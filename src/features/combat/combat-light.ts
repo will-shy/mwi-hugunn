@@ -23,27 +23,72 @@ function formatElapsed(ms: number): string {
   return `${m}m ${String(s).padStart(2, "0")}s`;
 }
 
+const COMBAT_SKILL_HRIDS = new Set([
+  "/skills/stamina",
+  "/skills/intelligence",
+  "/skills/attack",
+  "/skills/defense",
+  "/skills/melee",
+  "/skills/ranged",
+  "/skills/magic",
+]);
+
+function parseBattlePanelInfo(): { durationSec: number; battles: number } | null {
+  const infoEl = document.querySelector('[class*="BattlePanel_combatInfo"]');
+  if (!infoEl) return null;
+  const text = infoEl.textContent || "";
+  const durMatch = text.match(
+    /(?:Combat Duration|战斗时长|持续时间)\s*[:：]\s*(?:(\d+)\s*[d天]\s*)?(?:(\d+)\s*[h时]\s*)?(?:(\d+)\s*[m分]\s*)?(?:(\d+)\s*[s秒])?/i
+  );
+  if (!durMatch) return null;
+  const days = parseInt(durMatch[1] || "0", 10) || 0;
+  const hours = parseInt(durMatch[2] || "0", 10) || 0;
+  const mins = parseInt(durMatch[3] || "0", 10) || 0;
+  const secs = parseInt(durMatch[4] || "0", 10) || 0;
+  const durationSec = days * 86400 + hours * 3600 + mins * 60 + secs;
+
+  const batMatch = text.match(/(?:Battles|战斗次数|场次)\s*[:：]\s*(\d+)/i);
+  const battles = batMatch ? parseInt(batMatch[1], 10) || 0 : 0;
+  return { durationSec, battles };
+}
+
 export function createCombatLightTrackerModule(): FeatureModule {
   let ctx: KernelContext | null = null;
   let unregStyle: (() => void) | null = null;
   let unsubs: Array<() => void> = [];
 
-  let battleId = 0;
+  let sessionBattleCount = 0;
+  let lastSeenServerBattleId = 0;
   let currentWave = 0;
   let isDungeon = false;
   let isLabyrinth = false;
   let labyrinthAttempt = 0;
   let sessionStartTs = 0;
-  let sessionXpGain = 0;
-  let sessionLootValue = 0;
-  let lastInventoryCounts = new Map<string, number>();
+  let liveXpGain = 0;
+  let liveLootAsk = 0;
+  let liveLootBid = 0;
+  let lastCombatSkillXp = new Map<string, number>();
+  let lastItemCountsById = new Map<number | string, number>();
 
-  const snapshotInventoryCounts = () => {
+  // Authoritative summary from battle_unit_fetched
+  let fetchedSummary: { exp: number; ask: number; bid: number; ts: number } | null = null;
+
+  const snapshotCombatSkillXp = (): Map<string, number> => {
     const map = new Map<string, number>();
+    for (const sk of ctx?.gameData.getCharacterSkills() || []) {
+      if (sk?.skillHrid && COMBAT_SKILL_HRIDS.has(sk.skillHrid)) {
+        map.set(sk.skillHrid, Number(sk.experience) || 0);
+      }
+    }
+    return map;
+  };
+
+  const snapshotItemCountsById = (): Map<number | string, number> => {
+    const map = new Map<number | string, number>();
     for (const it of ctx?.gameData.getCharacterItems() || []) {
-      if (!it || it.itemLocationHrid !== "/item_locations/inventory") continue;
-      const key = `${it.itemHrid}:${it.enhancementLevel || 0}`;
-      map.set(key, (map.get(key) || 0) + (it.count || 0));
+      if (it?.id != null && it.itemLocationHrid === "/item_locations/inventory") {
+        map.set(it.id, Number(it.count) || 0);
+      }
     }
     return map;
   };
@@ -57,7 +102,7 @@ export function createCombatLightTrackerModule(): FeatureModule {
       (a) => !a?.isDone && (a?.actionHrid?.startsWith("/actions/combat/") || a?.actionHrid === "/actions/labyrinth/explore")
     );
 
-    if (!activeCombat || (battleId === 0 && labyrinthAttempt === 0)) {
+    if (!activeCombat || (sessionBattleCount === 0 && labyrinthAttempt === 0 && !fetchedSummary)) {
       document.getElementById(COUNTER_ID)?.remove();
       document.getElementById(LOOT_BAR_ID)?.remove();
       return;
@@ -74,26 +119,51 @@ export function createCombatLightTrackerModule(): FeatureModule {
     if (isLabyrinth) {
       el.textContent = ` · #${labyrinthAttempt}`;
     } else if (isDungeon) {
-      el.textContent = ` · W${currentWave} · #${battleId}`;
+      el.textContent = ` · W${currentWave} · #${sessionBattleCount}`;
     } else {
-      el.textContent = ` · #${battleId}`;
+      el.textContent = ` · #${sessionBattleCount}`;
     }
 
-    // Light session summary inside Battle/Combat panel header if present
     const combatPanel =
       document.querySelector('[class*="BattlePanel_"]') || document.querySelector('[class*="CombatPanel_"]');
-    if (combatPanel && sessionStartTs > 0) {
+    if (combatPanel && (sessionStartTs > 0 || fetchedSummary)) {
       let summary = document.getElementById(LOOT_BAR_ID);
       if (!summary) {
         summary = document.createElement("div");
         summary.id = LOOT_BAR_ID;
         summary.setAttribute("data-mwi-lite", "1");
-        combatPanel.insertBefore(summary, combatPanel.firstChild);
+        const gainedExp = combatPanel.querySelector('[class*="BattlePanel_gainedExp"]');
+        if (gainedExp?.parentElement) {
+          gainedExp.insertAdjacentElement("afterend", summary);
+        } else {
+          combatPanel.insertBefore(summary, combatPanel.firstChild);
+        }
       }
-      const hours = Math.max(1 / 3600, (Date.now() - sessionStartTs) / 3600_000);
-      const xpPerHr = sessionXpGain / hours;
-      const lootPerHr = sessionLootValue / hours;
-      summary.textContent = `⚔ ${formatElapsed(Date.now() - sessionStartTs)} · XP/h ${formatCompact(xpPerHr)} · ${ctx?.i18n.t("掉落/h", "Loot/h")} ${formatCompact(lootPerHr)} (${ctx?.i18n.t("累计", "Total")} ${formatCompact(sessionLootValue)})`;
+
+      const panelInfo = parseBattlePanelInfo();
+      const durationSec =
+        panelInfo && panelInfo.durationSec > 0
+          ? panelInfo.durationSec
+          : sessionStartTs > 0
+            ? Math.max(1, (Date.now() - sessionStartTs) / 1000)
+            : 0;
+      const hours = Math.max(1 / 3600, durationSec / 3600);
+
+      if (fetchedSummary && durationSec > 0) {
+        const encPart =
+          panelInfo && panelInfo.battles > 1
+            ? `${ctx?.i18n.t("场次/h", "Enc/h")} ${(((panelInfo.battles - 1) / durationSec) * 3600).toFixed(1)} · `
+            : "";
+        const xpHr = fetchedSummary.exp / hours;
+        const askHr = fetchedSummary.ask / hours;
+        const bidHr = fetchedSummary.bid / hours;
+        summary.textContent = `⚔ ${encPart}${ctx?.i18n.t("总经验", "Exp")} ${formatCompact(fetchedSummary.exp)} (${formatCompact(xpHr)}/h) · ${ctx?.i18n.t("收益(Ask/Bid)", "Loot(A/B)")} ${formatCompact(fetchedSummary.ask)}/${formatCompact(fetchedSummary.bid)} (${formatCompact(askHr)}/${formatCompact(bidHr)} /h)`;
+      } else if (sessionStartTs > 0) {
+        const elapsedMs = Date.now() - sessionStartTs;
+        const xpPerHr = liveXpGain / hours;
+        const askPerHr = liveLootAsk / hours;
+        summary.textContent = `⚔ ${ctx?.i18n.t("实时", "Live")} ${formatElapsed(elapsedMs)} · ${ctx?.i18n.t("战斗经验", "Combat XP")} ${formatCompact(liveXpGain)} (${formatCompact(xpPerHr)}/h) · ${ctx?.i18n.t("战斗掉落(Ask)", "Drops")} ${formatCompact(liveLootAsk)} (${formatCompact(askPerHr)}/h)`;
+      }
     }
   };
 
@@ -101,8 +171,8 @@ export function createCombatLightTrackerModule(): FeatureModule {
     id: "combat-light-tracker",
     nameZh: "战斗波次与轻量收益统计",
     nameEn: "Light Combat & Loot Tracker",
-    descriptionZh: "在行动栏显示当前波次/场次，在战斗面板顶部展示耗时、XP/h 与掉落估值（无 Chart.js）",
-    descriptionEn: "Show battle/wave counter, runtime, XP/hr and loot value summary without Chart.js",
+    descriptionZh: "在行动栏显示波次/本轮场次，结合战斗权威汇总与战斗专属增量精准展示 XP/h 与收益",
+    descriptionEn: "Accurate battle/wave counter, combat-only XP/hr and loot revenue summary",
     category: "combat",
     defaultEnabled: true,
 
@@ -114,7 +184,7 @@ export function createCombatLightTrackerModule(): FeatureModule {
         #${COUNTER_ID} { color: rgba(255,255,255,0.72); margin-left: 5px; font-size: 12px; white-space: nowrap; }
         #${LOOT_BAR_ID} {
           padding: 4px 10px;
-          margin-bottom: 6px;
+          margin: 4px 0 6px;
           border-radius: 5px;
           background: rgba(30, 41, 59, 0.78);
           border: 1px solid rgba(71, 85, 105, 0.5);
@@ -124,16 +194,21 @@ export function createCombatLightTrackerModule(): FeatureModule {
         `
       );
 
-      lastInventoryCounts = snapshotInventoryCounts();
+      lastCombatSkillXp = snapshotCombatSkillXp();
+      lastItemCountsById = snapshotItemCountsById();
 
       unsubs = [
         ctx.wsBus.on("init_character_data", () => {
           sessionStartTs = 0;
-          sessionXpGain = 0;
-          sessionLootValue = 0;
-          battleId = 0;
+          liveXpGain = 0;
+          liveLootAsk = 0;
+          liveLootBid = 0;
+          sessionBattleCount = 0;
+          lastSeenServerBattleId = 0;
           currentWave = 0;
-          lastInventoryCounts = snapshotInventoryCounts();
+          fetchedSummary = null;
+          lastCombatSkillXp = snapshotCombatSkillXp();
+          lastItemCountsById = snapshotItemCountsById();
         }),
         ctx.wsBus.on("new_battle", (data) => {
           const actions = ctx?.gameData.getCharacterActions() || [];
@@ -142,17 +217,55 @@ export function createCombatLightTrackerModule(): FeatureModule {
 
           if (!sessionStartTs) {
             sessionStartTs = Date.now();
-            sessionXpGain = 0;
-            sessionLootValue = 0;
-            lastInventoryCounts = snapshotInventoryCounts();
+            liveXpGain = 0;
+            liveLootAsk = 0;
+            liveLootBid = 0;
+            sessionBattleCount = 0;
+            lastSeenServerBattleId = 0;
+            lastCombatSkillXp = snapshotCombatSkillXp();
+            lastItemCountsById = snapshotItemCountsById();
           }
 
           isLabyrinth = false;
           labyrinthAttempt = 0;
-          battleId = data?.battleId || battleId + 1;
+          const srvId = Number(data?.battleId) || 0;
+          if (srvId === 0 || srvId !== lastSeenServerBattleId) {
+            lastSeenServerBattleId = srvId;
+            sessionBattleCount += 1;
+          }
           const zoneInfo = ctx?.gameData.getClientData()?.actionDetailMap?.[combatAct.actionHrid]?.combatZoneInfo;
           isDungeon = zoneInfo?.isDungeon === true;
           currentWave = isDungeon ? (data?.wave ?? 0) : 0;
+          renderCounter();
+        }),
+        ctx.wsBus.on("battle_unit_fetched", (data) => {
+          const unit = data?.unit;
+          if (!unit) return;
+          let exp = 0;
+          if (unit.totalSkillExperienceMap) {
+            for (const v of Object.values<number>(unit.totalSkillExperienceMap)) {
+              exp += Number(v) || 0;
+            }
+          }
+          let ask = 0;
+          let bid = 0;
+          if (unit.totalLootMap) {
+            for (const loot of Object.values<any>(unit.totalLootMap)) {
+              const cnt = Number(loot?.count) || 0;
+              if (cnt <= 0) continue;
+              if (loot.itemHrid === "/items/coin") {
+                ask += cnt;
+                bid += cnt;
+              } else {
+                const p = ctx?.marketStore.getPrice(loot.itemHrid, 0);
+                if (p) {
+                  ask += (p.ask && p.ask > 0 ? p.ask : p.bid ?? 0) * cnt;
+                  bid += (p.bid && p.bid > 0 ? p.bid : p.ask ?? 0) * cnt;
+                }
+              }
+            }
+          }
+          fetchedSummary = { exp, ask, bid, ts: Date.now() };
           renderCounter();
         }),
         ctx.wsBus.on("labyrinth_updated", (data) => {
@@ -176,25 +289,54 @@ export function createCombatLightTrackerModule(): FeatureModule {
           }
         }),
         ctx.wsBus.on("action_completed", (data) => {
-          if (!sessionStartTs) return;
-          const curCounts = snapshotInventoryCounts();
-          for (const [k, curVal] of curCounts) {
-            const prevVal = lastInventoryCounts.get(k) || 0;
-            if (curVal > prevVal) {
-              const [hrid, enhStr] = k.split(":");
-              const diff = curVal - prevVal;
-              if (hrid === "/items/coin") {
-                sessionLootValue += diff;
-              } else {
-                const p = ctx?.marketStore.getPrice(hrid, Number(enhStr) || 0);
-                const unit = p?.bid ?? p?.ask ?? 0;
-                sessionLootValue += unit * diff;
+          const actionHrid: string = data?.endCharacterAction?.actionHrid || "";
+          if (!actionHrid.startsWith("/actions/combat/")) {
+            // Sync baseline counts for non-combat actions (crafting, chests, etc.) so they never pollute combat loot
+            if (Array.isArray(data?.endCharacterItems)) {
+              for (const it of data.endCharacterItems) {
+                if (it?.id != null && it.itemLocationHrid === "/item_locations/inventory") {
+                  lastItemCountsById.set(it.id, Number(it.count) || 0);
+                }
               }
             }
+            return;
           }
-          lastInventoryCounts = curCounts;
-          if (typeof data?.experienceGain === "number") {
-            sessionXpGain += data.experienceGain;
+          if (!sessionStartTs) return;
+
+          // 1) Combat skill XP deltas directly from endCharacterSkills
+          if (Array.isArray(data?.endCharacterSkills)) {
+            for (const sk of data.endCharacterSkills) {
+              if (!sk?.skillHrid || !COMBAT_SKILL_HRIDS.has(sk.skillHrid)) continue;
+              const newXp = Number(sk.experience) || 0;
+              const prevXp = lastCombatSkillXp.get(sk.skillHrid);
+              if (typeof prevXp === "number" && newXp > prevXp) {
+                liveXpGain += newXp - prevXp;
+              }
+              lastCombatSkillXp.set(sk.skillHrid, newXp);
+            }
+          }
+
+          // 2) Combat-only item drops directly from this combat action's endCharacterItems
+          if (Array.isArray(data?.endCharacterItems)) {
+            for (const it of data.endCharacterItems) {
+              if (!it || it.id == null || it.itemLocationHrid !== "/item_locations/inventory") continue;
+              const newCnt = Number(it.count) || 0;
+              const prevCnt = lastItemCountsById.get(it.id) || 0;
+              const diff = newCnt - prevCnt;
+              lastItemCountsById.set(it.id, newCnt);
+              if (diff > 0) {
+                if (it.itemHrid === "/items/coin") {
+                  liveLootAsk += diff;
+                  liveLootBid += diff;
+                } else {
+                  const p = ctx?.marketStore.getPrice(it.itemHrid, it.enhancementLevel || 0);
+                  if (p) {
+                    liveLootAsk += (p.ask && p.ask > 0 ? p.ask : p.bid ?? 0) * diff;
+                    liveLootBid += (p.bid && p.bid > 0 ? p.bid : p.ask ?? 0) * diff;
+                  }
+                }
+              }
+            }
           }
           renderCounter();
         }),
@@ -203,10 +345,12 @@ export function createCombatLightTrackerModule(): FeatureModule {
             (a) => !a?.isDone && (a?.actionHrid?.startsWith("/actions/combat/") || a?.actionHrid === "/actions/labyrinth/explore")
           );
           if (!hasCombat) {
-            battleId = 0;
+            sessionBattleCount = 0;
+            lastSeenServerBattleId = 0;
             currentWave = 0;
             isLabyrinth = false;
             labyrinthAttempt = 0;
+            fetchedSummary = null;
             renderCounter();
           }
         }),

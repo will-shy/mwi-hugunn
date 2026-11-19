@@ -29,6 +29,7 @@ const SKIP_DEDUP_TYPES = new Set([
   "labyrinth_room_progress",
   "new_battle",
   "battle_updated",
+  "battle_unit_fetched",
 ]);
 
 class PassiveWsBus implements WsBus {
