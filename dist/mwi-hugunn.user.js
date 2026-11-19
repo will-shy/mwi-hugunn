@@ -1,0 +1,18554 @@
+// ==UserScript==
+// @name         MWI · Hugunn
+// @name:zh-CN   MWI · Hugunn
+// @namespace    https://milkywayidle.com/mwi-hugunn
+// @version      1.1.0
+// @description  MWI · Hugunn — Lightweight high-performance userscript for Milky Way Idle: market shortcuts & quick ops, volume & magic sort, item planner, queue next, lazy Monte-Carlo labyrinth calculator & light combat stats.
+// @description:zh-CN MWI · Hugunn — 高性能轻量 MWI 聚合增强插件：市场快捷导航与强化档位跳转、挂单魔法排序、交易量均价、市场快捷操作、悬浮窗估价/净资产、完成倒计时、队列设为下一步、物品规划计算器、按需蒙特卡洛迷宫胜率与轻量战斗统计。
+// @author       xhy
+// @license      MIT
+// @homepageURL  https://github.com/xiahuaaaa/mwi-hugunn
+// @downloadURL  https://raw.githubusercontent.com/xiahuaaaa/mwi-hugunn/main/dist/mwi-hugunn.user.js
+// @updateURL    https://raw.githubusercontent.com/xiahuaaaa/mwi-hugunn/main/dist/mwi-hugunn.user.js
+// @match        https://www.milkywayidle.com/*
+// @match        https://test.milkywayidle.com/*
+// @match        https://www.milkywayidlecn.com/*
+// @match        https://test.milkywayidlecn.com/*
+// @icon         https://www.milkywayidle.com/favicon.ico
+// @run-at       document-start
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_deleteValue
+// @grant        GM_addStyle
+// @grant        GM_xmlhttpRequest
+// @grant        GM.xmlHttpRequest
+// @grant        GM_registerMenuCommand
+// @grant        unsafeWindow
+// @connect      q7.nainai.eu.org
+// @connect      milkywayidle.com
+// @connect      www.milkywayidle.com
+// @connect      raw.githubusercontent.com
+// @connect      shykai.github.io
+// ==/UserScript==
+
+"use strict";
+(() => {
+  // src/core/lz-utf16.ts
+  function decompressFromUTF16(input) {
+    if (input == null) return "";
+    if (input === "") return null;
+    return _decompress(input.length, 16384, (index) => input.charCodeAt(index) - 32);
+  }
+  function _decompress(length, resetValue, getNextValue) {
+    const dictionary = [0, 1, 2];
+    const result = [];
+    let enlargeIn = 4;
+    let dictSize = 4;
+    let numBits = 3;
+    let entry = "";
+    let c;
+    let bits = 0;
+    let maxpower = 4;
+    let power = 1;
+    const data = {
+      val: getNextValue(0),
+      position: resetValue,
+      index: 1
+    };
+    while (power !== maxpower) {
+      const resb = data.val & data.position;
+      data.position >>= 1;
+      if (data.position === 0) {
+        data.position = resetValue;
+        data.val = getNextValue(data.index++);
+      }
+      bits |= (resb > 0 ? 1 : 0) * power;
+      power <<= 1;
+    }
+    const next = bits;
+    switch (next) {
+      case 0:
+        bits = 0;
+        maxpower = 256;
+        power = 1;
+        while (power !== maxpower) {
+          const resb = data.val & data.position;
+          data.position >>= 1;
+          if (data.position === 0) {
+            data.position = resetValue;
+            data.val = getNextValue(data.index++);
+          }
+          bits |= (resb > 0 ? 1 : 0) * power;
+          power <<= 1;
+        }
+        c = String.fromCharCode(bits);
+        break;
+      case 1:
+        bits = 0;
+        maxpower = 65536;
+        power = 1;
+        while (power !== maxpower) {
+          const resb = data.val & data.position;
+          data.position >>= 1;
+          if (data.position === 0) {
+            data.position = resetValue;
+            data.val = getNextValue(data.index++);
+          }
+          bits |= (resb > 0 ? 1 : 0) * power;
+          power <<= 1;
+        }
+        c = String.fromCharCode(bits);
+        break;
+      case 2:
+        return "";
+      default:
+        return null;
+    }
+    dictionary[3] = c;
+    let w = c;
+    result.push(c);
+    while (true) {
+      if (data.index > length) return "";
+      bits = 0;
+      maxpower = Math.pow(2, numBits);
+      power = 1;
+      while (power !== maxpower) {
+        const resb = data.val & data.position;
+        data.position >>= 1;
+        if (data.position === 0) {
+          data.position = resetValue;
+          data.val = getNextValue(data.index++);
+        }
+        bits |= (resb > 0 ? 1 : 0) * power;
+        power <<= 1;
+      }
+      let cc = bits;
+      switch (cc) {
+        case 0:
+          bits = 0;
+          maxpower = 256;
+          power = 1;
+          while (power !== maxpower) {
+            const resb = data.val & data.position;
+            data.position >>= 1;
+            if (data.position === 0) {
+              data.position = resetValue;
+              data.val = getNextValue(data.index++);
+            }
+            bits |= (resb > 0 ? 1 : 0) * power;
+            power <<= 1;
+          }
+          dictionary[dictSize++] = String.fromCharCode(bits);
+          cc = dictSize - 1;
+          enlargeIn--;
+          break;
+        case 1:
+          bits = 0;
+          maxpower = 65536;
+          power = 1;
+          while (power !== maxpower) {
+            const resb = data.val & data.position;
+            data.position >>= 1;
+            if (data.position === 0) {
+              data.position = resetValue;
+              data.val = getNextValue(data.index++);
+            }
+            bits |= (resb > 0 ? 1 : 0) * power;
+            power <<= 1;
+          }
+          dictionary[dictSize++] = String.fromCharCode(bits);
+          cc = dictSize - 1;
+          enlargeIn--;
+          break;
+        case 2:
+          return result.join("");
+      }
+      if (enlargeIn === 0) {
+        enlargeIn = Math.pow(2, numBits);
+        numBits++;
+      }
+      if (dictionary[cc] !== void 0) {
+        entry = String(dictionary[cc]);
+      } else if (cc === dictSize) {
+        entry = w + w.charAt(0);
+      } else {
+        return null;
+      }
+      result.push(entry);
+      dictionary[dictSize++] = w + entry.charAt(0);
+      enlargeIn--;
+      w = entry;
+      if (enlargeIn === 0) {
+        enlargeIn = Math.pow(2, numBits);
+        numBits++;
+      }
+    }
+  }
+
+  // src/core/storage.ts
+  var LS_PREFIX = "mwiLite_";
+  var storage = {
+    get(key, fallback) {
+      try {
+        if (typeof GM_getValue === "function") {
+          const raw = GM_getValue(key, void 0);
+          if (raw !== void 0 && raw !== null) {
+            if (typeof raw === "string" && (typeof fallback !== "string" || raw.startsWith("{") || raw.startsWith("["))) {
+              try {
+                return JSON.parse(raw);
+              } catch {
+                return raw;
+              }
+            }
+            return raw;
+          }
+        }
+      } catch {
+      }
+      try {
+        const ls = localStorage.getItem(LS_PREFIX + key);
+        if (ls !== null) {
+          return JSON.parse(ls);
+        }
+      } catch {
+      }
+      return fallback;
+    },
+    set(key, value) {
+      const serialized = typeof value === "string" ? value : JSON.stringify(value);
+      if (serialized && serialized.length > 65536) {
+        console.warn(`[MWI Lite] Refusing to persist oversized GM value (${key}: ${serialized.length} chars)`);
+        return;
+      }
+      try {
+        if (typeof GM_setValue === "function") {
+          GM_setValue(key, serialized);
+          return;
+        }
+      } catch {
+      }
+      try {
+        localStorage.setItem(LS_PREFIX + key, JSON.stringify(value));
+      } catch {
+      }
+    },
+    del(key) {
+      try {
+        if (typeof GM_deleteValue === "function") {
+          GM_deleteValue(key);
+        }
+      } catch {
+      }
+      try {
+        localStorage.removeItem(LS_PREFIX + key);
+      } catch {
+      }
+    }
+  };
+  function addStyle(id, css) {
+    const attr = "data-mwi-lite-style";
+    let styleEl = document.querySelector(`style[${attr}="${id}"]`);
+    if (!styleEl) {
+      styleEl = document.createElement("style");
+      styleEl.setAttribute(attr, id);
+      styleEl.setAttribute("data-mwi-lite", "1");
+      (document.head || document.documentElement).appendChild(styleEl);
+    }
+    styleEl.textContent = css;
+    return () => {
+      styleEl?.remove();
+    };
+  }
+
+  // src/core/ws-bus.ts
+  function getPageWindow() {
+    try {
+      if (typeof unsafeWindow !== "undefined" && unsafeWindow) {
+        return unsafeWindow;
+      }
+    } catch {
+    }
+    return window;
+  }
+  var SKIP_DEDUP_TYPES = /* @__PURE__ */ new Set([
+    "action_completed",
+    "items_updated",
+    "market_item_order_books_updated",
+    "market_listings_updated",
+    "actions_updated",
+    "skills_updated",
+    "house_rooms_updated",
+    "action_type_consumable_slots_updated",
+    "consumable_buffs_updated",
+    "personal_buffs_updated",
+    "character_info_updated",
+    "labyrinth_updated",
+    "labyrinth_room_progress",
+    "new_battle",
+    "battle_updated"
+  ]);
+  var PassiveWsBus = class {
+    installed = false;
+    listeners = /* @__PURE__ */ new Map();
+    anyListeners = /* @__PURE__ */ new Set();
+    seenEvents = /* @__PURE__ */ new WeakSet();
+    recentHashes = /* @__PURE__ */ new Map();
+    messageCount = 0;
+    install() {
+      if (this.installed) return;
+      this.installed = true;
+      const pageWin = getPageWindow();
+      const bus = this;
+      try {
+        const wrapCtor = (OrigWS) => {
+          if (!OrigWS || OrigWS.__mwiLiteWrapped) return OrigWS;
+          const isNative = /\[native code\]/.test(Function.prototype.toString.call(OrigWS));
+          if (!isNative) return OrigWS;
+          class LiteWrappedWebSocket extends OrigWS {
+            constructor(url, protocols) {
+              super(url, protocols);
+              bus.attachSocket(this);
+            }
+          }
+          LiteWrappedWebSocket.__mwiLiteWrapped = true;
+          return LiteWrappedWebSocket;
+        };
+        let currentWS = wrapCtor(pageWin.WebSocket);
+        const desc = Object.getOwnPropertyDescriptor(pageWin, "WebSocket");
+        if (!desc || desc.configurable) {
+          Object.defineProperty(pageWin, "WebSocket", {
+            configurable: true,
+            enumerable: true,
+            get() {
+              return currentWS;
+            },
+            set(nextWs) {
+              currentWS = wrapCtor(nextWs);
+            }
+          });
+        }
+      } catch {
+      }
+      try {
+        const pageMsgProto = (pageWin.MessageEvent || MessageEvent).prototype;
+        const dataDesc = Object.getOwnPropertyDescriptor(pageMsgProto, "data");
+        if (dataDesc && typeof dataDesc.get === "function") {
+          const originalGet = dataDesc.get;
+          Object.defineProperty(pageMsgProto, "data", {
+            configurable: true,
+            enumerable: dataDesc.enumerable ?? true,
+            get() {
+              const msg = originalGet.call(this);
+              const target = this.currentTarget;
+              if (target && bus.isGameSocket(target) && !bus.seenEvents.has(this)) {
+                bus.seenEvents.add(this);
+                bus.handleRawMessage(msg);
+              }
+              return msg;
+            }
+          });
+        }
+      } catch {
+      }
+    }
+    attachSocket(socket) {
+      if (socket.__mwiLiteAttached) return;
+      socket.__mwiLiteAttached = true;
+      socket.addEventListener("message", (ev) => {
+        if (!this.isGameSocket(socket)) return;
+        if (this.seenEvents.has(ev)) return;
+        this.seenEvents.add(ev);
+        this.handleRawMessage(ev.data);
+      });
+    }
+    isGameSocket(socket) {
+      const url = socket?.url;
+      if (!url || typeof url !== "string") return false;
+      return url.includes("api.milkywayidle.com/ws") || url.includes("api-test.milkywayidle.com/ws") || url.includes("milkywayidlecn.com/ws");
+    }
+    handleRawMessage(raw) {
+      if (typeof raw !== "string" || raw.length < 2 || raw[0] !== "{") return;
+      let parsed;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        return;
+      }
+      const msgType = parsed?.type;
+      if (typeof msgType !== "string" || !msgType) return;
+      if (!SKIP_DEDUP_TYPES.has(msgType)) {
+        const hash = raw.slice(0, 110) + ":" + raw.length;
+        const now = Date.now();
+        const prev = this.recentHashes.get(hash);
+        if (prev && now - prev < 500) return;
+        this.recentHashes.set(hash, now);
+        if (this.recentHashes.size > 120) {
+          for (const [k, ts] of this.recentHashes) {
+            if (now - ts > 4e3) this.recentHashes.delete(k);
+          }
+        }
+      }
+      this.messageCount++;
+      const set = this.listeners.get(msgType);
+      if (set) {
+        for (const fn of set) {
+          try {
+            fn(parsed, msgType);
+          } catch (err) {
+            console.error(`[MWI Lite wsBus] handler error (${msgType}):`, err);
+          }
+        }
+      }
+      for (const fn of this.anyListeners) {
+        try {
+          fn(parsed, msgType);
+        } catch (err) {
+          console.error("[MWI Lite wsBus] any-handler error:", err);
+        }
+      }
+    }
+    on(messageType, handler) {
+      let set = this.listeners.get(messageType);
+      if (!set) {
+        set = /* @__PURE__ */ new Set();
+        this.listeners.set(messageType, set);
+      }
+      set.add(handler);
+      return () => set?.delete(handler);
+    }
+    onAny(handler) {
+      this.anyListeners.add(handler);
+      return () => this.anyListeners.delete(handler);
+    }
+    isInstalled() {
+      return this.installed;
+    }
+    getMessageCount() {
+      return this.messageCount;
+    }
+  };
+  var wsBus = new PassiveWsBus();
+
+  // src/core/game-data.ts
+  function mergeMarketListings(currentListings = [], updatedListings = []) {
+    if (!updatedListings.length) return [...currentListings];
+    const map = /* @__PURE__ */ new Map();
+    for (const item of currentListings) {
+      if (item && item.id != null) map.set(item.id, item);
+    }
+    for (const item of updatedListings) {
+      if (!item || item.id == null) continue;
+      map.set(item.id, item);
+    }
+    const merged = [];
+    for (const l of map.values()) {
+      if (!l) continue;
+      if (l.status === "/market_listing_status/cancelled" || l.status === "/market_listing_status/expired") continue;
+      if (l.status === "/market_listing_status/filled" && (l.unclaimedCoinCount || 0) <= 0 && (l.unclaimedItemCount || 0) <= 0) {
+        continue;
+      }
+      merged.push(l);
+    }
+    return merged;
+  }
+  var InMemoryGameData = class {
+    initialized = false;
+    clientData = null;
+    lastInitClientRaw = null;
+    characterData = null;
+    characterItems = [];
+    characterActions = [];
+    characterSkills = [];
+    characterQuests = [];
+    houseRooms = /* @__PURE__ */ new Map();
+    characterAbilities = [];
+    abilityCombatTriggersMap = {};
+    drinkSlotsMap = /* @__PURE__ */ new Map();
+    personalBuffs = {};
+    guildActionBuffs = {};
+    labyrinthData = null;
+    battleData = null;
+    listeners = /* @__PURE__ */ new Map();
+    cachedCore = null;
+    cachedCoreEl = null;
+    init() {
+      if (this.initialized) return;
+      this.initialized = true;
+      this.tryDecodeLocalInitClientData();
+      wsBus.on("init_client_data", (data) => {
+        if (data && data.itemDetailMap) {
+          this.clientData = data;
+          this.emit("client_data_ready", data);
+        }
+      });
+      wsBus.on("init_character_data", (data) => {
+        if (!data?.character?.id) return;
+        this.characterData = data;
+        this.characterItems = Array.isArray(data.characterItems) ? [...data.characterItems] : [];
+        this.characterActions = Array.isArray(data.characterActions) ? [...data.characterActions] : [];
+        this.characterSkills = Array.isArray(data.characterSkills) ? [...data.characterSkills] : [];
+        this.characterQuests = Array.isArray(data.characterQuests) ? [...data.characterQuests] : [];
+        this.characterAbilities = Array.isArray(data.characterAbilities) ? [...data.characterAbilities] : [];
+        this.abilityCombatTriggersMap = data.abilityCombatTriggersMap ? { ...data.abilityCombatTriggersMap } : {};
+        this.houseRooms.clear();
+        if (data.characterHouseRoomMap) {
+          for (const [hrid, val] of Object.entries(data.characterHouseRoomMap)) {
+            this.houseRooms.set(hrid, val);
+          }
+        }
+        this.drinkSlotsMap.clear();
+        if (data.actionTypeDrinkSlotsMap) {
+          for (const [k, v] of Object.entries(data.actionTypeDrinkSlotsMap)) {
+            this.drinkSlotsMap.set(k, Array.isArray(v) ? v : []);
+          }
+        }
+        this.personalBuffs = data.personalActionTypeBuffsMap || {};
+        this.guildActionBuffs = data.guildActionTypeBuffsMap || {};
+        if (data.labyrinth) this.labyrinthData = data.labyrinth;
+        this.tryDecodeLocalInitClientData();
+        this.emit("character_initialized", data);
+      });
+      wsBus.on("actions_updated", (data) => {
+        if (this.characterData && Array.isArray(data?.endCharacterActions)) {
+          for (const action of data.endCharacterActions) {
+            this.characterActions = this.characterActions.filter((a) => a.id !== action.id);
+            if (action.isDone === false) {
+              this.characterActions.push(action);
+            }
+          }
+        }
+        this.emit("actions_updated", data);
+      });
+      wsBus.on("action_completed", (data) => {
+        if (this.characterData) {
+          const action = data?.endCharacterAction;
+          if (action && action.isDone === false) {
+            const idx = this.characterActions.findIndex((a) => a.id === action.id);
+            if (idx !== -1) this.characterActions[idx] = action;
+          }
+          if (Array.isArray(data?.endCharacterItems)) {
+            for (const endItem of data.endCharacterItems) {
+              const idx = this.characterItems.findIndex((i) => i.id === endItem.id);
+              if (idx !== -1) {
+                if (endItem.count === 0) this.characterItems.splice(idx, 1);
+                else this.characterItems[idx] = { ...this.characterItems[idx], ...endItem };
+              } else if (endItem.count > 0) {
+                this.characterItems.push(endItem);
+              }
+            }
+          }
+          if (Array.isArray(data?.endCharacterSkills)) {
+            for (const sk of data.endCharacterSkills) {
+              const existing = this.characterSkills.find((s) => s.skillHrid === sk.skillHrid);
+              if (existing) {
+                existing.experience = sk.experience;
+                if (sk.level !== void 0) existing.level = sk.level;
+              }
+            }
+          }
+        }
+        if (Array.isArray(data?.endCharacterItems)) this.emit("items_updated", data);
+        if (Array.isArray(data?.endCharacterSkills)) this.emit("skills_updated", data);
+        this.emit("action_completed", data);
+      });
+      wsBus.on("items_updated", (data) => {
+        if (this.characterData && Array.isArray(data?.endCharacterItems)) {
+          for (const item of data.endCharacterItems) {
+            const idx = this.characterItems.findIndex((i) => i.id === item.id);
+            if (idx !== -1) {
+              if (item.count === 0) this.characterItems.splice(idx, 1);
+              else this.characterItems[idx] = { ...this.characterItems[idx], ...item };
+            } else if (item.count > 0) {
+              this.characterItems.push(item);
+            }
+          }
+        }
+        if (Array.isArray(data?.endCharacterItems)) this.emit("items_updated", data);
+      });
+      wsBus.on("market_listings_updated", (data) => {
+        if (!this.characterData || !Array.isArray(data?.endMarketListings)) return;
+        const prev = Array.isArray(this.characterData.myMarketListings) ? this.characterData.myMarketListings : [];
+        this.characterData.myMarketListings = mergeMarketListings(prev, data.endMarketListings);
+        this.emit("market_listings_updated", this.characterData.myMarketListings);
+      });
+      wsBus.on("action_type_consumable_slots_updated", (data) => {
+        if (data?.actionTypeDrinkSlotsMap) {
+          for (const [k, v] of Object.entries(data.actionTypeDrinkSlotsMap)) {
+            this.drinkSlotsMap.set(k, Array.isArray(v) ? v : []);
+          }
+          this.emit("consumables_updated", data);
+        }
+      });
+      wsBus.on("personal_buffs_updated", (data) => {
+        if (data?.personalActionTypeBuffsMap) {
+          this.personalBuffs = data.personalActionTypeBuffsMap;
+          this.emit("personal_buffs_updated", data);
+        }
+      });
+      wsBus.on("house_rooms_updated", (data) => {
+        if (this.characterData && data?.characterHouseRoomMap) {
+          for (const [k, v] of Object.entries(data.characterHouseRoomMap)) {
+            this.houseRooms.set(k, v);
+          }
+        }
+        this.emit("house_rooms_updated", data);
+      });
+      wsBus.on("abilities_updated", (data) => {
+        if (this.characterData) {
+          if (Array.isArray(data?.characterAbilities)) {
+            this.characterAbilities = [...data.characterAbilities];
+          }
+          if (data?.abilityCombatTriggersMap) {
+            this.abilityCombatTriggersMap = { ...data.abilityCombatTriggersMap };
+          }
+        }
+        this.emit("abilities_updated", data);
+      });
+      wsBus.on("skills_updated", (data) => {
+        if (this.characterData && Array.isArray(data?.characterSkills)) {
+          this.characterSkills = data.characterSkills;
+        }
+        this.emit("skills_updated", data);
+      });
+      wsBus.on("quests_updated", (data) => {
+        if (this.characterData && Array.isArray(data?.endCharacterQuests)) {
+          const map = /* @__PURE__ */ new Map();
+          for (const q of this.characterQuests) {
+            if (q?.id != null) map.set(q.id, q);
+          }
+          for (const q of data.endCharacterQuests) {
+            if (q?.id != null) map.set(q.id, q);
+          }
+          this.characterQuests = Array.from(map.values());
+        }
+        this.emit("quests_updated", data);
+      });
+      wsBus.on("labyrinth_updated", (data) => {
+        if (data?.labyrinth) {
+          this.labyrinthData = data.labyrinth;
+        } else {
+          this.labyrinthData = data;
+        }
+        this.emit("labyrinth_updated", data);
+      });
+      wsBus.on("new_battle", (data) => {
+        this.battleData = data;
+        this.emit("new_battle", data);
+      });
+      wsBus.on("battle_updated", (data) => {
+        this.emit("battle_updated", data);
+      });
+    }
+    tryDecodeLocalInitClientData() {
+      try {
+        const raw = localStorage.getItem("initClientData");
+        if (!raw) return null;
+        if (this.clientData && this.lastInitClientRaw === raw) return this.clientData;
+        const jsonStr = decompressFromUTF16(raw);
+        if (!jsonStr) return null;
+        const parsed = JSON.parse(jsonStr);
+        if (parsed && parsed.itemDetailMap) {
+          this.lastInitClientRaw = raw;
+          this.clientData = parsed;
+          this.emit("client_data_ready", parsed);
+          return parsed;
+        }
+      } catch {
+      }
+      return null;
+    }
+    getClientData() {
+      if (!this.clientData) {
+        this.tryDecodeLocalInitClientData();
+      }
+      return this.clientData;
+    }
+    getCharacterData() {
+      if (!this.characterData) {
+        const core = this.getReactGameCore();
+        if (core?.state?.character) {
+          return core.state;
+        }
+      }
+      return this.characterData;
+    }
+    getCharacterId() {
+      return this.getCharacterData()?.character?.id ?? null;
+    }
+    getCharacterName() {
+      return this.getCharacterData()?.character?.name ?? null;
+    }
+    getCharacterItems() {
+      if (this.characterItems.length > 0) return this.characterItems;
+      const core = this.getReactGameCore();
+      if (core?.state?.characterItemMap instanceof Map) {
+        return Array.from(core.state.characterItemMap.values());
+      }
+      return [];
+    }
+    getCharacterActions() {
+      const core = this.getReactGameCore();
+      if (Array.isArray(core?.state?.characterActions) && core.state.characterActions.length > 0) {
+        return core.state.characterActions;
+      }
+      return this.characterActions;
+    }
+    getCharacterSkills() {
+      if (this.characterSkills.length > 0) return this.characterSkills;
+      const core = this.getReactGameCore();
+      if (core?.state?.characterSkillMap instanceof Map) {
+        return Array.from(core.state.characterSkillMap.values());
+      }
+      if (Array.isArray(core?.state?.characterSkills)) return core.state.characterSkills;
+      return [];
+    }
+    getCharacterQuests() {
+      if (this.characterData && this.characterQuests.length > 0) return this.characterQuests;
+      const core = this.getReactGameCore();
+      if (core?.state?.characterQuestMap instanceof Map) {
+        return Array.from(core.state.characterQuestMap.values());
+      }
+      if (Array.isArray(core?.state?.characterQuests)) return core.state.characterQuests;
+      return this.characterQuests;
+    }
+    getMarketListings() {
+      const data = this.getCharacterData();
+      if (this.characterData && Array.isArray(data?.myMarketListings)) return data.myMarketListings;
+      const core = this.getReactGameCore();
+      if (core?.state?.myMarketListingMap instanceof Map) {
+        return Array.from(core.state.myMarketListingMap.values());
+      }
+      return [];
+    }
+    getHouseRooms() {
+      if (this.houseRooms.size > 0) return this.houseRooms;
+      const core = this.getReactGameCore();
+      if (core?.state?.characterHouseRoomMap instanceof Map) {
+        return core.state.characterHouseRoomMap;
+      }
+      if (core?.state?.characterHouseRoomDict && typeof core.state.characterHouseRoomDict === "object") {
+        return new Map(Object.entries(core.state.characterHouseRoomDict));
+      }
+      return this.houseRooms;
+    }
+    getCharacterAbilities() {
+      if (this.characterAbilities.length > 0) return this.characterAbilities;
+      const core = this.getReactGameCore();
+      if (core?.state?.characterAbilityMap instanceof Map) {
+        return Array.from(core.state.characterAbilityMap.values());
+      }
+      if (Array.isArray(core?.state?.characterAbilities)) return core.state.characterAbilities;
+      return this.characterAbilities;
+    }
+    getAbilityCombatTriggers() {
+      if (Object.keys(this.abilityCombatTriggersMap).length > 0) return this.abilityCombatTriggersMap;
+      const core = this.getReactGameCore();
+      if (core?.state?.abilityCombatTriggersDict && typeof core.state.abilityCombatTriggersDict === "object") {
+        return core.state.abilityCombatTriggersDict;
+      }
+      if (core?.state?.abilityCombatTriggersMap instanceof Map) {
+        return Object.fromEntries(core.state.abilityCombatTriggersMap);
+      }
+      if (core?.state?.abilityCombatTriggersMap && typeof core.state.abilityCombatTriggersMap === "object") {
+        return core.state.abilityCombatTriggersMap;
+      }
+      return this.abilityCombatTriggersMap;
+    }
+    getActionTypeDrinkSlots() {
+      if (this.drinkSlotsMap.size > 0) return this.drinkSlotsMap;
+      const core = this.getReactGameCore();
+      if (core?.state?.actionTypeDrinkSlotsMap instanceof Map) {
+        return core.state.actionTypeDrinkSlotsMap;
+      }
+      return this.drinkSlotsMap;
+    }
+    getPersonalBuffs() {
+      return this.personalBuffs;
+    }
+    getGuildActionBuffs() {
+      return this.guildActionBuffs;
+    }
+    getLabyrinthData() {
+      return this.labyrinthData;
+    }
+    getBattleData() {
+      return this.battleData;
+    }
+    getReactGameCore(forceRefresh = false) {
+      if (!forceRefresh && this.cachedCore && this.cachedCoreEl?.isConnected) {
+        return this.cachedCore;
+      }
+      const el = document.querySelector('[class^="GamePage_gamePage"]') || document.querySelector('[class*="GamePage_gamePage"]') || document.querySelector('[class^="GamePage"]');
+      if (!el) return null;
+      const fiberKey = Reflect.ownKeys(el).find(
+        (k) => typeof k === "string" && (k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"))
+      );
+      if (!fiberKey) return null;
+      let fiber = el[fiberKey];
+      for (let depth = 0; fiber && depth < 12; depth++) {
+        const sn = fiber.stateNode;
+        if (sn && typeof sn === "object" && (sn.state?.character || sn.props?.i18n || sn.handleMoveCharacterActionByOne)) {
+          this.cachedCoreEl = el;
+          this.cachedCore = sn;
+          return sn;
+        }
+        fiber = fiber.return;
+      }
+      return null;
+    }
+    on(event, handler) {
+      let set = this.listeners.get(event);
+      if (!set) {
+        set = /* @__PURE__ */ new Set();
+        this.listeners.set(event, set);
+      }
+      set.add(handler);
+      return () => set?.delete(handler);
+    }
+    emit(event, data) {
+      const set = this.listeners.get(event);
+      if (!set) return;
+      for (const fn of set) {
+        try {
+          fn(data);
+        } catch (err) {
+          console.error(`[MWI Lite gameData] listener error (${event}):`, err);
+        }
+      }
+    }
+  };
+  var gameData = new InMemoryGameData();
+
+  // src/core/i18n.ts
+  var LiteI18n = class {
+    getLang() {
+      try {
+        const lng = localStorage.getItem("i18nextLng") || "";
+        if (lng.toLowerCase().startsWith("zh")) return "zh";
+        if (lng.toLowerCase().startsWith("en")) return "en";
+      } catch {
+      }
+      const htmlLang = document.documentElement?.lang?.toLowerCase() || "";
+      if (htmlLang.startsWith("zh")) return "zh";
+      if (location.hostname.includes("milkywayidlecn")) return "zh";
+      const reactLang = gameData.getReactGameCore()?.language;
+      if (typeof reactLang === "string" && reactLang.toLowerCase().startsWith("zh")) return "zh";
+      return "en";
+    }
+    isZh() {
+      return this.getLang() === "zh";
+    }
+    t(zh, en) {
+      return this.isZh() ? zh : en;
+    }
+    getName(hrid, category) {
+      if (!hrid) return "";
+      const core = gameData.getReactGameCore();
+      const lang = core?.language || this.getLang();
+      const dict = core?.props?.i18n?.options?.resources?.[lang]?.translation?.[category];
+      if (dict && typeof dict[hrid] === "string") {
+        return dict[hrid];
+      }
+      return "";
+    }
+    getItemName(itemHrid) {
+      const translated = this.getName(itemHrid, "itemNames");
+      if (translated) return translated;
+      const detail = gameData.getClientData()?.itemDetailMap?.[itemHrid];
+      return detail?.name || itemHrid.replace("/items/", "").replace(/_/g, " ");
+    }
+    getActionName(actionHrid) {
+      const translated = this.getName(actionHrid, "actionNames");
+      if (translated) return translated;
+      const detail = gameData.getClientData()?.actionDetailMap?.[actionHrid];
+      return detail?.name || actionHrid.replace("/actions/", "").replace(/_/g, " ");
+    }
+    getSkillName(skillHrid) {
+      const translated = this.getName(skillHrid, "skillNames");
+      if (translated) return translated;
+      const detail = gameData.getClientData()?.skillDetailMap?.[skillHrid];
+      return detail?.name || skillHrid.replace("/skills/", "").replace(/_/g, " ");
+    }
+    getMonsterName(monsterHrid) {
+      const translated = this.getName(monsterHrid, "monsterNames");
+      if (translated) return translated;
+      const detail = gameData.getClientData()?.monsterDetailMap?.[monsterHrid];
+      return detail?.name || monsterHrid.replace("/monsters/", "").replace(/_/g, " ");
+    }
+    getHouseRoomName(roomHrid) {
+      const translated = this.getName(roomHrid, "houseRoomNames");
+      if (translated) return translated;
+      const detail = gameData.getClientData()?.houseRoomDetailMap?.[roomHrid];
+      return detail?.name || roomHrid.replace("/house_rooms/", "").replace(/_/g, " ");
+    }
+    getItemHridByName(name) {
+      const target = name.trim().toLowerCase();
+      if (!target) return null;
+      const core = gameData.getReactGameCore();
+      const resources = core?.props?.i18n?.options?.resources;
+      const langs = [core?.language, this.getLang(), "zh", "en"].filter(Boolean);
+      for (const lang of langs) {
+        const itemNames = resources?.[lang]?.translation?.itemNames;
+        if (!itemNames) continue;
+        for (const [hrid, label] of Object.entries(itemNames)) {
+          if (typeof label === "string" && label.trim().toLowerCase() === target) {
+            return hrid;
+          }
+        }
+      }
+      const itemMap = gameData.getClientData()?.itemDetailMap;
+      if (itemMap) {
+        for (const [hrid, item] of Object.entries(itemMap)) {
+          if (typeof item?.name === "string" && item.name.trim().toLowerCase() === target) {
+            return hrid;
+          }
+        }
+      }
+      return null;
+    }
+  };
+  var i18n = new LiteI18n();
+
+  // src/core/market-store.ts
+  var MARKET_API_URL = "https://www.milkywayidle.com/game_data/marketplace.json";
+  var Q7_API_HOST = "https://q7.nainai.eu.org";
+  var DB_NAME = "MWILiteMarketDB";
+  var DB_VERSION = 1;
+  var STORE_PRICES = "prices";
+  var STORE_VOLUME = "volume";
+  var PRICES_TTL_MS = 30 * 60 * 1e3;
+  var VOLUME_TTL_MS = 5 * 60 * 1e3;
+  function normalizePrice(val) {
+    return typeof val === "number" && Number.isFinite(val) && val >= 0 ? val : null;
+  }
+  async function requestJson(url, timeoutMs = 8e3) {
+    const isCrossOrigin = !url.startsWith(location.origin);
+    if (isCrossOrigin && typeof GM_xmlhttpRequest === "function") {
+      return await new Promise((resolve, reject) => {
+        GM_xmlhttpRequest({
+          method: "GET",
+          url,
+          timeout: timeoutMs,
+          onload: (res) => {
+            if (res.status >= 200 && res.status < 300) {
+              try {
+                resolve(JSON.parse(res.responseText));
+              } catch (err) {
+                reject(err);
+              }
+            } else {
+              reject(new Error(`HTTP ${res.status}`));
+            }
+          },
+          onerror: (err) => reject(err || new Error("GM_xmlhttpRequest error")),
+          ontimeout: () => reject(new Error("GM_xmlhttpRequest timeout"))
+        });
+      });
+    }
+    const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+    try {
+      const res = await fetch(url, ctrl ? { signal: ctrl.signal } : void 0);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+  var LiteMarketStore = class {
+    initialized = false;
+    dbPromise = null;
+    marketData = null;
+    lastFetchTs = 0;
+    loadingPrices = null;
+    livePricePatches = /* @__PURE__ */ new Map();
+    orderBookCache = /* @__PURE__ */ new Map();
+    volumeMemCache = /* @__PURE__ */ new Map();
+    volumePending = /* @__PURE__ */ new Map();
+    listeners = /* @__PURE__ */ new Set();
+    writeCount = 0;
+    init() {
+      if (this.initialized) return;
+      this.initialized = true;
+      wsBus.on("market_item_order_books_updated", (data) => {
+        const itemHrid = data?.marketItemOrderBooks?.itemHrid;
+        const orderBooks = data?.marketItemOrderBooks?.orderBooks;
+        if (!itemHrid || !orderBooks) return;
+        const entries = Array.isArray(orderBooks) ? orderBooks.map((ob, idx) => [String(idx), ob]) : Object.entries(orderBooks);
+        const now = Date.now();
+        for (const [enhKey, ob] of entries) {
+          if (!ob) continue;
+          const asks = Array.isArray(ob.asks) ? ob.asks : [];
+          const bids = Array.isArray(ob.bids) ? ob.bids : [];
+          const key = `${itemHrid}:${enhKey}`;
+          this.orderBookCache.set(key, { asks, bids });
+          if (this.orderBookCache.size > 400) {
+            const oldest = this.orderBookCache.keys().next().value;
+            if (oldest) this.orderBookCache.delete(oldest);
+          }
+          const bestAsk = asks.length > 0 && typeof asks[0]?.price === "number" ? asks[0].price : null;
+          const bestBid = bids.length > 0 && typeof bids[0]?.price === "number" ? bids[0].price : null;
+          this.livePricePatches.set(key, { ask: bestAsk, bid: bestBid, ts: now });
+        }
+        this.notify();
+      });
+      void this.ensurePricesLoaded(false);
+    }
+    openDB() {
+      if (this.dbPromise) return this.dbPromise;
+      if (typeof indexedDB === "undefined") {
+        this.dbPromise = Promise.resolve(null);
+        return this.dbPromise;
+      }
+      this.dbPromise = new Promise((resolve) => {
+        try {
+          const req = indexedDB.open(DB_NAME, DB_VERSION);
+          req.onupgradeneeded = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains(STORE_PRICES)) {
+              db.createObjectStore(STORE_PRICES, { keyPath: "key" });
+            }
+            if (!db.objectStoreNames.contains(STORE_VOLUME)) {
+              db.createObjectStore(STORE_VOLUME, { keyPath: "key" });
+            }
+          };
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => resolve(null);
+        } catch {
+          resolve(null);
+        }
+      });
+      return this.dbPromise;
+    }
+    async idbGet(storeName, key) {
+      const db = await this.openDB();
+      if (!db) return null;
+      return await new Promise((resolve) => {
+        try {
+          const tx = db.transaction([storeName], "readonly");
+          const req = tx.objectStore(storeName).get(key);
+          req.onsuccess = () => resolve(req.result ?? null);
+          req.onerror = () => resolve(null);
+        } catch {
+          resolve(null);
+        }
+      });
+    }
+    async idbSet(storeName, record) {
+      const db = await this.openDB();
+      if (!db) return;
+      await new Promise((resolve) => {
+        try {
+          const tx = db.transaction([storeName], "readwrite");
+          tx.objectStore(storeName).put(record);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => resolve();
+        } catch {
+          resolve();
+        }
+      });
+      if (storeName === STORE_VOLUME && ++this.writeCount % 25 === 0) {
+        this.evictExpiredVolume(db);
+      }
+    }
+    evictExpiredVolume(db) {
+      try {
+        const tx = db.transaction([STORE_VOLUME], "readwrite");
+        const store = tx.objectStore(STORE_VOLUME);
+        const req = store.openCursor();
+        const cutoff = Date.now() - VOLUME_TTL_MS * 3;
+        req.onsuccess = () => {
+          const cursor = req.result;
+          if (!cursor) return;
+          if ((cursor.value?.ts || 0) < cutoff) {
+            cursor.delete();
+          }
+          cursor.continue();
+        };
+      } catch {
+      }
+    }
+    async ensurePricesLoaded(force = false) {
+      if (!force && this.marketData && Date.now() - this.lastFetchTs < PRICES_TTL_MS) {
+        return true;
+      }
+      if (this.loadingPrices) return this.loadingPrices;
+      this.loadingPrices = (async () => {
+        try {
+          if (!force) {
+            const cached = await this.idbGet(
+              STORE_PRICES,
+              "snapshot"
+            );
+            if (cached?.marketData && Date.now() - cached.fetchedAt < PRICES_TTL_MS) {
+              this.marketData = cached.marketData;
+              this.lastFetchTs = cached.fetchedAt;
+              this.notify();
+              return true;
+            }
+          }
+          const data = await requestJson(MARKET_API_URL, 1e4);
+          if (data?.marketData && typeof data.marketData === "object") {
+            this.marketData = data.marketData;
+            this.lastFetchTs = Date.now();
+            void this.idbSet(STORE_PRICES, {
+              key: "snapshot",
+              marketData: data.marketData,
+              apiTimestamp: data.timestamp || 0,
+              fetchedAt: this.lastFetchTs
+            });
+            this.notify();
+            return true;
+          }
+        } catch {
+          if (!this.marketData) {
+            const stale = await this.idbGet(STORE_PRICES, "snapshot");
+            if (stale?.marketData) {
+              this.marketData = stale.marketData;
+              this.lastFetchTs = stale.fetchedAt || 0;
+              this.notify();
+              return true;
+            }
+          }
+        } finally {
+          this.loadingPrices = null;
+        }
+        return this.marketData !== null;
+      })();
+      return this.loadingPrices;
+    }
+    isPricesLoaded() {
+      return this.marketData !== null;
+    }
+    getPrice(itemHrid, enhancementLevel = 0) {
+      if (!itemHrid) return null;
+      const key = `${itemHrid}:${enhancementLevel}`;
+      const patch = this.livePricePatches.get(key);
+      if (patch && patch.ts >= this.lastFetchTs) {
+        return { ask: patch.ask, bid: patch.bid };
+      }
+      const entry = this.marketData?.[itemHrid]?.[String(enhancementLevel)];
+      if (!entry) return null;
+      return {
+        ask: normalizePrice(entry.a),
+        bid: normalizePrice(entry.b)
+      };
+    }
+    getOrderBook(itemHrid, enhancementLevel = 0) {
+      return this.orderBookCache.get(`${itemHrid}:${enhancementLevel}`) ?? null;
+    }
+    async getVolumeStats(itemHrid, enhancementLevel = 0) {
+      if (!itemHrid || itemHrid === "/items/") return null;
+      const key = `${itemHrid}:${enhancementLevel}`;
+      const mem = this.volumeMemCache.get(key);
+      if (mem && Date.now() - mem.ts < VOLUME_TTL_MS) {
+        return mem.stats;
+      }
+      const inflight = this.volumePending.get(key);
+      if (inflight) return inflight;
+      const promise = (async () => {
+        try {
+          const cached = await this.idbGet(STORE_VOLUME, key);
+          let rows = null;
+          if (cached && Array.isArray(cached.rows) && Date.now() - cached.ts < VOLUME_TTL_MS) {
+            rows = cached.rows;
+          } else {
+            const url = `${Q7_API_HOST}/api/market/history?item_id=${encodeURIComponent(itemHrid)}&variant=${enhancementLevel}&days=7`;
+            const raw = await requestJson(url, 6e3);
+            if (Array.isArray(raw)) {
+              rows = raw;
+            } else if (raw && typeof raw === "object") {
+              if (Array.isArray(raw[itemHrid])) {
+                rows = raw[itemHrid];
+              } else {
+                const firstArr = Object.values(raw).find((v) => Array.isArray(v));
+                rows = Array.isArray(firstArr) ? firstArr : [];
+              }
+            }
+            if (rows && rows.length > 0) {
+              void this.idbSet(STORE_VOLUME, { key, rows, ts: Date.now() });
+            }
+          }
+          if (!rows) return null;
+          const stats = this.computeVolumeStats(itemHrid, enhancementLevel, rows);
+          this.volumeMemCache.set(key, { stats, ts: Date.now() });
+          if (this.volumeMemCache.size > 200) {
+            const oldest = this.volumeMemCache.keys().next().value;
+            if (oldest) this.volumeMemCache.delete(oldest);
+          }
+          return stats;
+        } catch {
+          return null;
+        } finally {
+          this.volumePending.delete(key);
+        }
+      })();
+      this.volumePending.set(key, promise);
+      return promise;
+    }
+    computeVolumeStats(itemHrid, enhancementLevel, rows) {
+      const nowSec = Math.floor(Date.now() / 1e3);
+      const calcWindow = (days) => {
+        const cutoff = nowSec - days * 86400;
+        const slice = rows.filter((r) => typeof r?.time === "number" && r.time >= cutoff && r.v > 0);
+        let volume = 0;
+        let pv = 0;
+        let buyVolume = 0;
+        let sellVolume = 0;
+        const hourly = /* @__PURE__ */ new Map();
+        for (const r of slice) {
+          volume += r.v;
+          pv += r.p * r.v;
+          const hr = Math.floor(r.time / 3600);
+          const list = hourly.get(hr);
+          if (list) list.push(r);
+          else hourly.set(hr, [r]);
+        }
+        const sortedHrs = Array.from(hourly.keys()).sort((a, b) => a - b);
+        let prevAsk = 0;
+        let prevBid = 0;
+        for (const hr of sortedHrs) {
+          const hrRows = hourly.get(hr);
+          const asks = hrRows.map((x) => x.a || 0).filter((a) => a > 0);
+          const bids = hrRows.map((x) => x.b || 0).filter((b) => b > 0);
+          const avgAsk = asks.length ? asks.reduce((s, x) => s + x, 0) / asks.length : prevAsk;
+          const avgBid = bids.length ? bids.reduce((s, x) => s + x, 0) / bids.length : prevBid;
+          for (const r of hrRows) {
+            if (avgAsk > 0 && r.p >= avgAsk || prevAsk > 0 && r.p >= prevAsk) {
+              buyVolume += r.v;
+            } else if (avgBid > 0 && r.p <= avgBid || prevBid > 0 && r.p <= prevBid) {
+              sellVolume += r.v;
+            } else if (avgAsk > avgBid && avgBid > 0) {
+              const ratio = Math.max(0, Math.min(1, (r.p - avgBid) / (avgAsk - avgBid)));
+              buyVolume += r.v * ratio;
+              sellVolume += r.v * (1 - ratio);
+            } else {
+              buyVolume += r.v * 0.5;
+              sellVolume += r.v * 0.5;
+            }
+          }
+          if (avgAsk > 0) prevAsk = avgAsk;
+          if (avgBid > 0) prevBid = avgBid;
+        }
+        const priceList = [];
+        for (const r of slice) {
+          if (r.v > 0 && r.p > 0) {
+            priceList.push({ price: r.p, volume: r.v });
+          }
+        }
+        priceList.sort((a, b) => a.price - b.price);
+        let medianPrice = 0;
+        const midVol = volume / 2;
+        let accum = 0;
+        for (const entry of priceList) {
+          accum += entry.volume;
+          if (accum >= midVol) {
+            medianPrice = entry.price;
+            break;
+          }
+        }
+        const winMin = priceList.length ? this.roundLegalPrice(priceList[0].price, "down") : 0;
+        const winMax = priceList.length ? this.roundLegalPrice(priceList[priceList.length - 1].price, "up") : 0;
+        return {
+          volume,
+          avgPrice: volume > 0 ? pv / volume : 0,
+          medianPrice,
+          buyVolume: Math.round(buyVolume),
+          sellVolume: Math.round(sellVolume),
+          minPrice: winMin,
+          maxPrice: winMax
+        };
+      };
+      const validPrices = rows.map((r) => r.p).filter((p) => typeof p === "number" && p > 0);
+      return {
+        itemHrid,
+        enhancementLevel,
+        updatedAt: Date.now(),
+        d1: calcWindow(1),
+        d3: calcWindow(3),
+        d5: calcWindow(5),
+        minPrice: validPrices.length ? this.roundLegalPrice(Math.min(...validPrices), "down") : 0,
+        maxPrice: validPrices.length ? this.roundLegalPrice(Math.max(...validPrices), "up") : 0
+      };
+    }
+    getPriceStepAt(price) {
+      const p = Math.trunc(price);
+      if (p < 100) return 1;
+      const text = String(p);
+      const digits = text.length;
+      const lead = text[0];
+      if (lead === "1" || lead === "2") {
+        return digits >= 4 ? 5 * Math.pow(10, digits - 4) : 1;
+      }
+      if (lead === "3" || lead === "4") {
+        return digits >= 3 ? Math.pow(10, digits - 3) : 1;
+      }
+      return digits >= 3 ? 2 * Math.pow(10, digits - 3) : 1;
+    }
+    roundLegalPrice(price, direction) {
+      if (!Number.isFinite(price) || price <= 0) return 0;
+      const p = Math.trunc(price);
+      if (p <= 1) return 1;
+      const step = this.getPriceStepAt(p);
+      const lower = p - p % step;
+      return direction === "up" && p > lower ? lower + step : Math.max(1, lower);
+    }
+    stepLegalPrice(price, deltaSteps) {
+      if (!Number.isFinite(price) || price <= 0) return 1;
+      let cur = this.roundLegalPrice(price, deltaSteps >= 0 ? "up" : "down");
+      const steps = Math.abs(Math.trunc(deltaSteps));
+      const dir = deltaSteps >= 0 ? 1 : -1;
+      for (let i = 0; i < steps; i++) {
+        if (dir > 0) {
+          cur += this.getPriceStepAt(cur);
+        } else {
+          if (cur <= 1) {
+            cur = 1;
+            break;
+          }
+          const downCandidate = cur - 1;
+          const step = this.getPriceStepAt(downCandidate);
+          cur = Math.max(1, downCandidate - downCandidate % step);
+        }
+      }
+      return Math.max(1, cur);
+    }
+    onPriceUpdate(cb) {
+      this.listeners.add(cb);
+      return () => this.listeners.delete(cb);
+    }
+    notify() {
+      for (const cb of this.listeners) {
+        try {
+          cb();
+        } catch (err) {
+          console.error("[MWI Lite marketStore] listener error:", err);
+        }
+      }
+    }
+  };
+  var marketStore = new LiteMarketStore();
+
+  // src/core/dom-scheduler.ts
+  function isPureLiteNode(node) {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
+    const el = node;
+    return el.hasAttribute("data-mwi-lite") || el.closest?.("[data-mwi-lite]") !== null;
+  }
+  var SingleRafDomScheduler = class {
+    observer = null;
+    tasks = /* @__PURE__ */ new Map();
+    routeListeners = /* @__PURE__ */ new Set();
+    activeRoute = "other";
+    rafId = null;
+    lastRunTs = 0;
+    cooldownTimer = null;
+    minIntervalMs = 80;
+    start() {
+      if (this.observer) return;
+      const attach = () => {
+        if (!document.body) {
+          setTimeout(attach, 20);
+          return;
+        }
+        this.observer = new MutationObserver((mutations) => {
+          let hasExternalMutation = false;
+          for (let i = 0; i < mutations.length; i++) {
+            const m = mutations[i];
+            if (m.target instanceof Element && isPureLiteNode(m.target)) {
+              continue;
+            }
+            if (m.addedNodes.length > 0) {
+              let allLite = true;
+              for (let j = 0; j < m.addedNodes.length; j++) {
+                const added = m.addedNodes[j];
+                if (added.nodeType === Node.ELEMENT_NODE && !isPureLiteNode(added)) {
+                  allLite = false;
+                  break;
+                }
+                if (added.nodeType !== Node.ELEMENT_NODE) {
+                  allLite = false;
+                  break;
+                }
+              }
+              if (allLite) continue;
+            }
+            hasExternalMutation = true;
+            break;
+          }
+          if (hasExternalMutation) {
+            this.scheduleRun(false);
+          }
+        });
+        this.observer.observe(document.body, {
+          childList: true,
+          subtree: true
+        });
+        this.scheduleRun(true);
+      };
+      attach();
+    }
+    isVisible(selector) {
+      const els = document.querySelectorAll(selector);
+      for (let i = 0; i < els.length; i++) {
+        if (els[i].offsetParent !== null) return true;
+      }
+      return false;
+    }
+    detectRoute() {
+      if (this.isVisible('[class*="MarketplacePanel_marketplacePanel"]')) {
+        return "market";
+      }
+      if (this.isVisible('[class*="LabyrinthPanel_labyrinthPanel"]')) {
+        return "labyrinth";
+      }
+      if (this.isVisible('[class*="BattlePanel_"]') || this.isVisible('[class*="CombatPanel_"]') || this.isVisible('[class*="DungeonPanel_"]')) {
+        return "combat";
+      }
+      if (this.isVisible('[class*="TasksPanel_"]')) {
+        return "tasks";
+      }
+      if (this.isVisible('[class*="HousePanel_"]')) {
+        return "house";
+      }
+      if (this.isVisible('[class*="GatheringProductionSkillPanel_"]') || this.isVisible('[class*="SkillActionDetail_"]') || this.isVisible('[class*="EnhancingPanel_"]') || this.isVisible('[class*="AlchemyPanel_"]')) {
+        return "production";
+      }
+      if (this.isVisible("#mwi-lite-calculator-panel")) {
+        return "calculator";
+      }
+      return "other";
+    }
+    getActiveRoute() {
+      return this.activeRoute;
+    }
+    registerDomHandler(id, routes, cb) {
+      this.tasks.set(id, { id, routes, cb });
+      this.scheduleRun(true);
+      return () => {
+        this.tasks.delete(id);
+      };
+    }
+    onRouteChange(cb) {
+      this.routeListeners.add(cb);
+      return () => this.routeListeners.delete(cb);
+    }
+    scheduleRun(immediate = false) {
+      if (immediate) {
+        this.flush();
+        return;
+      }
+      const now = performance.now();
+      const elapsed = now - this.lastRunTs;
+      if (elapsed < this.minIntervalMs) {
+        if (this.cooldownTimer === null) {
+          this.cooldownTimer = window.setTimeout(() => {
+            this.cooldownTimer = null;
+            this.queueRaf();
+          }, Math.max(16, this.minIntervalMs - elapsed));
+        }
+        return;
+      }
+      this.queueRaf();
+    }
+    queueRaf() {
+      if (this.rafId !== null) return;
+      this.rafId = requestAnimationFrame(() => {
+        this.rafId = null;
+        this.flush();
+      });
+    }
+    flush() {
+      if (!document.body) return;
+      this.lastRunTs = performance.now();
+      const prevRoute = this.activeRoute;
+      const nextRoute = this.detectRoute();
+      if (nextRoute !== prevRoute) {
+        this.activeRoute = nextRoute;
+        for (const fn of this.routeListeners) {
+          try {
+            fn(nextRoute, prevRoute);
+          } catch (err) {
+            console.error("[MWI Lite domScheduler] route listener error:", err);
+          }
+        }
+      }
+      for (const task of this.tasks.values()) {
+        if (task.routes && !task.routes.includes(nextRoute)) {
+          continue;
+        }
+        try {
+          task.cb(document, nextRoute);
+        } catch (err) {
+          console.error(`[MWI Lite domScheduler] task error (${task.id}):`, err);
+        }
+      }
+    }
+  };
+  var domScheduler = new SingleRafDomScheduler();
+
+  // src/core/registry.ts
+  var TOGGLES_STORAGE_KEY = "feature_toggles_v1";
+  var FeatureRegistry = class {
+    entries = /* @__PURE__ */ new Map();
+    savedToggles = {};
+    initialized = false;
+    constructor() {
+      this.savedToggles = storage.get(TOGGLES_STORAGE_KEY, {});
+    }
+    register(mod) {
+      const saved = this.savedToggles[mod.id];
+      const enabled = typeof saved === "boolean" ? saved : mod.defaultEnabled;
+      this.entries.set(mod.id, { module: mod, enabled });
+      if (this.initialized && enabled) {
+        this.startModule(this.entries.get(mod.id));
+      }
+    }
+    registerAll(mods) {
+      for (const m of mods) {
+        this.register(m);
+      }
+    }
+    initAll() {
+      if (this.initialized) return;
+      this.initialized = true;
+      for (const entry of this.entries.values()) {
+        if (entry.enabled) {
+          this.startModule(entry);
+        }
+      }
+    }
+    isEnabled(id) {
+      return this.entries.get(id)?.enabled ?? false;
+    }
+    setEnabled(id, enabled) {
+      const entry = this.entries.get(id);
+      if (!entry || entry.enabled === enabled) return;
+      entry.enabled = enabled;
+      this.savedToggles[id] = enabled;
+      storage.set(TOGGLES_STORAGE_KEY, this.savedToggles);
+      if (enabled) {
+        this.startModule(entry);
+        domScheduler.scheduleRun(true);
+      } else {
+        this.stopModule(entry);
+      }
+    }
+    list() {
+      return Array.from(this.entries.values()).map((e) => ({
+        module: e.module,
+        enabled: e.enabled
+      }));
+    }
+    createContext() {
+      return {
+        pageWindow: getPageWindow(),
+        wsBus,
+        gameData,
+        marketStore,
+        domScheduler,
+        storage,
+        i18n,
+        addStyle,
+        isFeatureEnabled: (id) => this.isEnabled(id)
+      };
+    }
+    startModule(entry) {
+      const ctx = this.createContext();
+      try {
+        const cleanup = entry.module.init(ctx);
+        if (typeof cleanup === "function") {
+          entry.dispose = cleanup;
+        }
+      } catch (err) {
+        console.error(`[MWI Lite] Failed to init ${entry.module.id}:`, err);
+      }
+      if (typeof entry.module.onDom === "function") {
+        const mod = entry.module;
+        entry.unregDom = domScheduler.registerDomHandler(mod.id, mod.routes, (doc, route) => {
+          mod.onDom?.(doc, route);
+        });
+      }
+    }
+    stopModule(entry) {
+      try {
+        entry.unregDom?.();
+      } catch {
+      }
+      entry.unregDom = void 0;
+      try {
+        entry.dispose?.();
+      } catch (err) {
+        console.error(`[MWI Lite] Failed to dispose ${entry.module.id}:`, err);
+      }
+      entry.dispose = void 0;
+    }
+  };
+  var registry = new FeatureRegistry();
+
+  // src/core/settings-ui.ts
+  var SETTINGS_BTN_ID = "mwi-lite-settings-btn";
+  var SETTINGS_MODAL_ID = "mwi-lite-settings-modal";
+  var CATEGORY_LABELS = {
+    market: ["市场与经济", "Market & Economy"],
+    planner: ["规划与队列", "Planner & Queue"],
+    combat: ["战斗与迷宫", "Combat & Labyrinth"]
+  };
+  function mountSettingsUI(isWorkerActiveFn) {
+    addStyle(
+      "settings-ui",
+      `
+    #${SETTINGS_BTN_ID} {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-left: 8px;
+      padding: 3px 9px;
+      border-radius: 6px;
+      border: 1px solid rgba(114, 179, 255, 0.35);
+      background: rgba(24, 34, 56, 0.9);
+      color: #a8d4ff;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      user-select: none;
+      line-height: 1.4;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    #${SETTINGS_BTN_ID}:hover {
+      background: rgba(38, 56, 92, 0.95);
+      border-color: rgba(114, 179, 255, 0.7);
+    }
+    #${SETTINGS_BTN_ID}.mwi-lite-floating {
+      position: fixed;
+      right: 14px;
+      bottom: 14px;
+      z-index: 9500;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+    }
+    #${SETTINGS_MODAL_ID} {
+      position: fixed;
+      inset: 0;
+      z-index: 9900;
+      background: rgba(7, 10, 18, 0.72);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    #${SETTINGS_MODAL_ID}.open {
+      display: flex;
+    }
+    #${SETTINGS_MODAL_ID} .mwi-lite-card {
+      width: min(640px, 92vw);
+      max-height: 82vh;
+      display: flex;
+      flex-direction: column;
+      background: #131826;
+      color: #e6ecf7;
+      border: 1px solid #2b3856;
+      border-radius: 12px;
+      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.65);
+      overflow: hidden;
+    }
+    #${SETTINGS_MODAL_ID} .mwi-lite-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      border-bottom: 1px solid #232d45;
+      background: #171e30;
+    }
+    #${SETTINGS_MODAL_ID} .mwi-lite-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #ffffff;
+    }
+    #${SETTINGS_MODAL_ID} .mwi-lite-status {
+      font-size: 12px;
+      color: #93a7cb;
+      margin-top: 2px;
+    }
+    #${SETTINGS_MODAL_ID} .mwi-lite-close {
+      background: transparent;
+      border: 1px solid #334263;
+      color: #c2cee5;
+      border-radius: 6px;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    #${SETTINGS_MODAL_ID} .mwi-lite-body {
+      padding: 14px 18px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    #${SETTINGS_MODAL_ID} .mwi-lite-group-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #7cc0ff;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    #${SETTINGS_MODAL_ID} .mwi-lite-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 9px 12px;
+      border-radius: 8px;
+      background: #1a2235;
+      border: 1px solid #25304a;
+      margin-bottom: 6px;
+    }
+    #${SETTINGS_MODAL_ID} .mwi-lite-row-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #eef3fc;
+    }
+    #${SETTINGS_MODAL_ID} .mwi-lite-row-desc {
+      font-size: 11.5px;
+      color: #93a5c7;
+      margin-top: 2px;
+    }
+    #${SETTINGS_MODAL_ID} input[type="checkbox"] {
+      width: 17px;
+      height: 17px;
+      accent-color: #4f9cff;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    `
+    );
+    const renderModal = () => {
+      let modal = document.getElementById(SETTINGS_MODAL_ID);
+      if (!modal) {
+        modal = document.createElement("div");
+        modal.id = SETTINGS_MODAL_ID;
+        modal.setAttribute("data-mwi-lite", "1");
+        modal.addEventListener("click", (ev) => {
+          if (ev.target === modal) modal?.classList.remove("open");
+        });
+        document.body.appendChild(modal);
+      }
+      const items = registry.list();
+      const enabledCount = items.filter((i) => i.enabled).length;
+      const workerTxt = isWorkerActiveFn() ? i18n.t("迷宫 Worker 运行中 (1 线程)", "Labyrinth Worker Active (1 thread)") : i18n.t("迷宫 Worker 休眠 (0 线程)", "Labyrinth Worker Idle (0 threads)");
+      const groups = ["market", "planner", "combat"];
+      const groupsHtml = groups.map((cat) => {
+        const list = items.filter((x) => x.module.category === cat);
+        if (!list.length) return "";
+        const [zhCat, enCat] = CATEGORY_LABELS[cat];
+        const rowsHtml = list.map(({ module, enabled }) => {
+          const name = i18n.t(module.nameZh, module.nameEn);
+          const desc = i18n.t(module.descriptionZh, module.descriptionEn);
+          return `
+              <label class="mwi-lite-row">
+                <div>
+                  <div class="mwi-lite-row-name">${name}</div>
+                  <div class="mwi-lite-row-desc">${desc}</div>
+                </div>
+                <input type="checkbox" data-mwi-lite-toggle="${module.id}" ${enabled ? "checked" : ""} />
+              </label>
+            `;
+        }).join("");
+        return `<div><div class="mwi-lite-group-title">${i18n.t(zhCat, enCat)}</div>${rowsHtml}</div>`;
+      }).join("");
+      modal.innerHTML = `
+      <div class="mwi-lite-card">
+        <div class="mwi-lite-header">
+          <div>
+            <div class="mwi-lite-title">🪶 MWI · Hugunn v1.1.0</div>
+            <div class="mwi-lite-status">
+              ${i18n.t(`已启用 ${enabledCount}/${items.length} 模块`, `${enabledCount}/${items.length} modules enabled`)}
+              · ${i18n.t("当前路由", "Route")}: <b>${domScheduler.getActiveRoute()}</b>
+              · ${workerTxt}
+            </div>
+          </div>
+          <button type="button" class="mwi-lite-close">${i18n.t("关闭", "Close")}</button>
+        </div>
+        <div class="mwi-lite-body">${groupsHtml}</div>
+      </div>
+    `;
+      modal.querySelector(".mwi-lite-close")?.addEventListener("click", () => {
+        modal?.classList.remove("open");
+      });
+      modal.querySelectorAll("input[data-mwi-lite-toggle]").forEach((cb) => {
+        cb.addEventListener("change", () => {
+          const id = cb.getAttribute("data-mwi-lite-toggle");
+          if (id) {
+            registry.setEnabled(id, cb.checked);
+            renderModal();
+          }
+        });
+      });
+      return modal;
+    };
+    const openSettings = () => {
+      const modal = renderModal();
+      modal.classList.add("open");
+    };
+    if (typeof GM_registerMenuCommand === "function") {
+      try {
+        GM_registerMenuCommand("🪶 MWI · Hugunn 设置 / Settings", openSettings);
+      } catch {
+      }
+    }
+    const ensureButton = () => {
+      if (!document.body) return;
+      let btn = document.getElementById(SETTINGS_BTN_ID);
+      const headerTarget = document.querySelector('[class*="Header_totalLevel"]') || document.querySelector('[class*="Header_info"]') || document.querySelector('[class*="Header_header"]');
+      if (!btn) {
+        btn = document.createElement("button");
+        btn.id = SETTINGS_BTN_ID;
+        btn.type = "button";
+        btn.setAttribute("data-mwi-lite", "1");
+        btn.textContent = "🪶 Hugunn";
+        btn.title = i18n.t("打开 MWI · Hugunn 设置", "Open MWI · Hugunn Settings");
+        btn.addEventListener("click", openSettings);
+      }
+      if (headerTarget && headerTarget.parentElement) {
+        btn.classList.remove("mwi-lite-floating");
+        if (btn.parentElement !== headerTarget.parentElement) {
+          headerTarget.parentElement.insertBefore(btn, headerTarget.nextSibling);
+        }
+      } else if (!btn.isConnected) {
+        btn.classList.add("mwi-lite-floating");
+        document.body.appendChild(btn);
+      }
+    };
+    domScheduler.registerDomHandler("core-settings-btn", void 0, () => {
+      ensureButton();
+    });
+  }
+
+  // src/features/combat/combat-light.ts
+  var COUNTER_ID = "mwi-lite-combat-counter";
+  var LOOT_BAR_ID = "mwi-lite-combat-loot-bar";
+  var LOADOUT_BADGE_CLASS = "mwi-lite-loadout-enh";
+  var SCORE_BADGE_CLASS = "mwi-lite-combat-score";
+  function formatCompact(n) {
+    if (!Number.isFinite(n)) return "0";
+    const abs = Math.abs(n);
+    if (abs >= 1e9) return `${(n / 1e9).toFixed(2).replace(/\.?0+$/, "")}B`;
+    if (abs >= 1e6) return `${(n / 1e6).toFixed(2).replace(/\.?0+$/, "")}M`;
+    if (abs >= 1e3) return `${(n / 1e3).toFixed(1).replace(/\.?0+$/, "")}K`;
+    return String(Math.round(n));
+  }
+  function formatElapsed(ms) {
+    const sec = Math.max(0, Math.floor(ms / 1e3));
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor(sec % 3600 / 60);
+    const s = sec % 60;
+    if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
+    return `${m}m ${String(s).padStart(2, "0")}s`;
+  }
+  function createCombatLightTrackerModule() {
+    let ctx = null;
+    let unregStyle = null;
+    let unsubs = [];
+    let battleId = 0;
+    let currentWave = 0;
+    let isDungeon = false;
+    let isLabyrinth = false;
+    let labyrinthAttempt = 0;
+    let sessionStartTs = 0;
+    let sessionXpGain = 0;
+    let sessionLootValue = 0;
+    let lastInventoryCounts = /* @__PURE__ */ new Map();
+    const snapshotInventoryCounts = () => {
+      const map = /* @__PURE__ */ new Map();
+      for (const it of ctx?.gameData.getCharacterItems() || []) {
+        if (!it || it.itemLocationHrid !== "/item_locations/inventory") continue;
+        const key = `${it.itemHrid}:${it.enhancementLevel || 0}`;
+        map.set(key, (map.get(key) || 0) + (it.count || 0));
+      }
+      return map;
+    };
+    const renderCounter = () => {
+      const nameRow = document.querySelector('[class*="Header_actionName"]');
+      if (!nameRow) return;
+      const actions = ctx?.gameData.getCharacterActions() || [];
+      const activeCombat = actions.some(
+        (a) => !a?.isDone && (a?.actionHrid?.startsWith("/actions/combat/") || a?.actionHrid === "/actions/labyrinth/explore")
+      );
+      if (!activeCombat || battleId === 0 && labyrinthAttempt === 0) {
+        document.getElementById(COUNTER_ID)?.remove();
+        document.getElementById(LOOT_BAR_ID)?.remove();
+        return;
+      }
+      let el = document.getElementById(COUNTER_ID);
+      if (!el) {
+        el = document.createElement("span");
+        el.id = COUNTER_ID;
+        el.setAttribute("data-mwi-lite", "1");
+        nameRow.appendChild(el);
+      }
+      if (isLabyrinth) {
+        el.textContent = ` · #${labyrinthAttempt}`;
+      } else if (isDungeon) {
+        el.textContent = ` · W${currentWave} · #${battleId}`;
+      } else {
+        el.textContent = ` · #${battleId}`;
+      }
+      const combatPanel = document.querySelector('[class*="BattlePanel_"]') || document.querySelector('[class*="CombatPanel_"]');
+      if (combatPanel && sessionStartTs > 0) {
+        let summary = document.getElementById(LOOT_BAR_ID);
+        if (!summary) {
+          summary = document.createElement("div");
+          summary.id = LOOT_BAR_ID;
+          summary.setAttribute("data-mwi-lite", "1");
+          combatPanel.insertBefore(summary, combatPanel.firstChild);
+        }
+        const hours = Math.max(1 / 3600, (Date.now() - sessionStartTs) / 36e5);
+        const xpPerHr = sessionXpGain / hours;
+        const lootPerHr = sessionLootValue / hours;
+        summary.textContent = `⚔ ${formatElapsed(Date.now() - sessionStartTs)} · XP/h ${formatCompact(xpPerHr)} · ${ctx?.i18n.t("掉落/h", "Loot/h")} ${formatCompact(lootPerHr)} (${ctx?.i18n.t("累计", "Total")} ${formatCompact(sessionLootValue)})`;
+      }
+    };
+    return {
+      id: "combat-light-tracker",
+      nameZh: "战斗波次与轻量收益统计",
+      nameEn: "Light Combat & Loot Tracker",
+      descriptionZh: "在行动栏显示当前波次/场次，在战斗面板顶部展示耗时、XP/h 与掉落估值（无 Chart.js）",
+      descriptionEn: "Show battle/wave counter, runtime, XP/hr and loot value summary without Chart.js",
+      category: "combat",
+      defaultEnabled: true,
+      init(context) {
+        ctx = context;
+        unregStyle = ctx.addStyle(
+          "combat-light-tracker",
+          `
+        #${COUNTER_ID} { color: rgba(255,255,255,0.72); margin-left: 5px; font-size: 12px; white-space: nowrap; }
+        #${LOOT_BAR_ID} {
+          padding: 4px 10px;
+          margin-bottom: 6px;
+          border-radius: 5px;
+          background: rgba(30, 41, 59, 0.78);
+          border: 1px solid rgba(71, 85, 105, 0.5);
+          color: #cbd5e1;
+          font-size: 12px;
+        }
+        `
+        );
+        lastInventoryCounts = snapshotInventoryCounts();
+        unsubs = [
+          ctx.wsBus.on("init_character_data", () => {
+            sessionStartTs = 0;
+            sessionXpGain = 0;
+            sessionLootValue = 0;
+            battleId = 0;
+            currentWave = 0;
+            lastInventoryCounts = snapshotInventoryCounts();
+          }),
+          ctx.wsBus.on("new_battle", (data) => {
+            const actions = ctx?.gameData.getCharacterActions() || [];
+            const combatAct = actions.find((a) => !a?.isDone && a?.actionHrid?.startsWith("/actions/combat/"));
+            if (!combatAct) return;
+            if (!sessionStartTs) {
+              sessionStartTs = Date.now();
+              sessionXpGain = 0;
+              sessionLootValue = 0;
+              lastInventoryCounts = snapshotInventoryCounts();
+            }
+            isLabyrinth = false;
+            labyrinthAttempt = 0;
+            battleId = data?.battleId || battleId + 1;
+            const zoneInfo = ctx?.gameData.getClientData()?.actionDetailMap?.[combatAct.actionHrid]?.combatZoneInfo;
+            isDungeon = zoneInfo?.isDungeon === true;
+            currentWave = isDungeon ? data?.wave ?? 0 : 0;
+            renderCounter();
+          }),
+          ctx.wsBus.on("labyrinth_updated", (data) => {
+            const lab = data?.labyrinth;
+            if (!lab?.isActive) return;
+            const activeLab = (ctx?.gameData.getCharacterActions() || []).some(
+              (a) => !a?.isDone && a?.actionHrid === "/actions/labyrinth/explore"
+            );
+            if (!activeLab) return;
+            try {
+              const path = JSON.parse(lab.pathData || "[]");
+              const active = path[path.length - 1];
+              const room = lab.roomData?.[active?.y]?.[active?.x];
+              if (room?.roomType === "/labyrinth_room_types/combat" && (room.entryCount || 0) > 0) {
+                isLabyrinth = true;
+                labyrinthAttempt = room.entryCount;
+                renderCounter();
+              }
+            } catch {
+            }
+          }),
+          ctx.wsBus.on("action_completed", (data) => {
+            if (!sessionStartTs) return;
+            const curCounts = snapshotInventoryCounts();
+            for (const [k, curVal] of curCounts) {
+              const prevVal = lastInventoryCounts.get(k) || 0;
+              if (curVal > prevVal) {
+                const [hrid, enhStr] = k.split(":");
+                const diff = curVal - prevVal;
+                if (hrid === "/items/coin") {
+                  sessionLootValue += diff;
+                } else {
+                  const p = ctx?.marketStore.getPrice(hrid, Number(enhStr) || 0);
+                  const unit = p?.bid ?? p?.ask ?? 0;
+                  sessionLootValue += unit * diff;
+                }
+              }
+            }
+            lastInventoryCounts = curCounts;
+            if (typeof data?.experienceGain === "number") {
+              sessionXpGain += data.experienceGain;
+            }
+            renderCounter();
+          }),
+          ctx.wsBus.on("actions_updated", () => {
+            const hasCombat = (ctx?.gameData.getCharacterActions() || []).some(
+              (a) => !a?.isDone && (a?.actionHrid?.startsWith("/actions/combat/") || a?.actionHrid === "/actions/labyrinth/explore")
+            );
+            if (!hasCombat) {
+              battleId = 0;
+              currentWave = 0;
+              isLabyrinth = false;
+              labyrinthAttempt = 0;
+              renderCounter();
+            }
+          })
+        ];
+        return () => {
+          unsubs.forEach((u) => u());
+          unsubs = [];
+          unregStyle?.();
+          unregStyle = null;
+          document.getElementById(COUNTER_ID)?.remove();
+          document.getElementById(LOOT_BAR_ID)?.remove();
+        };
+      },
+      onDom() {
+        renderCounter();
+      }
+    };
+  }
+  function createLoadoutBadgeModule() {
+    let ctx = null;
+    let unregStyle = null;
+    const renderBadges = () => {
+      if (!ctx) return;
+      const selectedLoadout = document.querySelector('[class*="LoadoutsPanel_selectedLoadout"]');
+      if (!selectedLoadout) return;
+      const equipDiv = selectedLoadout.querySelector('[class*="LoadoutsPanel_equipment"]');
+      if (!equipDiv) return;
+      const enhMap = /* @__PURE__ */ new Map();
+      for (const item of ctx.gameData.getCharacterItems()) {
+        if (!item?.itemHrid) continue;
+        const lvl = item.enhancementLevel || 0;
+        const prev = enhMap.get(item.itemHrid) || 0;
+        if (lvl > prev) enhMap.set(item.itemHrid, lvl);
+      }
+      equipDiv.querySelectorAll(`.${LOADOUT_BADGE_CLASS}`).forEach((el) => el.remove());
+      for (const useEl of equipDiv.querySelectorAll("use")) {
+        const href = useEl.getAttribute("href") || useEl.getAttribute("xlink:href") || "";
+        if (!href.includes("items_sprite")) continue;
+        const slug = href.split("#")[1];
+        if (!slug) continue;
+        const enh = enhMap.get(`/items/${slug}`) || 0;
+        if (enh <= 0) continue;
+        const slot = useEl.closest('[class*="LoadoutsPanel_equipmentSlot"], [class*="Item_itemContainer"]') || useEl.parentElement?.parentElement;
+        if (!slot) continue;
+        if (getComputedStyle(slot).position === "static") {
+          slot.style.position = "relative";
+        }
+        const badge = document.createElement("span");
+        badge.className = LOADOUT_BADGE_CLASS;
+        badge.setAttribute("data-mwi-lite", "1");
+        badge.textContent = `+${enh}`;
+        slot.appendChild(badge);
+      }
+    };
+    return {
+      id: "combat-loadout-badge",
+      nameZh: "配装强化等级角标",
+      nameEn: "Loadout Enhancement Badges",
+      descriptionZh: "在配装面板装备图标上直接显示仓库最高 +N 强化等级",
+      descriptionEn: "Overlay +N enhancement level badges on equipment icons in Loadouts panel",
+      category: "combat",
+      defaultEnabled: true,
+      init(context) {
+        ctx = context;
+        unregStyle = ctx.addStyle(
+          "combat-loadout-badge",
+          `
+        .${LOADOUT_BADGE_CLASS} {
+          position: absolute;
+          top: 1px;
+          left: 2px;
+          z-index: 5;
+          font-size: 10px;
+          font-weight: 700;
+          color: #fde047;
+          background: rgba(15, 23, 42, 0.85);
+          padding: 0 3px;
+          border-radius: 3px;
+          pointer-events: none;
+          line-height: 1.2;
+        }
+        `
+        );
+        return () => {
+          unregStyle?.();
+          unregStyle = null;
+          document.querySelectorAll(`.${LOADOUT_BADGE_CLASS}`).forEach((el) => el.remove());
+        };
+      },
+      onDom() {
+        renderBadges();
+      }
+    };
+  }
+  function createCombatScoreModule() {
+    let ctx = null;
+    let unregStyle = null;
+    let unregWs = null;
+    let lastProfile = null;
+    const computeProfileCombatScore = (profileWrapper) => {
+      const profile = profileWrapper?.profile || profileWrapper || {};
+      const clientData = ctx?.gameData.getClientData();
+      if (!clientData) return { total: 0, house: 0, ability: 0, gear: 0 };
+      let houseCost = 0;
+      const combatHouses = ["archery_range", "armory", "dining_room", "library", "observatory", "gym", "alchemy_lab"];
+      const houseMap = profile.characterHouseRoomMap || {};
+      for (const [roomHrid, info] of Object.entries(houseMap)) {
+        if (!combatHouses.some((k) => roomHrid.includes(k))) continue;
+        const lv = info?.level || 0;
+        const costsMap = clientData.houseRoomDetailMap?.[roomHrid]?.upgradeCostsMap;
+        if (!costsMap) continue;
+        for (let i = 1; i <= lv; i++) {
+          for (const c of costsMap[i] || []) {
+            if (c.itemHrid === "/items/coin") houseCost += c.count || 0;
+            else {
+              const p = ctx?.marketStore.getPrice(c.itemHrid, 0);
+              houseCost += (p?.ask ?? p?.bid ?? 0) * (c.count || 0);
+            }
+          }
+        }
+      }
+      let abilityCost = 0;
+      const bookExpTable = clientData.abilityExperienceThresholdTable || clientData.levelExperienceTable || [];
+      for (const ab of profile.equippedAbilities || []) {
+        if (!ab?.abilityHrid || !ab.level) continue;
+        const bookSlug = ab.abilityHrid.replace("/abilities/", "");
+        const bookHrid = `/items/${bookSlug}`;
+        const p = ctx?.marketStore.getPrice(bookHrid, 0);
+        const bookPrice = p?.ask ?? p?.bid ?? 0;
+        if (bookPrice > 0) {
+          const xpNeeded = bookExpTable[ab.level] || ab.level * 50;
+          abilityCost += Math.ceil(xpNeeded / 50) * bookPrice;
+        }
+      }
+      let gearCost = 0;
+      const wearableMap = profile.wearableItemMap || {};
+      for (const item of Object.values(wearableMap)) {
+        if (!item?.itemHrid) continue;
+        const enh = item.enhancementLevel || 0;
+        const p = ctx?.marketStore.getPrice(item.itemHrid, enh);
+        if (p?.ask || p?.bid) {
+          gearCost += p.ask ?? p.bid ?? 0;
+        } else {
+          const base = ctx?.marketStore.getPrice(item.itemHrid, 0);
+          gearCost += (base?.ask ?? base?.bid ?? 0) * Math.pow(1.35, Math.min(enh, 12));
+        }
+      }
+      const house = houseCost / 1e6;
+      const ability = abilityCost / 1e6;
+      const gear = gearCost / 1e6;
+      return { total: house + ability + gear, house, ability, gear };
+    };
+    const injectScoreOnProfilePanel = () => {
+      if (!ctx) return;
+      const profilePanels = document.querySelectorAll('[class*="Profile_profile"]');
+      if (!profilePanels.length) return;
+      profilePanels.forEach((panel) => {
+        if (panel.querySelector(`.${SCORE_BADGE_CLASS}`)) return;
+        const charData = ctx.gameData.getCharacterData();
+        const sourceData = lastProfile || (charData ? { profile: { characterHouseRoomMap: Object.fromEntries(ctx.gameData.getHouseRooms()), wearableItemMap: Object.fromEntries(ctx.gameData.getCharacterItems().filter((i) => i.itemLocationHrid !== "/item_locations/inventory").map((i) => [i.itemLocationHrid, i])) } } : null);
+        if (!sourceData) return;
+        const score = computeProfileCombatScore(sourceData);
+        if (score.total <= 0) return;
+        const badge = document.createElement("div");
+        badge.className = SCORE_BADGE_CLASS;
+        badge.setAttribute("data-mwi-lite", "1");
+        badge.textContent = `🛡 ${ctx.i18n.t("战斗评分", "Combat Score")}: ${score.total.toFixed(1)}M (${ctx.i18n.t("房", "H")} ${score.house.toFixed(1)} + ${ctx.i18n.t("技", "A")} ${score.ability.toFixed(1)} + ${ctx.i18n.t("装", "G")} ${score.gear.toFixed(1)})`;
+        const header = panel.querySelector('[class*="Profile_characterName"], [class*="Profile_header"]') || panel.firstElementChild;
+        header?.parentElement?.insertBefore(badge, header.nextSibling);
+      });
+    };
+    return {
+      id: "combat-score",
+      nameZh: "角色战斗评分",
+      nameEn: "Combat Score",
+      descriptionZh: "在角色资料面板展示综合战力估值（战斗房屋 + 已装备技能书 + 装备价值）",
+      descriptionEn: "Show Combat Score breakdown (houses + equipped abilities + gear) on Profile panel",
+      category: "combat",
+      defaultEnabled: true,
+      init(context) {
+        ctx = context;
+        unregStyle = ctx.addStyle(
+          "combat-score",
+          `
+        .${SCORE_BADGE_CLASS} {
+          display: inline-block;
+          margin: 4px 0;
+          padding: 3px 9px;
+          border-radius: 5px;
+          background: rgba(59, 130, 246, 0.16);
+          border: 1px solid rgba(96, 165, 250, 0.35);
+          color: #93c5fd;
+          font-size: 12px;
+          font-weight: 600;
+        }
+        `
+        );
+        unregWs = ctx.wsBus.on("profile_shared", (data) => {
+          lastProfile = data;
+          document.querySelectorAll(`.${SCORE_BADGE_CLASS}`).forEach((el) => el.remove());
+          ctx?.domScheduler.scheduleRun(false);
+        });
+        return () => {
+          unregWs?.();
+          unregWs = null;
+          unregStyle?.();
+          unregStyle = null;
+          document.querySelectorAll(`.${SCORE_BADGE_CLASS}`).forEach((el) => el.remove());
+        };
+      },
+      onDom() {
+        injectScoreOnProfilePanel();
+      }
+    };
+  }
+
+  // src/features/combat/labyrinth-engine.js
+  function createLabyrinthEngine(adapters) {
+    "use strict";
+    const ROOM_DURATION_SECONDS = 120;
+    const ROOM_ENTRY_SECONDS = 1;
+    const BASE_ACTION_SECONDS = 10;
+    const BASE_ENHANCING_ACTION_SECONDS = 8;
+    const LABYRINTH_ENHANCING_BASE_TARGET_LEVEL = 3;
+    const LABYRINTH_ENHANCING_LEVEL_STEP = 50;
+    const LABYRINTH_COMBAT_ROOM_TYPE = "/labyrinth_room_types/combat";
+    const LABYRINTH_SKILLING_ROOM_TYPE = "/labyrinth_room_types/skilling";
+    const LABYRINTH_TREASURE_ROOM_TYPE = "/labyrinth_room_types/treasure";
+    const LABYRINTH_DESCEND_ROOM_TYPE = "/labyrinth_room_types/descend";
+    const DEFAULT_COMBAT_SIM_TRIALS = 100;
+    const DEFAULT_AUTOMATION_COMBAT_SIM_TRIALS = 500;
+    const DEFAULT_AUTOMATION_TARGET_WIN_RATE = 70;
+    const MIN_COMBAT_SIM_TRIALS = 1;
+    const MAX_COMBAT_SIM_TRIALS = 2e3;
+    const COMBAT_SIM_TRIALS_STORAGE_KEY = "mwi_lab_clear_rate_combat_trials";
+    const AUTOMATION_COMBAT_SIM_TRIALS_STORAGE_KEY = "mwi_lab_auto_combat_trials";
+    const AUTOMATION_TARGET_WIN_RATE_STORAGE_KEY = "mwi_lab_auto_target_win_rate";
+    const COMBAT_SIM_CACHE_LIMIT = 500;
+    const COMBAT_ONE_SECOND_NS = 1e9;
+    const COMBAT_SLOT_COUNT = 5;
+    const SIMULATOR_SUPPORTED_EQUIPMENT_TYPES = /* @__PURE__ */ new Set([
+      "/equipment_types/head",
+      "/equipment_types/body",
+      "/equipment_types/legs",
+      "/equipment_types/feet",
+      "/equipment_types/hands",
+      "/equipment_types/main_hand",
+      "/equipment_types/two_hand",
+      "/equipment_types/off_hand",
+      "/equipment_types/pouch",
+      "/equipment_types/back",
+      "/equipment_types/neck",
+      "/equipment_types/earrings",
+      "/equipment_types/ring",
+      "/equipment_types/charm"
+    ]);
+    const COMBAT_SIM_CHUNK_CACHE_BUST = "20260309-1.5.7";
+    const COMBAT_SIM_VENDOR_CHUNK_URL = `https://shykai.github.io/MWICombatSimulatorTest/dist/vendors-node_modules_heap-js_dist_heap-js_es5_js.bundle.js?v=${COMBAT_SIM_CHUNK_CACHE_BUST}`;
+    const COMBAT_SIM_WORKER_CHUNK_URL = `https://shykai.github.io/MWICombatSimulatorTest/dist/src_worker_js.bundle.js?v=${COMBAT_SIM_CHUNK_CACHE_BUST}`;
+    const COMBAT_MAZE_PLAYER_LEVEL_BONUS = 15;
+    const COMBAT_MAZE_PLAYER_ATTACK_SPEED_BONUS = 0.15;
+    const COMBAT_MAZE_PLAYER_REGEN_BONUS = 0.06;
+    const COMBAT_MAZE_PLAYER_CRIT_RATE_BONUS = 0.06;
+    const COMBAT_MAZE_PLAYER_CRIT_DAMAGE_BONUS = 0.1;
+    const COMBAT_MODEL_SIGNATURE = "official-simulator-core-v2";
+    const LABYRINTH_ABILITY_NAME_ZH_MAP = {
+      "/abilities/critical_aura": "暴击光环",
+      "/abilities/elusiveness": "闪避",
+      "/abilities/rain_of_arrows": "箭雨",
+      "/abilities/penetrating_shot": "贯穿射击",
+      "/abilities/steady_shot": "稳定射击",
+      "/abilities/precision": "精确",
+      "/abilities/flame_arrow": "烈焰箭",
+      "/abilities/silencing_shot": "沉默之箭",
+      "/abilities/aqua_arrow": "流水箭",
+      "/abilities/quick_shot": "快速射击",
+      "/abilities/mystic_aura": "元素光环",
+      "/abilities/elemental_affinity": "元素增幅",
+      "/abilities/frost_surge": "冰霜爆裂",
+      "/abilities/mana_spring": "法力喷泉",
+      "/abilities/water_strike": "流水冲击",
+      "/abilities/firestorm": "火焰风暴",
+      "/abilities/smoke_burst": "烟爆灭影",
+      "/abilities/fireball": "火球",
+      "/abilities/guardian_aura": "守护光环",
+      "/abilities/toxic_pollen": "剧毒粉尘",
+      "/abilities/natures_veil": "自然菌幕",
+      "/abilities/life_drain": "生命吸取",
+      "/abilities/entangle": "缠绕",
+      "/abilities/fierce_aura": "物理光环",
+      "/abilities/berserk": "狂暴",
+      "/abilities/impale": "透骨之刺",
+      "/abilities/puncture": "破甲之刺",
+      "/abilities/penetrating_strike": "贯心之刺",
+      "/abilities/cleave": "分裂斩",
+      "/abilities/maim": "血刃斩",
+      "/abilities/crippling_slash": "致残斩",
+      "/abilities/toughness": "坚韧",
+      "/abilities/sweep": "重扫",
+      "/abilities/stunning_blow": "重锤",
+      "/abilities/fracturing_impact": "碎裂冲击",
+      "/abilities/speed_aura": "速度光环",
+      "/abilities/frenzy": "狂速"
+    };
+    const LABYRINTH_MONSTER_NAME_ZH_MAP = {
+      "/monsters/shadow_archer": "暗影弓手",
+      "/monsters/pyre_hunter": "火焰猎手",
+      "/monsters/frost_sniper": "霜冻狙击手",
+      "/monsters/siren": "海妖",
+      "/monsters/salamander": "火蜥蜴",
+      "/monsters/dryad": "树精",
+      "/monsters/giant_scorpion": "巨蝎",
+      "/monsters/giant_mantis": "巨螳螂",
+      "/monsters/cyclops": "独眼巨人",
+      "/monsters/mimic": "宝箱怪"
+    };
+    const LABYRINTH_MONSTER_NAME_ZH_BY_TAIL = {
+      shadow_archer: "暗影弓手",
+      pyre_hunter: "火焰猎手",
+      frost_sniper: "霜冻狙击手",
+      siren: "海妖",
+      salamander: "火蜥蜴",
+      dryad: "树精",
+      giant_scorpion: "巨蝎",
+      giant_mantis: "巨螳螂",
+      cyclops: "独眼巨人",
+      mimic: "宝箱怪"
+    };
+    const COMBAT_SKILL_HRID_BY_KEY = {
+      stamina: "/skills/stamina",
+      intelligence: "/skills/intelligence",
+      attack: "/skills/attack",
+      melee: "/skills/melee",
+      defense: "/skills/defense",
+      ranged: "/skills/ranged",
+      magic: "/skills/magic"
+    };
+    const COMBAT_LEVEL_SKILL_HRID = "/skills/combat";
+    const BADGE_CLASS = "mwi-lab-clear-rate-badge";
+    const STYLE_ID = "mwi-lab-clear-rate-style";
+    const CONTROL_ID = "mwi-lab-clear-rate-control";
+    const CONTROL_CLASS = "mwi-lab-clear-rate-control";
+    const CONTROL_LOAN_TOGGLE_CLASS = "mwi-lab-clear-rate-control__loan-toggle";
+    const CONTROL_LOAN_PANEL_CLASS = "mwi-lab-clear-rate-control__loan-panel";
+    const CONTROL_LOAN_LIST_CLASS = "mwi-lab-clear-rate-control__loan-list";
+    const CONTROL_LOAN_ITEM_CLASS = "mwi-lab-clear-rate-control__loan-item";
+    const CONTROL_LOAN_ITEM_STATUS_CLASS = "mwi-lab-clear-rate-control__loan-item-status";
+    const CONTROL_LOAN_CALC_CLASS = "mwi-lab-clear-rate-control__loan-calc";
+    const CONTROL_LOG_TOGGLE_CLASS = "mwi-lab-clear-rate-control__log-toggle";
+    const CONTROL_LOG_PANEL_CLASS = "mwi-lab-clear-rate-control__log-panel";
+    const CONTROL_LOG_LIST_CLASS = "mwi-lab-clear-rate-control__log-list";
+    const CONTROL_LOG_ITEM_CLASS = "mwi-lab-clear-rate-control__log-item";
+    const CONTROL_LOG_ACTION_CLASS = "mwi-lab-clear-rate-control__log-action";
+    const CONTROL_LOG_META_CLASS = "mwi-lab-clear-rate-control__log-meta";
+    const CONTROL_LOG_INCOMPLETE_CLASS = "mwi-lab-clear-rate-control__log-incomplete";
+    const ROOM_LOG_FLOAT_ID = "mwi-lab-room-log-floating";
+    const ROOM_LOG_FLOAT_CLASS = "mwi-lab-room-log-floating";
+    const ROOM_LOG_FLOAT_HEADER_CLASS = "mwi-lab-room-log-floating__header";
+    const ROOM_LOG_FLOAT_TITLE_CLASS = "mwi-lab-room-log-floating__title";
+    const ROOM_LOG_FLOAT_ACTIONS_CLASS = "mwi-lab-room-log-floating__actions";
+    const ROOM_LOG_FLOAT_CLEAR_CLASS = "mwi-lab-room-log-floating__clear";
+    const ROOM_LOG_FLOAT_CLOSE_CLASS = "mwi-lab-room-log-floating__close";
+    const ROOM_LOG_STORAGE_KEY = "mwi_lab_skilling_room_logs_v1";
+    const ROOM_LOG_POSITION_STORAGE_KEY = "mwi_lab_skilling_room_logs_position_v1";
+    const ROOM_LOG_MAX_SESSIONS = 30;
+    const ROOM_LOG_ACTION_OUTCOME_SUCCESS = "success";
+    const ROOM_LOG_ACTION_OUTCOME_FAIL = "fail";
+    const ROOM_LOG_ACTION_OUTCOME_DOUBLE = "double";
+    const ROOM_LOG_ACTION_OUTCOME_UNKNOWN = "unknown";
+    const LIVE_ACTION_RATE_ID = "mwi-lab-live-action-rate";
+    const LIVE_ACTION_RATE_CLASS = "mwi-lab-live-action-rate";
+    const LIVE_ACTION_RATE_MWITOOLS_COLOR = "#ffffff";
+    const LIVE_ACTION_RATE_MWITOOLS_FONT_SIZE = "0.875rem";
+    const CONTROL_SCHEMA_ATTR = "data-mwi-lab-clear-schema";
+    const CONTROL_SCHEMA_VERSION = "6";
+    const CONTROL_BOUND_FLAG = "__mwiLabControlBound";
+    const PREVIEW_TOOLTIP_ID = "mwi-lab-clear-rate-preview";
+    const PREVIEW_TOOLTIP_CLASS = "mwi-lab-clear-rate-preview";
+    const PREVIEW_CELL_BOUND_FLAG = "__mwiLabPreviewBound";
+    const AUTOMATION_ESTIMATE_CONTROL_ID = "mwi-lab-auto-estimate-control";
+    const AUTOMATION_ESTIMATE_CONTROL_CLASS = "mwi-lab-auto-estimate-control";
+    const AUTOMATION_ESTIMATE_CONTROL_SCHEMA_ATTR = "data-mwi-lab-auto-schema";
+    const AUTOMATION_ESTIMATE_CONTROL_SCHEMA_VERSION = "4";
+    const AUTOMATION_ESTIMATE_CONTROL_TRIALS_INPUT_CLASS = "mwi-lab-auto-estimate-control__trials-input";
+    const AUTOMATION_ESTIMATE_CONTROL_TARGET_RATE_INPUT_CLASS = "mwi-lab-auto-estimate-control__target-rate-input";
+    const AUTOMATION_ESTIMATE_CONTROL_TARGET_RATE_LABEL_CLASS = "mwi-lab-auto-estimate-control__target-rate-label";
+    const AUTOMATION_ESTIMATE_CONTROL_RECOMMEND_BUTTON_CLASS = "mwi-lab-auto-estimate-control__recommend-button";
+    const AUTOMATION_MAX_FLOOR_TABLE_HEADER_CLASS = "mwi-lab-auto-floor-header";
+    const AUTOMATION_MAX_FLOOR_CELL_CLASS = "mwi-lab-auto-floor-cell";
+    const AUTOMATION_ESTIMATE_TABLE_HEADER_CLASS = "mwi-lab-auto-estimate-header";
+    const AUTOMATION_ESTIMATE_CELL_CLASS = "mwi-lab-auto-estimate-cell";
+    const AUTOMATION_ESTIMATE_CELL_CHANCE_CLASS = "mwi-lab-auto-estimate-cell__chance";
+    const AUTOMATION_ESTIMATE_CELL_ETA_CLASS = "mwi-lab-auto-estimate-cell__eta";
+    const AUTOMATION_ESTIMATE_CELL_ETA_DANGER_CLASS = "mwi-lab-auto-estimate-cell__eta--danger";
+    const AUTOMATION_ESTIMATE_CELL_BOUND_FLAG = "__mwiLabAutoEstimateCellBound";
+    const AUTOMATION_ESTIMATE_CELL_RENDER_TOKEN_ATTR = "data-mwi-auto-render-token";
+    const AUTOMATION_RECOMMEND_TABLE_HEADER_CLASS = "mwi-lab-auto-recommend-header";
+    const AUTOMATION_RECOMMEND_CELL_CLASS = "mwi-lab-auto-recommend-cell";
+    const AUTOMATION_RECOMMEND_CELL_RENDER_TOKEN_ATTR = "data-mwi-auto-recommend-token";
+    const AUTOMATION_RECOMMEND_CELL_BOUND_FLAG = "__mwiLabAutoRecommendCellBound";
+    const AUTOMATION_RECOMMEND_MIN_DELTA = -300;
+    const AUTOMATION_RECOMMEND_MAX_DELTA = 300;
+    const AUTOMATION_RECOMMEND_COMBAT_TRIALS = Math.max(
+      MIN_COMBAT_SIM_TRIALS,
+      Math.min(MAX_COMBAT_SIM_TRIALS, Math.floor(3600 / ROOM_DURATION_SECONDS))
+    );
+    const AUTOMATION_RECOMMEND_ACCEPTABLE_DIFF = 5e-3;
+    const AUTOMATION_ESTIMATE_DEFAULT_SKIP_THRESHOLD = 100;
+    const LABYRINTH_UPGRADE_LEVELS_STORAGE_KEY = "mwi_labyrinth_upgrade_levels_v1";
+    const LABYRINTH_SKILLING_UPGRADE_MAX_LEVEL = 12;
+    const LABYRINTH_UPGRADE_STEP_RATIO = 0.01;
+    const LABYRINTH_UPGRADE_SKILLING_SUCCESS_STEP_RATIO = 5e-3;
+    const LABYRINTH_UPGRADE_KEY_SKILL_ACTION_SPEED = "/labyrinth_upgrades/skill_action_speed";
+    const LABYRINTH_UPGRADE_KEY_SKILLING_EFFICIENCY = "/labyrinth_upgrades/skilling_efficiency";
+    const LABYRINTH_UPGRADE_KEY_SKILLING_SUCCESS = "/labyrinth_upgrades/skilling_success";
+    const LABYRINTH_UPGRADE_KEY_SKILLING_DOUBLE_PROGRESS = "/labyrinth_upgrades/skilling_double_progress";
+    const LABYRINTH_UPGRADE_KEY_COMBAT_DAMAGE = "/labyrinth_upgrades/combat_damage";
+    const LABYRINTH_UPGRADE_KEY_ATTACK_SPEED = "/labyrinth_upgrades/attack_speed";
+    const LABYRINTH_UPGRADE_KEY_CAST_SPEED = "/labyrinth_upgrades/cast_speed";
+    const LABYRINTH_UPGRADE_KEY_CRITICAL_RATE = "/labyrinth_upgrades/critical_rate";
+    const LABYRINTH_UPGRADE_KEY_LABYRINTH_EXPERIENCE = "/labyrinth_upgrades/labyrinth_experience";
+    const LABYRINTH_UPGRADE_KEYS = [
+      LABYRINTH_UPGRADE_KEY_SKILL_ACTION_SPEED,
+      LABYRINTH_UPGRADE_KEY_SKILLING_EFFICIENCY,
+      LABYRINTH_UPGRADE_KEY_SKILLING_SUCCESS,
+      LABYRINTH_UPGRADE_KEY_SKILLING_DOUBLE_PROGRESS,
+      LABYRINTH_UPGRADE_KEY_COMBAT_DAMAGE,
+      LABYRINTH_UPGRADE_KEY_ATTACK_SPEED,
+      LABYRINTH_UPGRADE_KEY_CAST_SPEED,
+      LABYRINTH_UPGRADE_KEY_CRITICAL_RATE,
+      LABYRINTH_UPGRADE_KEY_LABYRINTH_EXPERIENCE
+    ];
+    const LABYRINTH_AUTOMATION_SKILL_ROOM_TYPES = [
+      { key: "milking", skillHrid: "/skills/milking" },
+      { key: "foraging", skillHrid: "/skills/foraging" },
+      { key: "woodcutting", skillHrid: "/skills/woodcutting" },
+      { key: "cheesesmithing", skillHrid: "/skills/cheesesmithing" },
+      { key: "crafting", skillHrid: "/skills/crafting" },
+      { key: "tailoring", skillHrid: "/skills/tailoring" },
+      { key: "cooking", skillHrid: "/skills/cooking" },
+      { key: "brewing", skillHrid: "/skills/brewing" },
+      { key: "alchemy", skillHrid: "/skills/alchemy" },
+      { key: "enhancing", skillHrid: "/skills/enhancing" }
+    ];
+    const LABYRINTH_AUTOMATION_COMBAT_ROOM_TYPES = [
+      { key: "shadow_archer", monsterHrid: "/monsters/shadow_archer" },
+      { key: "pyre_hunter", monsterHrid: "/monsters/pyre_hunter" },
+      { key: "frost_sniper", monsterHrid: "/monsters/frost_sniper" },
+      { key: "siren", monsterHrid: "/monsters/siren" },
+      { key: "salamander", monsterHrid: "/monsters/salamander" },
+      { key: "dryad", monsterHrid: "/monsters/dryad" },
+      { key: "giant_scorpion", monsterHrid: "/monsters/giant_scorpion" },
+      { key: "giant_mantis", monsterHrid: "/monsters/giant_mantis" },
+      { key: "cyclops", monsterHrid: "/monsters/cyclops" },
+      { key: "mimic", monsterHrid: "/monsters/mimic" }
+    ];
+    const LABYRINTH_AUTOMATION_SKILL_NAME_ZH_BY_KEY = {
+      milking: "挤奶",
+      foraging: "采摘",
+      woodcutting: "伐木",
+      cheesesmithing: "奶酪锻造",
+      crafting: "制作",
+      tailoring: "缝纫",
+      cooking: "烹饪",
+      brewing: "冲泡",
+      alchemy: "炼金",
+      enhancing: "强化"
+    };
+    const LABYRINTH_AUTOMATION_SKILL_NAME_EN_BY_KEY = {
+      milking: "Milking",
+      foraging: "Foraging",
+      woodcutting: "Woodcutting",
+      cheesesmithing: "Cheesesmithing",
+      crafting: "Crafting",
+      tailoring: "Tailoring",
+      cooking: "Cooking",
+      brewing: "Brewing",
+      alchemy: "Alchemy",
+      enhancing: "Enhancing"
+    };
+    const LABYRINTH_LOAN_SEAL_EFFECTS = [
+      {
+        itemHrid: "/items/seal_of_efficiency",
+        buffTypeHrid: "/buff_types/efficiency",
+        amount: 0.14,
+        boostMode: "flat",
+        isCombat: false
+      },
+      {
+        itemHrid: "/items/seal_of_action_speed",
+        buffTypeHrid: "/buff_types/action_speed",
+        amount: 0.15,
+        boostMode: "flat",
+        isCombat: false
+      },
+      {
+        itemHrid: "/items/seal_of_gourmet",
+        buffTypeHrid: "/buff_types/gourmet",
+        amount: 0.1,
+        boostMode: "flat",
+        isCombat: false
+      },
+      {
+        itemHrid: "/items/seal_of_gathering",
+        buffTypeHrid: "/buff_types/gathering",
+        amount: 0.18,
+        boostMode: "flat",
+        isCombat: false
+      },
+      {
+        itemHrid: "/items/seal_of_damage",
+        buffTypeHrid: "/buff_types/damage",
+        amount: 0.08,
+        boostMode: "ratio",
+        isCombat: true
+      },
+      {
+        itemHrid: "/items/seal_of_attack_speed",
+        buffTypeHrid: "/buff_types/attack_speed",
+        amount: 0.15,
+        boostMode: "ratio",
+        isCombat: true
+      },
+      {
+        itemHrid: "/items/seal_of_cast_speed",
+        buffTypeHrid: "/buff_types/cast_speed",
+        amount: 0.15,
+        boostMode: "flat",
+        isCombat: true
+      },
+      {
+        itemHrid: "/items/seal_of_critical_rate",
+        buffTypeHrid: "/buff_types/critical_rate",
+        amount: 0.1,
+        boostMode: "flat",
+        isCombat: true
+      }
+    ];
+    const SIMULATOR_PERSONAL_BUFF_ITEM_HRIDS = /* @__PURE__ */ new Set([
+      "/items/seal_of_combat_drop",
+      "/items/seal_of_attack_speed",
+      "/items/seal_of_cast_speed",
+      "/items/seal_of_damage",
+      "/items/seal_of_critical_rate",
+      "/items/seal_of_wisdom",
+      "/items/seal_of_rare_find"
+    ]);
+    const SIMULATOR_COMBAT_PERSONAL_SEAL_ITEM_HRIDS = /* @__PURE__ */ new Set([
+      "/items/seal_of_combat_drop",
+      "/items/seal_of_attack_speed",
+      "/items/seal_of_cast_speed",
+      "/items/seal_of_damage",
+      "/items/seal_of_critical_rate",
+      "/items/seal_of_wisdom",
+      "/items/seal_of_rare_find"
+    ]);
+    const LABYRINTH_SEAL_NAME_ZH_BY_ITEM_HRID = {
+      "/items/seal_of_gathering": "卷轴·采集",
+      "/items/seal_of_gourmet": "卷轴·美食",
+      "/items/seal_of_processing": "卷轴·加工",
+      "/items/seal_of_efficiency": "卷轴·效率",
+      "/items/seal_of_action_speed": "卷轴·行动速度",
+      "/items/seal_of_combat_drop": "卷轴·战利品",
+      "/items/seal_of_attack_speed": "卷轴·攻击速度",
+      "/items/seal_of_cast_speed": "卷轴·施法速度",
+      "/items/seal_of_damage": "卷轴·伤害",
+      "/items/seal_of_critical_rate": "卷轴·暴击率",
+      "/items/seal_of_wisdom": "卷轴·智慧",
+      "/items/seal_of_rare_find": "卷轴·稀有掉落"
+    };
+    const SIMULATOR_BRIDGE_URL_STORAGE_KEY = "mwi_lab_simulator_bridge_url";
+    const SIMULATOR_BRIDGE_DEFAULT_URL = "https://shykai.github.io/MWICombatSimulatorTest/dist/";
+    const SIMULATOR_BRIDGE_LEGACY_URL_PREFIXES = [
+      "https://amvoidguy.github.io/MWICombatSimulatorTest/",
+      "https://shykai.github.io/MWICombatSimulatorTest/",
+      "https://shykai.github.io/mwisim/",
+      "https://truthligh.github.io/MWICombatSimulator/"
+    ];
+    const SIMULATOR_BRIDGE_PAYLOAD_PARAM = "mwiLabBridge";
+    const SIMULATOR_BRIDGE_SOURCE = "mwi-lab-clear-rate-overlay";
+    const SIMULATOR_BRIDGE_VERSION = 1;
+    const ETA_INFINITE_TEXT = "999+";
+    const PANEL_REFRESH_POLL_MS = 1e3;
+    const PANEL_REFRESH_DEBOUNCE_MS = 120;
+    const AUTO_RECALC_DEBOUNCE_MS = 600;
+    const UI_LANGUAGE_STORAGE_KEY = "i18nextLng";
+    const UI_LANGUAGE_EN = "en";
+    const UI_LANGUAGE_ZH = "zh";
+    const UI_TEXT = {
+      en: {
+        pending: "Pending",
+        tokenExpected: "Token Expected",
+        experiencePerAction: "EXP / Action",
+        experiencePerRoom: "EXP / Room",
+        experiencePerHour: "EXP / Hour",
+        skillingBoxExpected: "Skilling Box Expected",
+        combatBoxExpected: "Combat Box Expected",
+        refiningChestExpected: "Refining Chest Expected",
+        skillingRoomPreview: "Skilling Room Preview",
+        combatRoomPreview: "Combat Room Preview",
+        treasureRoomPreview: "Treasure Room Preview",
+        floorExitPreview: "Floor Exit Preview",
+        roomPreview: "Room Preview",
+        styleStab: "Stab",
+        styleSlash: "Slash",
+        styleSmash: "Smash",
+        styleRanged: "Ranged",
+        styleMagic: "Magic",
+        unknown: "Unknown",
+        accuracySuffix: "Accuracy",
+        damageSuffix: "Damage",
+        evasionSuffix: "Evasion",
+        water: "Water",
+        nature: "Nature",
+        fire: "Fire",
+        physical: "Physical",
+        waterResistance: "Water Resistance",
+        natureResistance: "Nature Resistance",
+        fireResistance: "Fire Resistance",
+        armor: "Armor",
+        failureDefense: "Insufficient Defense",
+        failureDamage: "Insufficient Damage",
+        targetEnhancement: "Target Enhancement",
+        successRate: "Success Rate",
+        doubleProgress: "Double Progress",
+        twoMinuteActions: "Actions in 2m",
+        actionDuration: "Action Duration",
+        needSpeedForOneMoreAction: "Speed for +1 Action",
+        workPower: "Work Power",
+        needEfficiencyForOneLessProgress: "Efficiency for -1 Progress",
+        nextLevelClearChance: "Next Level Clear %",
+        efficiencyTierClearChance: "Efficiency Tier Clear %",
+        speedTierClearChance: "Speed Tier Clear %",
+        nextSkillingSuccessClearChance: "Next Skilling Success Clear %",
+        nextSkillingDoubleProgressClearChance: "Next Double Progress Clear %",
+        alreadyOptimal: "Already Optimal",
+        combatStyle: "Combat Style",
+        damageType: "Damage Type",
+        attackInterval: "Attack Interval",
+        castSpeed: "Cast Speed",
+        maxHp: "Max HP",
+        operation: "Action",
+        rightClickOpenSimulator: "Right-click to open simulator",
+        failureReason: "Failure Reason",
+        accuracyDefault: "Accuracy",
+        damageDefault: "Damage",
+        evasionDefault: "Evasion",
+        mitigationDefault: "Armor",
+        automationPreview: "Automation Preview",
+        status: "Status",
+        level: "Level",
+        maxFloor: "Max Floor",
+        chanceEta: "Chance / ETA",
+        targetWinRate: "Target Win %",
+        recommendDelta: "Recommend Level",
+        recommendSettingLevel: "Recommend Setting Level",
+        skipLevel: "Skip Level",
+        skipLevelLong: "Skip if above level",
+        combatTrials: "Combat Trials",
+        calcChance: "Calculate",
+        calculating: "Calculating...",
+        calcMaze: "Calculate Labyrinth",
+        automationListNotFound: "Automation list not found",
+        noCalculableRooms: "No calculable rooms",
+        missingClientData: "Missing client data",
+        preparing: "Preparing...",
+        calculatingProgressFmt: "Calculating {current}/{total}",
+        skipRoom: "Skip Room",
+        calcFailed: "Calculation failed",
+        calcDone: "Calculation complete",
+        calcDoneWithPersonalBuffs: "Calculation complete (including personal buffs)",
+        loanSeal: "Scroll Loan",
+        loanPanelTitle: "Available Scroll Effects",
+        loanCalc: "Loan Calculate",
+        loanNoOptions: "No usable scrolls",
+        loanAlreadyActive: "Active",
+        loanCannotApply: "No effect data",
+        roomLog: "Logs",
+        roomLogTitleFmt: "Room Logs (Last {count})",
+        roomLogEmpty: "No logs yet",
+        roomLogIncomplete: "Incomplete",
+        roomLogModeSkilling: "Skilling",
+        roomLogModeEnhancing: "Enhancing",
+        roomLogModeCombat: "Combat",
+        roomLogActionGap: "Missed action records",
+        roomLogComingSoon: "Coming Soon",
+        roomLogRateFmt: "Success {success}% / Double {double}%",
+        roomLogWorkFmt: "Work {value}",
+        roomLogExpFmt: "EXP {value}",
+        roomLogProgressFmt: "Progress {current}% / {target}%",
+        roomLogEnhFmt: "Enh +{current}/+{target}",
+        roomLogDurationFmt: "{seconds}s",
+        roomLogClear: "Clear",
+        roomLogClose: "Close",
+        skippedRooms: "Rooms skipped",
+        noSupplies: "No supply crates equipped",
+        partialSkipped: "Some rooms skipped",
+        missingCoffeeCrate: "Coffee Crate",
+        missingFoodCrate: "Food Crate",
+        missingTeaCrate: "Tea Crate",
+        missingCrateFmt: "Missing {crates}",
+        progressFmt: "Progress {percent}%",
+        notInLabyrinth: "Not in labyrinth",
+        noLabyrinthData: "No labyrinth data",
+        cellsNotFound: "Grid cells not found",
+        noNewTiles: "No new tiles",
+        roomFmt: "Room {current}/{total}",
+        combatFmt: "Combat {current}/{total}",
+        autoNewTiles: "New tiles found, auto calculating",
+        readGameDataFailed: "Unable to read game data. Refresh and try again.",
+        exportableCombatRoomNotFound: "Could not identify an exportable combat room.",
+        skippedCannotExport: "This room is skipped and cannot be exported.",
+        simulatorExportNoLoadout: "Simulator export failed: missing usable loadout.",
+        combatFlowFailedFmt: "Labyrinth combat full-flow calculation failed: {message}",
+        liveEnhFmt: " [Clear {chance}% | +{current}/+{target} | {left} left]",
+        liveBasicFmt: " [Clear {chance}% | {left} left]",
+        liveSuccessFmt: "Success {chance}%",
+        liveDoubleFmt: "Double {chance}%",
+        liveActionsFmt: "Actions {current}/{total}",
+        liveEnhTitleFmt: "Enhance +{current}/+{target}",
+        liveProgressFmt: "Progress {current}/{target}",
+        waitingOptimization: "(Pending optimization)"
+      },
+      zh: {
+        pending: "待计算",
+        tokenExpected: "代币期望",
+        experiencePerAction: "每次经验",
+        experiencePerRoom: "每场经验",
+        experiencePerHour: "每小时经验",
+        skillingBoxExpected: "生活紫盒期望",
+        combatBoxExpected: "战斗紫盒期望",
+        refiningChestExpected: "精炼宝箱期望",
+        skillingRoomPreview: "生活房间预览",
+        combatRoomPreview: "战斗房间预览",
+        treasureRoomPreview: "宝箱房间预览",
+        floorExitPreview: "楼层出口预览",
+        roomPreview: "房间预览",
+        styleStab: "刺击",
+        styleSlash: "斩击",
+        styleSmash: "钝击",
+        styleRanged: "远程",
+        styleMagic: "魔法",
+        unknown: "未知",
+        accuracySuffix: "精准度",
+        damageSuffix: "伤害",
+        evasionSuffix: "闪避",
+        water: "水系",
+        nature: "自然系",
+        fire: "火系",
+        physical: "物理",
+        waterResistance: "水系抗性",
+        natureResistance: "自然系抗性",
+        fireResistance: "火系抗性",
+        armor: "护甲",
+        failureDefense: "防御不足",
+        failureDamage: "伤害不足",
+        targetEnhancement: "目标强化",
+        successRate: "成功率",
+        doubleProgress: "双倍进度",
+        twoMinuteActions: "2分钟次数",
+        actionDuration: "单次时长",
+        needSpeedForOneMoreAction: "多1次行动需速度",
+        workPower: "工作能力",
+        needEfficiencyForOneLessProgress: "减1次进度需效率",
+        nextLevelClearChance: "等级提升胜率",
+        efficiencyTierClearChance: "效率升档胜率",
+        speedTierClearChance: "速度升档胜率",
+        nextSkillingSuccessClearChance: "下一级专业成功率胜率",
+        nextSkillingDoubleProgressClearChance: "下一级专业双倍进度胜率",
+        alreadyOptimal: "已最优",
+        combatStyle: "战斗风格",
+        damageType: "伤害类型",
+        attackInterval: "攻击间隔",
+        castSpeed: "施法速度",
+        maxHp: "最大HP",
+        operation: "操作",
+        rightClickOpenSimulator: "右键打开模拟器",
+        failureReason: "失败原因",
+        accuracyDefault: "精准度",
+        damageDefault: "伤害",
+        evasionDefault: "闪避",
+        mitigationDefault: "护甲",
+        automationPreview: "自动化预览",
+        status: "状态",
+        level: "等级",
+        maxFloor: "最高层数",
+        chanceEta: "胜率/耗时",
+        targetWinRate: "目标胜率",
+        recommendDelta: "推荐等级",
+        recommendSettingLevel: "推荐设置等级",
+        skipLevel: "跳过等级",
+        skipLevelLong: "跳过如果高出等级",
+        combatTrials: "战斗次数",
+        calcChance: "计算胜率",
+        calculating: "计算中...",
+        calcMaze: "计算迷宫",
+        automationListNotFound: "未识别到自动化列表",
+        noCalculableRooms: "无可计算房间",
+        missingClientData: "缺少客户端数据",
+        preparing: "准备中...",
+        calculatingProgressFmt: "计算中 {current}/{total}",
+        skipRoom: "跳过房间",
+        calcFailed: "计算失败",
+        calcDone: "计算完成",
+        calcDoneWithPersonalBuffs: "计算完成（包含个人增益）",
+        loanSeal: "贷款卷轴",
+        loanPanelTitle: "可用卷轴效果",
+        loanCalc: "贷款计算",
+        loanNoOptions: "没有可用卷轴",
+        loanAlreadyActive: "已生效",
+        loanCannotApply: "无效果数据",
+        roomLog: "日志",
+        roomLogTitleFmt: "房间日志（最近{count}场）",
+        roomLogEmpty: "暂无日志",
+        roomLogIncomplete: "不完整",
+        roomLogModeSkilling: "技能",
+        roomLogModeEnhancing: "强化",
+        roomLogModeCombat: "战斗",
+        roomLogActionGap: "行动记录缺失",
+        roomLogComingSoon: "敬请期待",
+        roomLogRateFmt: "成功率 {success}% / 双倍 {double}%",
+        roomLogWorkFmt: "工作能力 {value}",
+        roomLogExpFmt: "经验 {value}",
+        roomLogProgressFmt: "进度 {current}% / {target}%",
+        roomLogEnhFmt: "强化 +{current}/+{target}",
+        roomLogDurationFmt: "持续{seconds}秒",
+        roomLogClear: "清理",
+        roomLogClose: "关闭",
+        skippedRooms: "已跳过房间",
+        noSupplies: "未携带补给箱",
+        partialSkipped: "部分房间已跳过",
+        missingCoffeeCrate: "咖啡箱",
+        missingFoodCrate: "食物箱",
+        missingTeaCrate: "茶叶箱",
+        missingCrateFmt: "未携带{crates}",
+        progressFmt: "进度 {percent}%",
+        notInLabyrinth: "不在迷宫",
+        noLabyrinthData: "无迷宫数据",
+        cellsNotFound: "未找到格子",
+        noNewTiles: "无新增地块",
+        roomFmt: "房间 {current}/{total}",
+        combatFmt: "战斗 {current}/{total}",
+        autoNewTiles: "发现新地块，自动计算",
+        readGameDataFailed: "无法读取游戏数据，请刷新页面后重试。",
+        exportableCombatRoomNotFound: "未识别到可导出的战斗房间。",
+        skippedCannotExport: "该房间当前设置会跳过，无法导出模拟器。",
+        simulatorExportNoLoadout: "导出模拟器数据失败：缺少可用配装。",
+        combatFlowFailedFmt: "迷宫战斗全流程计算失败：{message}",
+        liveEnhFmt: " [胜率 {chance}% | +{current}/+{target} | 剩余{left}次]",
+        liveBasicFmt: " [胜率 {chance}% | 剩余{left}次]",
+        liveSuccessFmt: "成功率 {chance}%",
+        liveDoubleFmt: "双倍 {chance}%",
+        liveActionsFmt: "已行动 {current}/{total}",
+        liveEnhTitleFmt: "强化 +{current}/+{target}",
+        liveProgressFmt: "进度 {current}/{target}",
+        waitingOptimization: "(等待优化)"
+      }
+    };
+    function normalizeUiLanguage(value) {
+      const raw = String(value || "").trim().toLowerCase();
+      if (raw.startsWith("zh")) {
+        return UI_LANGUAGE_ZH;
+      }
+      if (raw.startsWith("en")) {
+        return UI_LANGUAGE_EN;
+      }
+      return "";
+    }
+    function getUiLanguage() {
+      try {
+        const fromStorage = normalizeUiLanguage(localStorage.getItem(UI_LANGUAGE_STORAGE_KEY));
+        if (fromStorage) {
+          return fromStorage;
+        }
+      } catch (_error) {
+      }
+      return UI_LANGUAGE_EN;
+    }
+    function isChineseUi() {
+      return getUiLanguage() === UI_LANGUAGE_ZH;
+    }
+    function t(key, vars) {
+      const lang = getUiLanguage();
+      const template = UI_TEXT[lang] && UI_TEXT[lang][key] || UI_TEXT.en[key] || key;
+      if (!vars || typeof vars !== "object") {
+        return template;
+      }
+      return String(template).replace(/\{([a-zA-Z0-9_]+)\}/g, (_match, name) => {
+        if (Object.prototype.hasOwnProperty.call(vars, name)) {
+          return String(vars[name]);
+        }
+        return "";
+      });
+    }
+    let cachedInitClientDataRaw = "";
+    let cachedInitClientData = null;
+    let combatEstimateCache = /* @__PURE__ */ new Map();
+    let manualUpdateRunning = false;
+    let combatWorkerScriptPromise = null;
+    let combatSimulatorWorker = null;
+    let combatSimulatorWorkerUrl = "";
+    let combatWorkerRequestId = 0;
+    let lastLabyrinthDisplaySignature = "";
+    let lastProgressRoomKey = "";
+    let wasRoomChallengeRunning = false;
+    let lastObservedPathRoomKey = "";
+    let autoRecalcArmed = false;
+    let autoRecalcLabyrinthSignature = "";
+    let lastCalculatedCalculableRoomSignature = "";
+    let lastCalculatedCalculableRoomCount = 0;
+    let lastCalculatedCalculableRoomEntries = /* @__PURE__ */ new Set();
+    let pendingAutoRecalcRoomKeys = /* @__PURE__ */ new Set();
+    let autoRecalcTimerId = 0;
+    let panelRefreshTimerId = 0;
+    const combatWorkerPendingRequests = /* @__PURE__ */ new Map();
+    let skillingPreviewByCell = /* @__PURE__ */ new WeakMap();
+    let combatPreviewByCell = /* @__PURE__ */ new WeakMap();
+    let latestRoomEstimateByRoomKey = /* @__PURE__ */ new Map();
+    let lastLiveActionRateToken = "";
+    let liveActionRateWsHookInstalled = false;
+    let automationEstimateByRoomTypeKey = /* @__PURE__ */ new Map();
+    let automationEstimateSignatureByRoomTypeKey = /* @__PURE__ */ new Map();
+    let automationRecommendByRoomTypeKey = /* @__PURE__ */ new Map();
+    let automationRecommendSignatureByRoomTypeKey = /* @__PURE__ */ new Map();
+    let automationEstimateRunning = false;
+    let automationEstimateRunningMode = "";
+    let automationEstimateStatusText = t("pending");
+    let automationEstimateColumnEnabled = false;
+    let automationRecommendColumnEnabled = false;
+    let automationWideLayoutNodes = [];
+    let lastLabyrinthCalcDoneMessage = "";
+    let loanSealSelectionByItemHrid = /* @__PURE__ */ new Map();
+    let activeLoanSimulationOptions = null;
+    let latestLabyrinthUpgradeLevels = null;
+    let roomLogSessions = [];
+    let activeRoomLogSession = null;
+    function clamp01(value) {
+      if (!Number.isFinite(value)) {
+        return 0;
+      }
+      if (value < 0) {
+        return 0;
+      }
+      if (value > 1) {
+        return 1;
+      }
+      return value;
+    }
+    function finiteNumber(value, fallback = 0) {
+      return Number.isFinite(value) ? Number(value) : fallback;
+    }
+    function positiveNumber(value, fallback = 0) {
+      const n = finiteNumber(value, fallback);
+      return n > 0 ? n : fallback;
+    }
+    function createEmptyLabyrinthUpgradeLevels() {
+      const result = {};
+      for (const key of LABYRINTH_UPGRADE_KEYS) {
+        result[key] = 0;
+      }
+      return result;
+    }
+    function normalizeLabyrinthUpgradeLevels(raw) {
+      const result = createEmptyLabyrinthUpgradeLevels();
+      if (!raw || typeof raw !== "object") {
+        return result;
+      }
+      for (const key of LABYRINTH_UPGRADE_KEYS) {
+        result[key] = Math.max(0, Math.floor(finiteNumber(raw[key], 0)));
+      }
+      return result;
+    }
+    function mergeLabyrinthUpgradeLevels(base, override) {
+      const result = normalizeLabyrinthUpgradeLevels(base);
+      if (!override || typeof override !== "object") {
+        return result;
+      }
+      for (const key of LABYRINTH_UPGRADE_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(override, key)) {
+          result[key] = Math.max(0, Math.floor(finiteNumber(override[key], result[key])));
+        }
+      }
+      return result;
+    }
+    function loadStoredLabyrinthUpgradeLevels() {
+      try {
+        return normalizeLabyrinthUpgradeLevels(JSON.parse(localStorage.getItem(LABYRINTH_UPGRADE_LEVELS_STORAGE_KEY) || "null"));
+      } catch (_error) {
+        return createEmptyLabyrinthUpgradeLevels();
+      }
+    }
+    function saveLabyrinthUpgradeLevels(levels) {
+      const normalized = normalizeLabyrinthUpgradeLevels(levels);
+      try {
+        localStorage.setItem(LABYRINTH_UPGRADE_LEVELS_STORAGE_KEY, JSON.stringify(normalized));
+      } catch (_error) {
+      }
+      latestLabyrinthUpgradeLevels = normalized;
+      return normalized;
+    }
+    function readLabyrinthUpgradeLevelsFromState(state) {
+      const info = state?.characterInfo;
+      if (!info || typeof info !== "object") {
+        return null;
+      }
+      const result = {};
+      let matched = 0;
+      const assign = (key, value) => {
+        if (!Number.isFinite(Number(value))) {
+          return;
+        }
+        result[key] = Math.max(0, Math.floor(Number(value)));
+        matched += 1;
+      };
+      assign(LABYRINTH_UPGRADE_KEY_SKILL_ACTION_SPEED, info.labyrinthSkillActionSpeedLevel);
+      assign(LABYRINTH_UPGRADE_KEY_SKILLING_EFFICIENCY, info.labyrinthSkillingEfficiencyLevel);
+      assign(LABYRINTH_UPGRADE_KEY_SKILLING_SUCCESS, info.labyrinthSkillingSuccessLevel);
+      assign(LABYRINTH_UPGRADE_KEY_SKILLING_DOUBLE_PROGRESS, info.labyrinthSkillingDoubleProgressLevel);
+      assign(LABYRINTH_UPGRADE_KEY_COMBAT_DAMAGE, info.labyrinthCombatDamageLevel);
+      assign(LABYRINTH_UPGRADE_KEY_ATTACK_SPEED, info.labyrinthAttackSpeedLevel);
+      assign(LABYRINTH_UPGRADE_KEY_CAST_SPEED, info.labyrinthCastSpeedLevel);
+      assign(LABYRINTH_UPGRADE_KEY_CRITICAL_RATE, info.labyrinthCriticalRateLevel);
+      assign(LABYRINTH_UPGRADE_KEY_LABYRINTH_EXPERIENCE, info.labyrinthExperienceLevel);
+      return matched > 0 ? result : null;
+    }
+    function areLabyrinthUpgradeLevelsEqual(left, right) {
+      for (const key of LABYRINTH_UPGRADE_KEYS) {
+        if (Math.max(0, Math.floor(finiteNumber(left?.[key], 0))) !== Math.max(0, Math.floor(finiteNumber(right?.[key], 0)))) {
+          return false;
+        }
+      }
+      return true;
+    }
+    function getLabyrinthUpgradeLevels(forceRefresh = false) {
+      if (!latestLabyrinthUpgradeLevels) {
+        latestLabyrinthUpgradeLevels = loadStoredLabyrinthUpgradeLevels();
+      }
+      const fromState = readLabyrinthUpgradeLevelsFromState(getGameState());
+      const resolved = fromState ? mergeLabyrinthUpgradeLevels(latestLabyrinthUpgradeLevels, fromState) : latestLabyrinthUpgradeLevels;
+      return areLabyrinthUpgradeLevelsEqual(resolved, latestLabyrinthUpgradeLevels) ? latestLabyrinthUpgradeLevels : saveLabyrinthUpgradeLevels(resolved);
+    }
+    function syncVisibleLabyrinthUpgradeLevelsCache() {
+      if (!latestLabyrinthUpgradeLevels) {
+        latestLabyrinthUpgradeLevels = loadStoredLabyrinthUpgradeLevels();
+      }
+      const fromState = readLabyrinthUpgradeLevelsFromState(getGameState());
+      const resolved = fromState ? mergeLabyrinthUpgradeLevels(latestLabyrinthUpgradeLevels, fromState) : latestLabyrinthUpgradeLevels;
+      if (!areLabyrinthUpgradeLevelsEqual(resolved, latestLabyrinthUpgradeLevels)) {
+        return saveLabyrinthUpgradeLevels(resolved);
+      }
+      latestLabyrinthUpgradeLevels = normalizeLabyrinthUpgradeLevels(resolved);
+      return latestLabyrinthUpgradeLevels;
+    }
+    function getLabyrinthUpgradeLevel(levels, upgradeKey) {
+      return Math.max(0, Math.floor(finiteNumber(levels?.[upgradeKey], 0)));
+    }
+    function resolveLabyrinthUpgradeLevels(options = null) {
+      if (options?.labyrinthUpgradeLevels && typeof options.labyrinthUpgradeLevels === "object") {
+        return normalizeLabyrinthUpgradeLevels(options.labyrinthUpgradeLevels);
+      }
+      return getLabyrinthUpgradeLevels();
+    }
+    function normalizeChance(value) {
+      const n = finiteNumber(value, 0);
+      if (n > 1 && n <= 100) {
+        return clamp01(n / 100);
+      }
+      return clamp01(n);
+    }
+    function nowIsoString(timestamp = Date.now()) {
+      try {
+        return new Date(timestamp).toISOString();
+      } catch (_error) {
+        return "";
+      }
+    }
+    function formatRoomLogPercent(percentValue) {
+      const value = Math.max(0, finiteNumber(percentValue, 0));
+      const oneDecimal = Math.round(value * 10) / 10;
+      if (Math.abs(oneDecimal - Math.round(oneDecimal)) < 1e-4) {
+        return String(Math.round(oneDecimal));
+      }
+      return oneDecimal.toFixed(1);
+    }
+    function formatRoomLogExperience(value) {
+      const n = Math.max(0, finiteNumber(value, 0));
+      if (Math.abs(n - Math.round(n)) < 1e-9) {
+        return `${Math.round(n)}`;
+      }
+      return n.toFixed(1).replace(/\.0$/, "");
+    }
+    function getSkillNameByHrid(skillHrid) {
+      const hrid = String(skillHrid || "");
+      const key = hrid.split("/").pop() || "";
+      if (isChineseUi()) {
+        return LABYRINTH_AUTOMATION_SKILL_NAME_ZH_BY_KEY[key] || key || "--";
+      }
+      return LABYRINTH_AUTOMATION_SKILL_NAME_EN_BY_KEY[key] || key || "--";
+    }
+    function getSkillExperienceValue(skillMap, skillHrid) {
+      const hrid = String(skillHrid || "");
+      if (!skillMap || !hrid) {
+        return NaN;
+      }
+      if (skillMap instanceof Map) {
+        const entry2 = skillMap.get(hrid);
+        if (Number.isFinite(entry2?.experience)) {
+          return Number(entry2.experience);
+        }
+        return NaN;
+      }
+      const entry = skillMap[hrid];
+      if (entry && Number.isFinite(entry.experience)) {
+        return Number(entry.experience);
+      }
+      return NaN;
+    }
+    function buildRoomLogContextFromSession(session) {
+      if (!session || typeof session !== "object") {
+        return null;
+      }
+      const skillHrid = String(session.skillHrid || "");
+      if (!skillHrid) {
+        return null;
+      }
+      return {
+        roomKey: String(session.roomKey || ""),
+        roomType: LABYRINTH_SKILLING_ROOM_TYPE,
+        skillHrid,
+        skillName: String(session.skillName || getSkillNameByHrid(skillHrid)),
+        recommendedLevel: Math.max(0, Math.floor(finiteNumber(session.recommendedLevel, 0)))
+      };
+    }
+    function createEmptyRoomLogStorage() {
+      return {
+        sessions: [],
+        active: null
+      };
+    }
+    function trimRoomLogSessions(sessions) {
+      if (!Array.isArray(sessions)) {
+        return [];
+      }
+      return sessions.filter((entry) => entry && typeof entry === "object").slice(0, ROOM_LOG_MAX_SESSIONS);
+    }
+    function sanitizeRoomLogAction(action, fallbackCounter = 0) {
+      if (!action || typeof action !== "object") {
+        return {
+          counter: Math.max(0, Math.floor(finiteNumber(fallbackCounter, 0))),
+          outcome: ROOM_LOG_ACTION_OUTCOME_UNKNOWN,
+          text: "?",
+          missing: true
+        };
+      }
+      return {
+        counter: Math.max(0, Math.floor(finiteNumber(action.counter, fallbackCounter))),
+        outcome: String(action.outcome || ROOM_LOG_ACTION_OUTCOME_UNKNOWN),
+        text: String(action.text || "?"),
+        missing: action.missing === true
+      };
+    }
+    function sanitizeRoomLogSession(session) {
+      if (!session || typeof session !== "object") {
+        return null;
+      }
+      const startedAt = Math.max(0, Math.floor(finiteNumber(session.startedAt, 0)));
+      const actions = Array.isArray(session.actions) ? session.actions.map((action) => sanitizeRoomLogAction(action)) : [];
+      return {
+        id: String(session.id || `room-log-${startedAt}`),
+        startedAt,
+        endedAt: Math.max(0, Math.floor(finiteNumber(session.endedAt, 0))),
+        runKey: String(session.runKey || ""),
+        roomKey: String(session.roomKey || ""),
+        mode: String(session.mode || "skilling"),
+        skillHrid: String(session.skillHrid || ""),
+        skillName: String(session.skillName || "--"),
+        recommendedLevel: Math.max(0, Math.floor(finiteNumber(session.recommendedLevel, 0))),
+        successRate: clamp01(finiteNumber(session.successRate, 0)),
+        doubleChance: clamp01(finiteNumber(session.doubleChance, 0)),
+        progressPerAction: Math.max(0, finiteNumber(session.progressPerAction, 0)),
+        experiencePerAction: Math.max(0, finiteNumber(session.experiencePerAction, 0)),
+        predictedExperience: Math.max(
+          0,
+          finiteNumber(session.predictedExperience, finiteNumber(session.experiencePerAction, 0))
+        ),
+        actualExperienceGain: Math.max(0, finiteNumber(session.actualExperienceGain, 0)),
+        startSkillExperience: Math.max(0, finiteNumber(session.startSkillExperience, 0)),
+        endSkillExperience: Math.max(0, finiteNumber(session.endSkillExperience, 0)),
+        totalExperience: Math.max(0, finiteNumber(session.totalExperience, 0)),
+        targetWorkValue: Math.max(0, finiteNumber(session.targetWorkValue, 0)),
+        currentWorkValue: Math.max(0, finiteNumber(session.currentWorkValue, 0)),
+        currentProgressPct: Math.max(0, finiteNumber(session.currentProgressPct, 0)),
+        targetLevel: Math.max(0, Math.floor(finiteNumber(session.targetLevel, 0))),
+        currentEnhLevel: Math.max(0, Math.floor(finiteNumber(session.currentEnhLevel, 0))),
+        actions,
+        incomplete: session.incomplete === true,
+        incompleteReasons: Array.isArray(session.incompleteReasons) ? Array.from(new Set(session.incompleteReasons.map((reason) => String(reason || "").trim()).filter(Boolean))) : [],
+        completed: session.completed === true
+      };
+    }
+    function persistRoomLogStorage() {
+      const payload = {
+        sessions: trimRoomLogSessions(roomLogSessions),
+        active: sanitizeRoomLogSession(activeRoomLogSession)
+      };
+      try {
+        localStorage.setItem(ROOM_LOG_STORAGE_KEY, JSON.stringify(payload));
+      } catch (_error) {
+      }
+    }
+    function loadRoomLogStorage() {
+      const fallback = createEmptyRoomLogStorage();
+      try {
+        const raw = localStorage.getItem(ROOM_LOG_STORAGE_KEY);
+        if (!raw) {
+          return fallback;
+        }
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object") {
+          return fallback;
+        }
+        const sessions = Array.isArray(parsed.sessions) ? trimRoomLogSessions(parsed.sessions.map((entry) => sanitizeRoomLogSession(entry)).filter(Boolean)) : [];
+        const active = sanitizeRoomLogSession(parsed.active);
+        return {
+          sessions,
+          active
+        };
+      } catch (_error) {
+        return fallback;
+      }
+    }
+    function getRoomLogFloatingPanel() {
+      return document.getElementById(ROOM_LOG_FLOAT_ID);
+    }
+    function refreshRoomLogPanelIfVisible() {
+      const panel = getRoomLogFloatingPanel();
+      if (!panel || panel.hasAttribute("hidden")) {
+        return;
+      }
+      renderRoomLogPanel();
+    }
+    function markRoomLogSessionIncomplete(session, reason) {
+      if (!session || typeof session !== "object") {
+        return;
+      }
+      session.incomplete = true;
+      if (!Array.isArray(session.incompleteReasons)) {
+        session.incompleteReasons = [];
+      }
+      const normalized = String(reason || "").trim();
+      if (normalized && !session.incompleteReasons.includes(normalized)) {
+        session.incompleteReasons.push(normalized);
+      }
+    }
+    function getRoomLogRunKey(state) {
+      const labyrinth = state?.characterLabyrinth;
+      if (!labyrinth) {
+        return "";
+      }
+      const startedAt = String(labyrinth.startedAt || "");
+      const floor = Math.max(0, Math.floor(finiteNumber(labyrinth.currentFloor, 0)));
+      return `${startedAt}|${floor}`;
+    }
+    function buildRoomLogSessionKey(state, roomContext, mode) {
+      if (!roomContext) {
+        return "";
+      }
+      return [
+        getRoomLogRunKey(state),
+        String(roomContext.roomKey || ""),
+        String(roomContext.skillHrid || ""),
+        String(mode || "skilling")
+      ].join("|");
+    }
+    function getCurrentSkillingRoomContext(state) {
+      const roomKey = getCurrentPathRoomKey(state);
+      if (!roomKey) {
+        return null;
+      }
+      const room = getRoomAtKey(state, roomKey);
+      if (!room || room.roomType !== LABYRINTH_SKILLING_ROOM_TYPE) {
+        return null;
+      }
+      const skillHrid = String(room.skillHrid || "");
+      return {
+        roomKey,
+        roomType: String(room.roomType || ""),
+        skillHrid,
+        skillName: getSkillNameByHrid(skillHrid),
+        recommendedLevel: Math.max(0, Math.floor(finiteNumber(room.recommendedLevel, 0)))
+      };
+    }
+    function getCombatMonsterDisplayName(monsterHrid, initClientData) {
+      const hrid = String(monsterHrid || "");
+      if (!hrid) {
+        return t("roomLogModeCombat");
+      }
+      const tail = hrid.split("/").pop() || hrid;
+      const monster = initClientData?.combatMonsterDetailMap?.[hrid];
+      if (isChineseUi()) {
+        const localizedByTail = LABYRINTH_MONSTER_NAME_ZH_BY_TAIL[tail];
+        if (localizedByTail) {
+          return String(localizedByTail);
+        }
+        const localized = LABYRINTH_MONSTER_NAME_ZH_MAP[hrid];
+        if (localized) {
+          return String(localized);
+        }
+      }
+      return String(monster?.name || tail || hrid);
+    }
+    function getCurrentCombatRoomContext(state) {
+      const roomKey = getCurrentPathRoomKey(state);
+      if (!roomKey) {
+        return null;
+      }
+      const room = getRoomAtKey(state, roomKey);
+      if (!room || room.roomType !== LABYRINTH_COMBAT_ROOM_TYPE) {
+        return null;
+      }
+      const initClientData = getInitClientData();
+      const monsterHrid = String(room.monsterHrid || "");
+      return {
+        roomKey,
+        roomType: String(room.roomType || ""),
+        skillHrid: "",
+        skillName: getCombatMonsterDisplayName(monsterHrid, initClientData),
+        recommendedLevel: Math.max(0, Math.floor(finiteNumber(room.recommendedLevel, 0)))
+      };
+    }
+    function buildRoomLogSnapshot(roomProgress) {
+      if (!roomProgress || typeof roomProgress !== "object") {
+        return null;
+      }
+      const isEnhancing = roomProgress.targetLevel !== null && roomProgress.targetLevel !== void 0;
+      const targetWorkValue = Math.max(0, finiteNumber(roomProgress.targetWorkValue, 0));
+      let currentProgressRatio = clamp01(finiteNumber(roomProgress.currentProgress, 0));
+      let currentWorkValue = Math.max(0, finiteNumber(roomProgress.currentWorkValue, 0));
+      if (targetWorkValue > 0 && currentWorkValue <= 0 && currentProgressRatio > 0) {
+        currentWorkValue = targetWorkValue * currentProgressRatio;
+      }
+      if (targetWorkValue > 0) {
+        currentProgressRatio = clamp01(currentWorkValue / targetWorkValue);
+      }
+      return {
+        isEnhancing,
+        actionCounter: Math.max(0, Math.floor(finiteNumber(roomProgress.actionCounter, 0))),
+        successRate: normalizeChance(roomProgress.successRate),
+        doubleChance: normalizeChance(roomProgress.doubleProgressChance),
+        progressPerAction: Math.max(0, finiteNumber(roomProgress.progressPerAction, 0)),
+        targetWorkValue,
+        currentWorkValue,
+        currentProgressRatio,
+        targetLevel: Math.max(0, Math.floor(finiteNumber(roomProgress.targetLevel, 0))),
+        currentEnhLevel: Math.max(0, Math.floor(finiteNumber(roomProgress.currentEnhLevel, 0))),
+        actionTimeMs: Math.max(1, finiteNumber(roomProgress.actionTimeMs, 1))
+      };
+    }
+    function computeSkillingRoomExperiencePerRoom(state, _initClientData, roomContext) {
+      if (!state || !roomContext?.skillHrid) {
+        return 0;
+      }
+      const skillId = skillHridToSkillId(roomContext.skillHrid);
+      if (!skillId) {
+        return 0;
+      }
+      const actionTypeHrid = skillIdToActionTypeHrid(skillId);
+      if (!actionTypeHrid) {
+        return 0;
+      }
+      const liveRoom = getRoomAtKey(state, roomContext.roomKey);
+      const room = liveRoom || {
+        roomType: LABYRINTH_SKILLING_ROOM_TYPE,
+        skillHrid: roomContext.skillHrid,
+        recommendedLevel: roomContext.recommendedLevel,
+        roomKey: roomContext.roomKey
+      };
+      const roomLevel = Math.max(0, finiteNumber(room.recommendedLevel, roomContext.recommendedLevel));
+      const baseExperiencePerRoom = roomLevel * 50;
+      if (baseExperiencePerRoom <= 0) {
+        return 0;
+      }
+      const equipmentMetrics = getSkillingActionMetricsFromState(
+        state,
+        skillId,
+        actionTypeHrid,
+        "equipmentActionTypeBuffsDict"
+      );
+      const consumableMetrics = getSkillingActionMetricsFromState(
+        state,
+        skillId,
+        actionTypeHrid,
+        "consumableActionTypeBuffsDict"
+      );
+      const labyrinthUpgradeLevels = getLabyrinthUpgradeLevels();
+      const labyrinthExperienceBonus = getLabyrinthUpgradeExperienceBonus(labyrinthUpgradeLevels);
+      const experienceBonusDetail = computeSkillingExperienceBonusForRoom(
+        state,
+        skillId,
+        actionTypeHrid,
+        equipmentMetrics,
+        consumableMetrics,
+        createEmptySkillingMetrics(),
+        true,
+        labyrinthExperienceBonus
+      );
+      const experienceMultiplier = Math.max(0, finiteNumber(experienceBonusDetail?.multiplier, 1));
+      return Math.max(0, baseExperiencePerRoom * experienceMultiplier);
+    }
+    function computeSkillingRoomExperiencePerAction(state, initClientData, roomContext) {
+      return computeSkillingRoomExperiencePerRoom(state, initClientData, roomContext);
+    }
+    function refreshRoomLogSessionActualExperience(session, state) {
+      if (!session || !state || !session.skillHrid) {
+        return NaN;
+      }
+      const latestSkillExperience = getSkillExperienceValue(state.characterSkillMap, session.skillHrid);
+      if (Number.isFinite(latestSkillExperience)) {
+        session.endSkillExperience = latestSkillExperience;
+      }
+      const startSkillExperience = finiteNumber(session.startSkillExperience, NaN);
+      const endSkillExperience = finiteNumber(session.endSkillExperience, NaN);
+      if (!Number.isFinite(startSkillExperience) || !Number.isFinite(endSkillExperience)) {
+        return NaN;
+      }
+      const gained = Math.max(0, endSkillExperience - startSkillExperience);
+      session.actualExperienceGain = gained;
+      return gained;
+    }
+    function resolveRoomLogTotalExperience(session, actualGain) {
+      const safeActual = finiteNumber(actualGain, NaN);
+      if (Number.isFinite(safeActual) && (safeActual > 0 || session?.completed)) {
+        return Math.max(0, safeActual);
+      }
+      return Math.max(
+        0,
+        finiteNumber(session?.predictedExperience, finiteNumber(session?.experiencePerAction, finiteNumber(session?.totalExperience, 0)))
+      );
+    }
+    function refreshRoomLogSessionExperience(session, state, roomContext, snapshot) {
+      if (!session || !roomContext) {
+        return;
+      }
+      const initClientData = getInitClientData();
+      const predicted = computeSkillingRoomExperiencePerRoom(state, initClientData, roomContext);
+      session.experiencePerAction = Math.max(0, finiteNumber(predicted, 0));
+      session.predictedExperience = session.experiencePerAction;
+      const actualGain = refreshRoomLogSessionActualExperience(session, state);
+      session.totalExperience = resolveRoomLogTotalExperience(session, actualGain);
+    }
+    function createRoomLogUnknownAction(counter) {
+      return {
+        counter: Math.max(0, Math.floor(finiteNumber(counter, 0))),
+        outcome: ROOM_LOG_ACTION_OUTCOME_UNKNOWN,
+        text: "?",
+        missing: true
+      };
+    }
+    function deriveRoomLogAction(prevSnapshot, nextSnapshot, actionCounter) {
+      if (!nextSnapshot || typeof nextSnapshot !== "object") {
+        return createRoomLogUnknownAction(actionCounter);
+      }
+      if (nextSnapshot.isEnhancing) {
+        const previousLevel = Math.max(0, Math.floor(finiteNumber(prevSnapshot?.currentEnhLevel, 0)));
+        const nextLevel = Math.max(0, Math.floor(finiteNumber(nextSnapshot.currentEnhLevel, 0)));
+        const levelDelta = nextLevel - previousLevel;
+        let outcome2 = ROOM_LOG_ACTION_OUTCOME_FAIL;
+        if (levelDelta >= 2) {
+          outcome2 = ROOM_LOG_ACTION_OUTCOME_DOUBLE;
+        } else if (levelDelta >= 1) {
+          outcome2 = ROOM_LOG_ACTION_OUTCOME_SUCCESS;
+        }
+        const text = `+${nextLevel}`;
+        return {
+          counter: Math.max(0, Math.floor(finiteNumber(actionCounter, 0))),
+          outcome: outcome2,
+          text,
+          missing: false
+        };
+      }
+      const prevWork = Math.max(0, finiteNumber(prevSnapshot?.currentWorkValue, 0));
+      const nextWork = Math.max(0, finiteNumber(nextSnapshot.currentWorkValue, 0));
+      const workDelta = nextWork - prevWork;
+      const prevProgress = clamp01(finiteNumber(prevSnapshot?.currentProgressRatio, 0));
+      const nextProgress = clamp01(finiteNumber(nextSnapshot.currentProgressRatio, 0));
+      const progressDelta = nextProgress - prevProgress;
+      const expectedSingle = Math.max(0, finiteNumber(prevSnapshot?.progressPerAction, 0));
+      let outcome = ROOM_LOG_ACTION_OUTCOME_FAIL;
+      if (workDelta > 1e-4 || progressDelta > 1e-4) {
+        if (expectedSingle > 0 && workDelta >= expectedSingle * 1.8) {
+          outcome = ROOM_LOG_ACTION_OUTCOME_DOUBLE;
+        } else {
+          outcome = ROOM_LOG_ACTION_OUTCOME_SUCCESS;
+        }
+      }
+      return {
+        counter: Math.max(0, Math.floor(finiteNumber(actionCounter, 0))),
+        outcome,
+        text: `${formatRoomLogPercent(nextProgress * 100)}%`,
+        missing: false
+      };
+    }
+    function applyRoomLogSnapshotToSession(session, snapshot) {
+      if (!session || !snapshot) {
+        return;
+      }
+      session.successRate = snapshot.successRate;
+      session.doubleChance = snapshot.doubleChance;
+      session.progressPerAction = snapshot.progressPerAction;
+      session.targetWorkValue = snapshot.targetWorkValue;
+      session.currentWorkValue = snapshot.currentWorkValue;
+      session.currentProgressPct = snapshot.currentProgressRatio * 100;
+      session.targetLevel = snapshot.targetLevel;
+      session.currentEnhLevel = snapshot.currentEnhLevel;
+      session.totalExperience = Math.max(0, finiteNumber(session.totalExperience, finiteNumber(session.experiencePerAction, 0)));
+    }
+    function appendRoomLogAction(session, nextSnapshot) {
+      if (!session || !nextSnapshot) {
+        return;
+      }
+      const prevSnapshot = session.lastSnapshot || null;
+      const prevCounter = Math.max(0, Math.floor(finiteNumber(prevSnapshot?.actionCounter, 0)));
+      const nextCounter = Math.max(0, Math.floor(finiteNumber(nextSnapshot.actionCounter, 0)));
+      if (!prevSnapshot) {
+        session.lastSnapshot = nextSnapshot;
+        session.lastActionCounter = nextCounter;
+        applyRoomLogSnapshotToSession(session, nextSnapshot);
+        return;
+      }
+      if (nextCounter <= prevCounter) {
+        session.lastSnapshot = nextSnapshot;
+        session.lastActionCounter = nextCounter;
+        applyRoomLogSnapshotToSession(session, nextSnapshot);
+        return;
+      }
+      if (!Array.isArray(session.actions)) {
+        session.actions = [];
+      }
+      if (nextCounter - prevCounter > 1) {
+        markRoomLogSessionIncomplete(session, "action_gap");
+        for (let counter = prevCounter + 1; counter < nextCounter; counter += 1) {
+          session.actions.push(createRoomLogUnknownAction(counter));
+        }
+      }
+      const action = deriveRoomLogAction(prevSnapshot, nextSnapshot, nextCounter);
+      session.actions.push(action);
+      if (session.actions.length > 200) {
+        markRoomLogSessionIncomplete(session, "action_overflow");
+        session.actions = session.actions.slice(session.actions.length - 200);
+      }
+      session.lastSnapshot = nextSnapshot;
+      session.lastActionCounter = nextCounter;
+      applyRoomLogSnapshotToSession(session, nextSnapshot);
+    }
+    function isRoomLogSessionComplete(session) {
+      if (!session || typeof session !== "object") {
+        return false;
+      }
+      if (session.mode === "combat") {
+        return true;
+      }
+      if (session.mode === "enhancing") {
+        const targetLevel = Math.max(0, Math.floor(finiteNumber(session.targetLevel, 0)));
+        const currentLevel = Math.max(0, Math.floor(finiteNumber(session.currentEnhLevel, 0)));
+        return targetLevel > 0 && currentLevel >= targetLevel;
+      }
+      const targetWork = Math.max(0, finiteNumber(session.targetWorkValue, 0));
+      const currentWork = Math.max(0, finiteNumber(session.currentWorkValue, 0));
+      const progressPct = Math.max(0, finiteNumber(session.currentProgressPct, 0));
+      if (targetWork > 0) {
+        return currentWork >= targetWork - 1e-4 || progressPct >= 99.9;
+      }
+      return progressPct >= 99.9;
+    }
+    function finalizeActiveRoomLogSession(options = {}) {
+      if (!activeRoomLogSession) {
+        return;
+      }
+      const session = activeRoomLogSession;
+      const latestState = getGameState();
+      const fallbackContext = buildRoomLogContextFromSession(session);
+      if (latestState && fallbackContext) {
+        refreshRoomLogSessionExperience(session, latestState, fallbackContext, session.lastSnapshot || null);
+      }
+      if (options && options.forceIncompleteReason) {
+        markRoomLogSessionIncomplete(session, options.forceIncompleteReason);
+      }
+      let completed;
+      if (options && typeof options.completed === "boolean") {
+        completed = options.completed;
+      } else {
+        completed = isRoomLogSessionComplete(session);
+      }
+      if (!completed) {
+        markRoomLogSessionIncomplete(session, "not_complete");
+      }
+      session.endedAt = Date.now();
+      session.completed = completed && !session.incomplete;
+      const stored = sanitizeRoomLogSession(session);
+      if (stored) {
+        roomLogSessions.unshift(stored);
+        roomLogSessions = trimRoomLogSessions(roomLogSessions);
+      }
+      activeRoomLogSession = null;
+      persistRoomLogStorage();
+      refreshRoomLogPanelIfVisible();
+    }
+    function ensureRoomLogSession(state, roomContext, snapshot) {
+      if (!roomContext || !snapshot) {
+        return null;
+      }
+      const mode = snapshot.isEnhancing ? "enhancing" : "skilling";
+      const sessionKey = buildRoomLogSessionKey(state, roomContext, mode);
+      if (!sessionKey) {
+        return null;
+      }
+      if (activeRoomLogSession && activeRoomLogSession.sessionKey !== sessionKey) {
+        finalizeActiveRoomLogSession({ forceIncompleteReason: "room_switch" });
+      }
+      if (activeRoomLogSession) {
+        return activeRoomLogSession;
+      }
+      const now = Date.now();
+      const startSkillExperience = getSkillExperienceValue(state?.characterSkillMap, roomContext.skillHrid);
+      activeRoomLogSession = {
+        id: `room-log-${now}-${Math.random().toString(36).slice(2, 8)}`,
+        startedAt: now,
+        endedAt: 0,
+        runKey: getRoomLogRunKey(state),
+        sessionKey,
+        roomKey: String(roomContext.roomKey || ""),
+        mode,
+        skillHrid: String(roomContext.skillHrid || ""),
+        skillName: String(roomContext.skillName || "--"),
+        recommendedLevel: Math.max(0, Math.floor(finiteNumber(roomContext.recommendedLevel, 0))),
+        successRate: snapshot.successRate,
+        doubleChance: snapshot.doubleChance,
+        progressPerAction: snapshot.progressPerAction,
+        experiencePerAction: 0,
+        predictedExperience: 0,
+        actualExperienceGain: 0,
+        startSkillExperience: Number.isFinite(startSkillExperience) ? startSkillExperience : 0,
+        endSkillExperience: Number.isFinite(startSkillExperience) ? startSkillExperience : 0,
+        totalExperience: 0,
+        targetWorkValue: snapshot.targetWorkValue,
+        currentWorkValue: snapshot.currentWorkValue,
+        currentProgressPct: snapshot.currentProgressRatio * 100,
+        targetLevel: snapshot.targetLevel,
+        currentEnhLevel: snapshot.currentEnhLevel,
+        actions: [],
+        lastActionCounter: snapshot.actionCounter,
+        lastSnapshot: snapshot,
+        incomplete: false,
+        incompleteReasons: [],
+        completed: false
+      };
+      refreshRoomLogSessionExperience(activeRoomLogSession, state, roomContext, snapshot);
+      if (snapshot.actionCounter > 0) {
+        markRoomLogSessionIncomplete(activeRoomLogSession, "start_midway");
+      }
+      persistRoomLogStorage();
+      return activeRoomLogSession;
+    }
+    function ensureCombatRoomLogSession(state, roomContext) {
+      if (!roomContext) {
+        return null;
+      }
+      const mode = "combat";
+      const sessionKey = buildRoomLogSessionKey(state, roomContext, mode);
+      if (!sessionKey) {
+        return null;
+      }
+      if (activeRoomLogSession && activeRoomLogSession.sessionKey !== sessionKey) {
+        finalizeActiveRoomLogSession({ forceIncompleteReason: "room_switch" });
+      }
+      if (activeRoomLogSession) {
+        return activeRoomLogSession;
+      }
+      const now = Date.now();
+      activeRoomLogSession = {
+        id: `room-log-${now}-${Math.random().toString(36).slice(2, 8)}`,
+        startedAt: now,
+        endedAt: 0,
+        runKey: getRoomLogRunKey(state),
+        sessionKey,
+        roomKey: String(roomContext.roomKey || ""),
+        mode,
+        skillHrid: "",
+        skillName: String(roomContext.skillName || t("roomLogModeCombat")),
+        recommendedLevel: Math.max(0, Math.floor(finiteNumber(roomContext.recommendedLevel, 0))),
+        successRate: 0,
+        doubleChance: 0,
+        progressPerAction: 0,
+        experiencePerAction: 0,
+        predictedExperience: 0,
+        actualExperienceGain: 0,
+        startSkillExperience: 0,
+        endSkillExperience: 0,
+        totalExperience: 0,
+        targetWorkValue: 0,
+        currentWorkValue: 0,
+        currentProgressPct: 0,
+        targetLevel: 0,
+        currentEnhLevel: 0,
+        actions: [],
+        lastActionCounter: 0,
+        lastSnapshot: null,
+        incomplete: false,
+        incompleteReasons: [],
+        completed: false
+      };
+      persistRoomLogStorage();
+      refreshRoomLogPanelIfVisible();
+      return activeRoomLogSession;
+    }
+    function handleRoomLogProgressMessage(roomProgressMessage) {
+      if (!roomProgressMessage || typeof roomProgressMessage !== "object") {
+        return;
+      }
+      const state = getGameState();
+      const roomContext = getCurrentSkillingRoomContext(state);
+      if (!roomContext) {
+        return;
+      }
+      const snapshot = buildRoomLogSnapshot(roomProgressMessage);
+      if (!snapshot) {
+        return;
+      }
+      const session = ensureRoomLogSession(state, roomContext, snapshot);
+      if (!session) {
+        return;
+      }
+      appendRoomLogAction(session, snapshot);
+      refreshRoomLogSessionExperience(session, state, roomContext, snapshot);
+      persistRoomLogStorage();
+      refreshRoomLogPanelIfVisible();
+    }
+    function syncRoomLogSessionState(state) {
+      if (!state?.characterLabyrinth) {
+        if (activeRoomLogSession) {
+          finalizeActiveRoomLogSession({ forceIncompleteReason: "left_labyrinth", completed: false });
+        }
+        return;
+      }
+      const combatRoomContext = getCurrentCombatRoomContext(state);
+      const isCombatRunning = Boolean(
+        combatRoomContext && Array.isArray(state.labyrinthBattleMonsters) && state.labyrinthBattleMonsters.length > 0
+      );
+      if (isCombatRunning) {
+        ensureCombatRoomLogSession(state, combatRoomContext);
+        return;
+      }
+      if (!activeRoomLogSession) {
+        return;
+      }
+      if (activeRoomLogSession.mode === "combat") {
+        finalizeActiveRoomLogSession({ completed: true });
+        return;
+      }
+      const roomContext = getCurrentSkillingRoomContext(state);
+      if (!roomContext || !state.labyrinthRoomProgress) {
+        finalizeActiveRoomLogSession();
+        return;
+      }
+      const snapshot = buildRoomLogSnapshot(state.labyrinthRoomProgress);
+      if (!snapshot) {
+        return;
+      }
+      const mode = snapshot.isEnhancing ? "enhancing" : "skilling";
+      const activeSessionKey = buildRoomLogSessionKey(state, roomContext, mode);
+      if (activeRoomLogSession.sessionKey !== activeSessionKey) {
+        finalizeActiveRoomLogSession({ forceIncompleteReason: "room_switch" });
+        return;
+      }
+      activeRoomLogSession.lastSnapshot = snapshot;
+      activeRoomLogSession.lastActionCounter = snapshot.actionCounter;
+      applyRoomLogSnapshotToSession(activeRoomLogSession, snapshot);
+      refreshRoomLogSessionExperience(activeRoomLogSession, state, roomContext, snapshot);
+    }
+    function initializeRoomLogState() {
+      const loaded = loadRoomLogStorage();
+      roomLogSessions = trimRoomLogSessions(loaded.sessions);
+      activeRoomLogSession = null;
+      const staleActive = loaded.active;
+      if (staleActive) {
+        markRoomLogSessionIncomplete(staleActive, "reload_recovered");
+        staleActive.completed = false;
+        staleActive.endedAt = Date.now();
+        const stored = sanitizeRoomLogSession(staleActive);
+        if (stored) {
+          roomLogSessions.unshift(stored);
+          roomLogSessions = trimRoomLogSessions(roomLogSessions);
+        }
+      }
+      persistRoomLogStorage();
+    }
+    function isSimulatorBridgePage() {
+      const host = String(window.location.host || "").toLowerCase();
+      const path = String(window.location.pathname || "");
+      return host === "shykai.github.io" && path.includes("/MWICombatSimulatorTest/dist");
+    }
+    function normalizeSimulatorBridgeUrl(value) {
+      const raw = String(value || "").trim();
+      if (!raw) {
+        return SIMULATOR_BRIDGE_DEFAULT_URL;
+      }
+      try {
+        const url = new URL(raw, window.location.href);
+        if (!/^https?:$/i.test(url.protocol)) {
+          return SIMULATOR_BRIDGE_DEFAULT_URL;
+        }
+        return url.toString();
+      } catch (_error) {
+        return SIMULATOR_BRIDGE_DEFAULT_URL;
+      }
+    }
+    function getSimulatorBridgeUrl() {
+      try {
+        const fromStorage = localStorage.getItem(SIMULATOR_BRIDGE_URL_STORAGE_KEY);
+        return normalizeSimulatorBridgeUrl(fromStorage);
+      } catch (_error) {
+        return SIMULATOR_BRIDGE_DEFAULT_URL;
+      }
+    }
+    function migrateLegacySimulatorBridgeUrl() {
+      try {
+        const raw = localStorage.getItem(SIMULATOR_BRIDGE_URL_STORAGE_KEY);
+        if (!raw) {
+          return;
+        }
+        const normalized = normalizeSimulatorBridgeUrl(raw);
+        const normalizedLower = normalized.toLowerCase();
+        const defaultLower = String(SIMULATOR_BRIDGE_DEFAULT_URL || "").toLowerCase();
+        if (defaultLower && normalizedLower.startsWith(defaultLower)) {
+          return;
+        }
+        const shouldMigrate = SIMULATOR_BRIDGE_LEGACY_URL_PREFIXES.some((legacyPrefix) => {
+          return normalizedLower.startsWith(String(legacyPrefix || "").toLowerCase());
+        });
+        if (shouldMigrate) {
+          localStorage.setItem(SIMULATOR_BRIDGE_URL_STORAGE_KEY, SIMULATOR_BRIDGE_DEFAULT_URL);
+        }
+      } catch (_error) {
+      }
+    }
+    function encodeSimulatorBridgePayload(payload) {
+      const json = JSON.stringify(payload || {});
+      const lz = null;
+      if (lz && typeof lz.compressToEncodedURIComponent === "function") {
+        const encoded = lz.compressToEncodedURIComponent(json);
+        if (encoded) {
+          return encoded;
+        }
+      }
+      return encodeURIComponent(json);
+    }
+    function decodeSimulatorBridgePayload(encoded) {
+      const raw = String(encoded || "");
+      if (!raw) {
+        return null;
+      }
+      const lz = null;
+      if (lz && typeof lz.decompressFromEncodedURIComponent === "function") {
+        try {
+          const decompressed = lz.decompressFromEncodedURIComponent(raw);
+          if (decompressed) {
+            return JSON.parse(decompressed);
+          }
+        } catch (_error) {
+        }
+      }
+      try {
+        return JSON.parse(decodeURIComponent(raw));
+      } catch (_error) {
+        return null;
+      }
+    }
+    function extractSimulatorBridgePayloadFromLocation() {
+      try {
+        const searchParams = new URLSearchParams(window.location.search || "");
+        const searchValue = searchParams.get(SIMULATOR_BRIDGE_PAYLOAD_PARAM);
+        if (searchValue) {
+          return decodeSimulatorBridgePayload(searchValue);
+        }
+      } catch (_error) {
+      }
+      try {
+        const hashRaw = String(window.location.hash || "").replace(/^#/, "");
+        if (!hashRaw) {
+          return null;
+        }
+        const hashParams = new URLSearchParams(hashRaw);
+        const hashValue = hashParams.get(SIMULATOR_BRIDGE_PAYLOAD_PARAM);
+        if (hashValue) {
+          return decodeSimulatorBridgePayload(hashValue);
+        }
+      } catch (_error) {
+        return null;
+      }
+      return null;
+    }
+    function clearSimulatorBridgePayloadFromLocation() {
+      try {
+        const url = new URL(window.location.href);
+        const searchParams = new URLSearchParams(url.search);
+        searchParams.delete(SIMULATOR_BRIDGE_PAYLOAD_PARAM);
+        url.search = searchParams.toString();
+        const hashRaw = String(url.hash || "").replace(/^#/, "");
+        if (hashRaw) {
+          const hashParams = new URLSearchParams(hashRaw);
+          hashParams.delete(SIMULATOR_BRIDGE_PAYLOAD_PARAM);
+          const hash = hashParams.toString();
+          url.hash = hash ? `#${hash}` : "";
+        }
+        history.replaceState(null, "", url.toString());
+      } catch (_error) {
+      }
+    }
+    function buildSimulatorBridgeLaunchUrl(payload) {
+      const baseUrl = normalizeSimulatorBridgeUrl(getSimulatorBridgeUrl());
+      const encoded = encodeSimulatorBridgePayload(payload);
+      const url = new URL(baseUrl, window.location.href);
+      url.hash = `${SIMULATOR_BRIDGE_PAYLOAD_PARAM}=${encoded}`;
+      return url.toString();
+    }
+    function normalizeCombatSimTrials(value) {
+      const n = Math.floor(Number(value));
+      if (!Number.isFinite(n)) {
+        return DEFAULT_COMBAT_SIM_TRIALS;
+      }
+      if (n < MIN_COMBAT_SIM_TRIALS) {
+        return MIN_COMBAT_SIM_TRIALS;
+      }
+      if (n > MAX_COMBAT_SIM_TRIALS) {
+        return MAX_COMBAT_SIM_TRIALS;
+      }
+      return n;
+    }
+    function loadCombatSimTrialsSetting() {
+      try {
+        const raw = localStorage.getItem(COMBAT_SIM_TRIALS_STORAGE_KEY);
+        if (raw === null || raw === void 0) {
+          return DEFAULT_COMBAT_SIM_TRIALS;
+        }
+        const trimmed = String(raw).trim();
+        if (!trimmed) {
+          return DEFAULT_COMBAT_SIM_TRIALS;
+        }
+        return normalizeCombatSimTrials(trimmed);
+      } catch (_error) {
+        return DEFAULT_COMBAT_SIM_TRIALS;
+      }
+    }
+    function saveCombatSimTrialsSetting(value) {
+      const normalized = normalizeCombatSimTrials(Number(value));
+      try {
+        localStorage.setItem(COMBAT_SIM_TRIALS_STORAGE_KEY, String(normalized));
+      } catch (_error) {
+      }
+      return normalized;
+    }
+    function loadAutomationCombatSimTrialsSetting() {
+      try {
+        const raw = localStorage.getItem(AUTOMATION_COMBAT_SIM_TRIALS_STORAGE_KEY);
+        if (raw === null || raw === void 0) {
+          return DEFAULT_AUTOMATION_COMBAT_SIM_TRIALS;
+        }
+        const trimmed = String(raw).trim();
+        if (!trimmed) {
+          return DEFAULT_AUTOMATION_COMBAT_SIM_TRIALS;
+        }
+        return normalizeCombatSimTrials(trimmed);
+      } catch (_error) {
+        return DEFAULT_AUTOMATION_COMBAT_SIM_TRIALS;
+      }
+    }
+    function saveAutomationCombatSimTrialsSetting(value) {
+      const normalized = normalizeCombatSimTrials(Number(value));
+      try {
+        localStorage.setItem(AUTOMATION_COMBAT_SIM_TRIALS_STORAGE_KEY, String(normalized));
+      } catch (_error) {
+      }
+      return normalized;
+    }
+    function normalizeAutomationTargetWinRate(value) {
+      let n = Number(value);
+      if (!Number.isFinite(n)) {
+        return DEFAULT_AUTOMATION_TARGET_WIN_RATE;
+      }
+      if (n >= 0 && n <= 1) {
+        n *= 100;
+      }
+      if (n < 0) {
+        n = 0;
+      }
+      if (n > 100) {
+        n = 100;
+      }
+      return Math.round(n * 10) / 10;
+    }
+    function loadAutomationTargetWinRateSetting() {
+      try {
+        const raw = localStorage.getItem(AUTOMATION_TARGET_WIN_RATE_STORAGE_KEY);
+        if (raw === null || raw === void 0) {
+          return DEFAULT_AUTOMATION_TARGET_WIN_RATE;
+        }
+        const trimmed = String(raw).trim();
+        if (!trimmed) {
+          return DEFAULT_AUTOMATION_TARGET_WIN_RATE;
+        }
+        return normalizeAutomationTargetWinRate(trimmed);
+      } catch (_error) {
+        return DEFAULT_AUTOMATION_TARGET_WIN_RATE;
+      }
+    }
+    function saveAutomationTargetWinRateSetting(value) {
+      const normalized = normalizeAutomationTargetWinRate(value);
+      try {
+        localStorage.setItem(AUTOMATION_TARGET_WIN_RATE_STORAGE_KEY, String(normalized));
+      } catch (_error) {
+      }
+      return normalized;
+    }
+    function roundForSignature(value) {
+      const n = finiteNumber(value, 0);
+      return Math.round(n * 1e3) / 1e3;
+    }
+    function isLikelyGameState(state) {
+      return Boolean(
+        state && typeof state === "object" && (Object.prototype.hasOwnProperty.call(state, "characterLabyrinth") || Object.prototype.hasOwnProperty.call(state, "combatUnit") || Object.prototype.hasOwnProperty.call(state, "gameConn"))
+      );
+    }
+    function findGameStateFromFiber(rootFiber) {
+      if (!rootFiber || typeof rootFiber !== "object") {
+        return null;
+      }
+      const queue = [rootFiber];
+      const visited = /* @__PURE__ */ new Set();
+      let steps = 0;
+      while (queue.length > 0 && steps < 2e4) {
+        const fiber = queue.shift();
+        if (!fiber || typeof fiber !== "object" || visited.has(fiber)) {
+          continue;
+        }
+        visited.add(fiber);
+        steps += 1;
+        const state = fiber.stateNode?.state;
+        if (isLikelyGameState(state)) {
+          return state;
+        }
+        if (fiber.child) {
+          queue.push(fiber.child);
+        }
+        if (fiber.sibling) {
+          queue.push(fiber.sibling);
+        }
+      }
+      return null;
+    }
+    function getGameState() {
+      const gamePage = document.querySelector('[class^="GamePage"]');
+      if (gamePage) {
+        const reactKey = Object.keys(gamePage).find((key) => key.startsWith("__reactFiber$"));
+        if (reactKey) {
+          const fiberNode = gamePage[reactKey];
+          const directState = fiberNode?.return?.stateNode?.state || null;
+          if (isLikelyGameState(directState)) {
+            return directState;
+          }
+        }
+      }
+      const rootElement = document.getElementById("root");
+      let rootContainer = rootElement?._reactRootContainer || null;
+      if (!rootContainer) {
+        const fallbackRoot = Array.from(document.querySelectorAll("div")).find(
+          (el) => Object.prototype.hasOwnProperty.call(el, "_reactRootContainer")
+        );
+        rootContainer = fallbackRoot?._reactRootContainer || null;
+      }
+      return findGameStateFromFiber(rootContainer?.current || null);
+    }
+    function getInitClientData() {
+      const raw = localStorage.getItem("initClientData");
+      if (!raw) {
+        return null;
+      }
+      if (cachedInitClientData && cachedInitClientDataRaw === raw) {
+        return cachedInitClientData;
+      }
+      const preloaded = adapters.getClientData?.();
+      if (preloaded && typeof preloaded === "object") {
+        cachedInitClientData = preloaded;
+        cachedInitClientDataRaw = raw;
+        return cachedInitClientData;
+      }
+      const parsers = [
+        () => JSON.parse(raw),
+        () => {
+          const decompressed = adapters.decompressFromUTF16(raw);
+          return decompressed ? JSON.parse(decompressed) : null;
+        }
+      ];
+      for (const parser of parsers) {
+        try {
+          const parsed = parser();
+          if (parsed && typeof parsed === "object") {
+            cachedInitClientData = parsed;
+            cachedInitClientDataRaw = raw;
+            return cachedInitClientData;
+          }
+        } catch (_error) {
+        }
+      }
+      console.error("[Lab Clear Rate] Failed to parse initClientData with all parsers.");
+      return null;
+    }
+    function getContainerValue(container, key) {
+      if (!container || key === void 0 || key === null) {
+        return void 0;
+      }
+      if (container instanceof Map) {
+        return container.get(key);
+      }
+      return container[key];
+    }
+    function getContainerEntries(container) {
+      if (!container) {
+        return [];
+      }
+      if (container instanceof Map) {
+        return Array.from(container.entries());
+      }
+      if (typeof container === "object") {
+        return Object.entries(container);
+      }
+      return [];
+    }
+    function deepCloneJson(value) {
+      if (value === null || value === void 0) {
+        return value;
+      }
+      if (typeof structuredClone === "function") {
+        return structuredClone(value);
+      }
+      try {
+        return JSON.parse(JSON.stringify(value));
+      } catch (_error) {
+        return value;
+      }
+    }
+    function stableStringify(value) {
+      if (value === null || value === void 0) {
+        return String(value);
+      }
+      const type = typeof value;
+      if (type === "number" || type === "boolean") {
+        return JSON.stringify(value);
+      }
+      if (type === "string") {
+        return JSON.stringify(value);
+      }
+      if (Array.isArray(value)) {
+        return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+      }
+      if (value instanceof Map) {
+        const entries = Array.from(value.entries()).sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+        return stableStringify(entries);
+      }
+      if (type === "object") {
+        const keys = Object.keys(value).sort();
+        const body = keys.map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(",");
+        return `{${body}}`;
+      }
+      return JSON.stringify(String(value));
+    }
+    function hashString(text) {
+      const source = String(text || "");
+      let hash = 2166136261;
+      for (let i = 0; i < source.length; i += 1) {
+        hash ^= source.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
+      return (hash >>> 0).toString(36);
+    }
+    function normalizeTriggerList(rawList) {
+      if (!Array.isArray(rawList)) {
+        return [];
+      }
+      return rawList.map((trigger) => ({
+        dependencyHrid: String(trigger?.dependencyHrid || ""),
+        conditionHrid: String(trigger?.conditionHrid || ""),
+        comparatorHrid: String(trigger?.comparatorHrid || ""),
+        value: finiteNumber(trigger?.value, 0)
+      })).filter((trigger) => trigger.dependencyHrid && trigger.conditionHrid && trigger.comparatorHrid);
+    }
+    function skillHridToSkillId(skillHrid) {
+      if (!skillHrid || typeof skillHrid !== "string") {
+        return "";
+      }
+      const parts = skillHrid.split("/");
+      return parts[parts.length - 1] || "";
+    }
+    function skillIdToActionTypeHrid(skillId) {
+      return skillId ? `/action_types/${skillId}` : "";
+    }
+    function isGatheringSkillId(skillId) {
+      return skillId === "milking" || skillId === "foraging" || skillId === "woodcutting";
+    }
+    function isGourmetSkillId(skillId) {
+      return skillId === "cooking" || skillId === "brewing";
+    }
+    function isDoubleProgressBuffApplicable(skillId, buffTypeHrid) {
+      if (buffTypeHrid === "/buff_types/gathering") {
+        return isGatheringSkillId(skillId);
+      }
+      if (buffTypeHrid === "/buff_types/gourmet") {
+        return isGourmetSkillId(skillId);
+      }
+      return false;
+    }
+    function sumBuffValue(buffs, predicate) {
+      let total = 0;
+      for (const buff of buffs) {
+        if (!buff || !predicate(buff)) {
+          continue;
+        }
+        total += Number(buff.flatBoost || 0);
+        total += Number(buff.flatBoostLevelBonus || 0);
+        total += Number(buff.ratioBoost || 0);
+        total += Number(buff.ratioBoostLevelBonus || 0);
+      }
+      return total;
+    }
+    function getBuffAmount(buff) {
+      if (!buff) {
+        return 0;
+      }
+      return finiteNumber(buff.flatBoost, 0) + finiteNumber(buff.flatBoostLevelBonus, 0) + finiteNumber(buff.ratioBoost, 0) + finiteNumber(buff.ratioBoostLevelBonus, 0);
+    }
+    function createEmptySkillingMetrics() {
+      return {
+        skillLevelBonus: 0,
+        efficiencyBonus: 0,
+        actionSpeedBonus: 0,
+        successBonus: 0,
+        experienceBonus: 0,
+        genericExperienceBonus: 0,
+        skillingExperienceBonus: 0,
+        skillExperienceBonus: 0,
+        crateDoubleProgressBonus: 0,
+        gatheringBonus: 0
+      };
+    }
+    function cloneSkillingMetrics(metrics) {
+      return {
+        skillLevelBonus: finiteNumber(metrics?.skillLevelBonus, 0),
+        efficiencyBonus: finiteNumber(metrics?.efficiencyBonus, 0),
+        actionSpeedBonus: finiteNumber(metrics?.actionSpeedBonus, 0),
+        successBonus: finiteNumber(metrics?.successBonus, 0),
+        experienceBonus: finiteNumber(metrics?.experienceBonus, 0),
+        genericExperienceBonus: finiteNumber(metrics?.genericExperienceBonus, 0),
+        skillingExperienceBonus: finiteNumber(metrics?.skillingExperienceBonus, 0),
+        skillExperienceBonus: finiteNumber(metrics?.skillExperienceBonus, 0),
+        crateDoubleProgressBonus: finiteNumber(metrics?.crateDoubleProgressBonus, 0),
+        gatheringBonus: finiteNumber(metrics?.gatheringBonus, 0)
+      };
+    }
+    function addSkillingMetrics(target, source) {
+      if (!target || !source) {
+        return target;
+      }
+      target.skillLevelBonus += finiteNumber(source.skillLevelBonus, 0);
+      target.efficiencyBonus += finiteNumber(source.efficiencyBonus, 0);
+      target.actionSpeedBonus += finiteNumber(source.actionSpeedBonus, 0);
+      target.successBonus += finiteNumber(source.successBonus, 0);
+      target.experienceBonus += finiteNumber(source.experienceBonus, 0);
+      target.genericExperienceBonus += finiteNumber(source.genericExperienceBonus, 0);
+      target.skillingExperienceBonus += finiteNumber(source.skillingExperienceBonus, 0);
+      target.skillExperienceBonus += finiteNumber(source.skillExperienceBonus, 0);
+      target.crateDoubleProgressBonus += finiteNumber(source.crateDoubleProgressBonus, 0);
+      target.gatheringBonus += finiteNumber(source.gatheringBonus, 0);
+      return target;
+    }
+    function buildLabyrinthUpgradeSkillingMetrics(levels) {
+      const metrics = createEmptySkillingMetrics();
+      metrics.actionSpeedBonus += getLabyrinthUpgradeLevel(levels, LABYRINTH_UPGRADE_KEY_SKILL_ACTION_SPEED) * LABYRINTH_UPGRADE_STEP_RATIO;
+      metrics.efficiencyBonus += getLabyrinthUpgradeLevel(levels, LABYRINTH_UPGRADE_KEY_SKILLING_EFFICIENCY) * LABYRINTH_UPGRADE_STEP_RATIO;
+      metrics.successBonus += getLabyrinthUpgradeLevel(levels, LABYRINTH_UPGRADE_KEY_SKILLING_SUCCESS) * LABYRINTH_UPGRADE_SKILLING_SUCCESS_STEP_RATIO;
+      metrics.crateDoubleProgressBonus += getLabyrinthUpgradeLevel(levels, LABYRINTH_UPGRADE_KEY_SKILLING_DOUBLE_PROGRESS) * LABYRINTH_UPGRADE_STEP_RATIO;
+      return metrics;
+    }
+    function getLabyrinthUpgradeExperienceBonus(levels) {
+      return getLabyrinthUpgradeLevel(levels, LABYRINTH_UPGRADE_KEY_LABYRINTH_EXPERIENCE) * LABYRINTH_UPGRADE_STEP_RATIO;
+    }
+    function subtractSkillingMetrics(target, source) {
+      if (!target || !source) {
+        return target;
+      }
+      target.skillLevelBonus -= finiteNumber(source.skillLevelBonus, 0);
+      target.efficiencyBonus -= finiteNumber(source.efficiencyBonus, 0);
+      target.actionSpeedBonus -= finiteNumber(source.actionSpeedBonus, 0);
+      target.successBonus -= finiteNumber(source.successBonus, 0);
+      target.experienceBonus -= finiteNumber(source.experienceBonus, 0);
+      target.genericExperienceBonus -= finiteNumber(source.genericExperienceBonus, 0);
+      target.skillingExperienceBonus -= finiteNumber(source.skillingExperienceBonus, 0);
+      target.skillExperienceBonus -= finiteNumber(source.skillExperienceBonus, 0);
+      target.crateDoubleProgressBonus -= finiteNumber(source.crateDoubleProgressBonus, 0);
+      target.gatheringBonus -= finiteNumber(source.gatheringBonus, 0);
+      return target;
+    }
+    function getSkillingBuffMetrics(skillId, buffs) {
+      const metrics = createEmptySkillingMetrics();
+      const skillLevelType = `/buff_types/${skillId}_level`;
+      const skillSuccessType = `/buff_types/${skillId}_success`;
+      const skillExperienceType = `/buff_types/${skillId}_experience`;
+      for (const buff of Array.isArray(buffs) ? buffs : []) {
+        if (!buff?.typeHrid) {
+          continue;
+        }
+        const amount = getBuffAmount(buff);
+        if (!Number.isFinite(amount) || amount === 0) {
+          continue;
+        }
+        if (buff.typeHrid === skillLevelType) {
+          metrics.skillLevelBonus += amount;
+        } else if (buff.typeHrid === "/buff_types/efficiency") {
+          metrics.efficiencyBonus += amount;
+        } else if (buff.typeHrid === "/buff_types/action_speed") {
+          metrics.actionSpeedBonus += amount;
+        } else if (buff.typeHrid === "/buff_types/labyrinth_double_progress") {
+          metrics.crateDoubleProgressBonus += amount;
+        } else if (buff.typeHrid === "/buff_types/experience" || buff.typeHrid === "/buff_types/wisdom") {
+          metrics.experienceBonus += amount;
+          metrics.genericExperienceBonus += amount;
+        } else if (buff.typeHrid === "/buff_types/skilling_experience") {
+          metrics.experienceBonus += amount;
+          metrics.skillingExperienceBonus += amount;
+        } else if (buff.typeHrid === skillExperienceType) {
+          metrics.experienceBonus += amount;
+          metrics.skillExperienceBonus += amount;
+        } else if (isDoubleProgressBuffApplicable(skillId, buff.typeHrid)) {
+          metrics.gatheringBonus += amount;
+        } else if (buff.typeHrid === "/buff_types/success_rate" || buff.typeHrid === skillSuccessType) {
+          metrics.successBonus += amount;
+        }
+      }
+      return metrics;
+    }
+    function getSkillingActionMetricsFromState(state, skillId, actionTypeHrid, stateKey) {
+      const actionTypeBuffs = state?.[stateKey];
+      const buffs = actionTypeBuffs?.[actionTypeHrid];
+      return getSkillingBuffMetrics(skillId, Array.isArray(buffs) ? buffs : []);
+    }
+    function getSkillingGlobalMetrics(state, skillId, actionTypeHrid, options = {}) {
+      const includePersonalBuffs = !(options && options.includePersonalBuffs === false);
+      const equipmentMetrics = getSkillingActionMetricsFromState(
+        state,
+        skillId,
+        actionTypeHrid,
+        "equipmentActionTypeBuffsDict"
+      );
+      const hasTotalBuffs = Array.isArray(state?.skillingActionTypeBuffsDict?.[actionTypeHrid]);
+      if (!hasTotalBuffs) {
+        const fallbackGlobalMetrics = createEmptySkillingMetrics();
+        const fallbackGlobalStateKeys = [
+          "communityActionTypeBuffsDict",
+          "houseActionTypeBuffsDict",
+          "achievementActionTypeBuffsDict",
+          "mooPassActionTypeBuffsDict"
+        ];
+        if (includePersonalBuffs) {
+          fallbackGlobalStateKeys.unshift("personalActionTypeBuffsDict");
+        }
+        for (const stateKey of fallbackGlobalStateKeys) {
+          addSkillingMetrics(
+            fallbackGlobalMetrics,
+            getSkillingActionMetricsFromState(state, skillId, actionTypeHrid, stateKey)
+          );
+        }
+        return {
+          equipmentMetrics,
+          globalMetrics: fallbackGlobalMetrics
+        };
+      }
+      const totalMetrics = getSkillingActionMetricsFromState(
+        state,
+        skillId,
+        actionTypeHrid,
+        "skillingActionTypeBuffsDict"
+      );
+      const consumableMetrics = getSkillingActionMetricsFromState(
+        state,
+        skillId,
+        actionTypeHrid,
+        "consumableActionTypeBuffsDict"
+      );
+      const globalMetrics = cloneSkillingMetrics(totalMetrics);
+      subtractSkillingMetrics(globalMetrics, equipmentMetrics);
+      subtractSkillingMetrics(globalMetrics, consumableMetrics);
+      if (!includePersonalBuffs) {
+        const personalMetrics = getSkillingActionMetricsFromState(
+          state,
+          skillId,
+          actionTypeHrid,
+          "personalActionTypeBuffsDict"
+        );
+        subtractSkillingMetrics(globalMetrics, personalMetrics);
+      }
+      return {
+        equipmentMetrics,
+        globalMetrics
+      };
+    }
+    function hasMeaningfulSkillingMetrics(metrics) {
+      const epsilon = 1e-9;
+      return Math.abs(finiteNumber(metrics?.skillLevelBonus, 0)) > epsilon || Math.abs(finiteNumber(metrics?.efficiencyBonus, 0)) > epsilon || Math.abs(finiteNumber(metrics?.actionSpeedBonus, 0)) > epsilon || Math.abs(finiteNumber(metrics?.successBonus, 0)) > epsilon || Math.abs(finiteNumber(metrics?.experienceBonus, 0)) > epsilon || Math.abs(finiteNumber(metrics?.genericExperienceBonus, 0)) > epsilon || Math.abs(finiteNumber(metrics?.skillingExperienceBonus, 0)) > epsilon || Math.abs(finiteNumber(metrics?.skillExperienceBonus, 0)) > epsilon || Math.abs(finiteNumber(metrics?.crateDoubleProgressBonus, 0)) > epsilon || Math.abs(finiteNumber(metrics?.gatheringBonus, 0)) > epsilon;
+    }
+    function hasActivePersonalSkillingBuffForRoom(state, room) {
+      if (!state || !room || room.roomType !== LABYRINTH_SKILLING_ROOM_TYPE || !room.skillHrid) {
+        return false;
+      }
+      const skillId = skillHridToSkillId(room.skillHrid);
+      if (!skillId) {
+        return false;
+      }
+      const actionTypeHrid = skillIdToActionTypeHrid(skillId);
+      const personalBuffs = state?.personalActionTypeBuffsDict?.[actionTypeHrid];
+      if (!Array.isArray(personalBuffs) || personalBuffs.length === 0) {
+        return false;
+      }
+      return hasMeaningfulSkillingMetrics(getSkillingBuffMetrics(skillId, personalBuffs));
+    }
+    function hasActivePersonalCombatBuff(state) {
+      const personalBuffs = state?.personalActionTypeBuffsDict?.["/action_types/combat"];
+      if (!Array.isArray(personalBuffs) || personalBuffs.length === 0) {
+        return false;
+      }
+      const epsilon = 1e-9;
+      for (const buff of personalBuffs) {
+        if (Math.abs(getBuffAmount(buff)) > epsilon) {
+          return true;
+        }
+      }
+      return false;
+    }
+    function buildLabyrinthCalcDoneMessage(state, flatRooms, targetIndexes) {
+      return t("calcDone");
+    }
+    function getCharacterItemValues(state) {
+      const itemMap = state?.characterItemMap;
+      if (itemMap instanceof Map) {
+        return Array.from(itemMap.values());
+      }
+      if (itemMap && typeof itemMap === "object") {
+        return Object.values(itemMap);
+      }
+      return [];
+    }
+    function formatLoanSealPercent(amount) {
+      const percent = Math.max(0, finiteNumber(amount, 0)) * 100;
+      if (Math.abs(percent - Math.round(percent)) < 1e-9) {
+        return `${Math.round(percent)}`;
+      }
+      return percent.toFixed(1).replace(/\.0$/, "");
+    }
+    function getPersonalBuffHridFromSealItemHrid(itemHrid) {
+      const tail = String(itemHrid || "").split("/").pop() || "";
+      if (!tail.startsWith("seal_of_")) {
+        return "";
+      }
+      return `/personal_buff_types/${tail.slice("seal_of_".length)}`;
+    }
+    function getActivePersonalBuffByHrid(state) {
+      const result = /* @__PURE__ */ new Map();
+      const buffs = Array.isArray(state?.characterBuffs) ? state.characterBuffs : [];
+      for (const buff of buffs) {
+        const hrid = String(buff?.hrid || "");
+        if (!hrid.startsWith("/personal_buff_types/")) {
+          continue;
+        }
+        result.set(hrid, buff);
+      }
+      return result;
+    }
+    function formatLoanSealDisplayName(name) {
+      const rawName = String(name || "").trim();
+      if (!rawName) {
+        return "";
+      }
+      return rawName.replace(/^卷轴[·.．]/, "");
+    }
+    function buildLoanSealEffectCatalog(state, initClientData = null) {
+      const itemDetails = state?.itemDetailDict || initClientData?.itemDetailMap || {};
+      const buffTypeDetails = state?.buffTypeDetailDict || initClientData?.buffTypeDetailMap || {};
+      const itemCountByHrid = /* @__PURE__ */ new Map();
+      for (const item of getCharacterItemValues(state)) {
+        const itemHrid = String(item?.itemHrid || item?.hrid || "");
+        if (!itemHrid.startsWith("/items/seal_of_")) {
+          continue;
+        }
+        const count = Math.max(0, Math.floor(finiteNumber(item?.count ?? item?.quantity ?? item?.amount, 0)));
+        itemCountByHrid.set(itemHrid, (itemCountByHrid.get(itemHrid) || 0) + count);
+      }
+      const activePersonalBuffByHrid = getActivePersonalBuffByHrid(state);
+      const catalog = [];
+      for (const effect of LABYRINTH_LOAN_SEAL_EFFECTS) {
+        const itemHrid = String(effect?.itemHrid || "");
+        const quantity = Math.max(0, Math.floor(finiteNumber(itemCountByHrid.get(itemHrid), 0)));
+        const itemDetail = getContainerValue(itemDetails, itemHrid) || null;
+        const buffTypeHrid = String(effect?.buffTypeHrid || "");
+        const buffTypeDetail = buffTypeHrid ? getContainerValue(buffTypeDetails, buffTypeHrid) : null;
+        const personalBuffHrid = getPersonalBuffHridFromSealItemHrid(itemHrid);
+        const activeBuff = personalBuffHrid ? activePersonalBuffByHrid.get(personalBuffHrid) || null : null;
+        const localizedName = isChineseUi() ? LABYRINTH_SEAL_NAME_ZH_BY_ITEM_HRID[itemHrid] || "" : "";
+        const displayName = formatLoanSealDisplayName(
+          localizedName || itemDetail?.name || buffTypeDetail?.name || itemHrid.split("/").pop() || itemHrid
+        );
+        const sortIndex = Math.max(0, Math.floor(finiteNumber(itemDetail?.sortIndex, 9999)));
+        const amount = Math.max(0, finiteNumber(effect?.amount, 0));
+        catalog.push({
+          itemHrid,
+          displayName,
+          sortIndex,
+          quantity,
+          buffTypeHrid,
+          amount,
+          boostMode: String(effect?.boostMode || "flat") === "ratio" ? "ratio" : "flat",
+          isCombat: effect?.isCombat === true,
+          personalBuffHrid,
+          isActive: Boolean(activeBuff),
+          activeBuff,
+          canApply: Boolean(buffTypeHrid) && amount > 0,
+          labelText: `${displayName} (+${formatLoanSealPercent(amount)}%)`
+        });
+      }
+      catalog.sort((a, b) => {
+        if (a.sortIndex !== b.sortIndex) {
+          return a.sortIndex - b.sortIndex;
+        }
+        return a.displayName.localeCompare(b.displayName);
+      });
+      return catalog;
+    }
+    function createLoanSealBuffEntry(effect, index = 0) {
+      const amount = Math.max(0, finiteNumber(effect?.amount, 0));
+      if (!effect?.buffTypeHrid || amount <= 0) {
+        return null;
+      }
+      const useRatio = effect?.boostMode === "ratio";
+      return {
+        uniqueHrid: `/buff_uniques/loan_seal_${String(effect.itemHrid || "").split("/").pop() || index}`,
+        typeHrid: String(effect.buffTypeHrid),
+        ratioBoost: useRatio ? amount : 0,
+        ratioBoostLevelBonus: 0,
+        flatBoost: useRatio ? 0 : amount,
+        flatBoostLevelBonus: 0,
+        startTime: "0001-01-01T00:00:00Z",
+        duration: 0
+      };
+    }
+    function getLoanSkillingActionTypeHrids(state) {
+      const source = state?.personalActionTypeBuffsDict || state?.skillingActionTypeBuffsDict || {};
+      const values = [];
+      for (const key of Object.keys(source)) {
+        const actionType = String(key || "");
+        if (!actionType.startsWith("/action_types/")) {
+          continue;
+        }
+        if (actionType === "/action_types/combat" || actionType === "/action_types/labyrinth" || actionType === "/action_types/special") {
+          continue;
+        }
+        values.push(actionType);
+      }
+      if (values.length > 0) {
+        values.sort();
+        return values;
+      }
+      return LABYRINTH_AUTOMATION_SKILL_ROOM_TYPES.map((entry) => `/action_types/${entry.key}`);
+    }
+    function buildLoanSimulationOptions(state, catalog, selectedItemHrids) {
+      if (!Array.isArray(catalog) || catalog.length === 0 || !Array.isArray(selectedItemHrids) || selectedItemHrids.length === 0) {
+        return null;
+      }
+      const selectedSet = new Set(selectedItemHrids.map((itemHrid) => String(itemHrid || "")));
+      const selectedEffects = catalog.filter(
+        (effect) => selectedSet.has(String(effect?.itemHrid || "")) && !effect?.isActive && effect?.canApply
+      );
+      if (!selectedEffects.length) {
+        return null;
+      }
+      const skillingActionTypes = getLoanSkillingActionTypeHrids(state);
+      const loanPersonalActionTypeBuffsDict = {};
+      for (let i = 0; i < selectedEffects.length; i += 1) {
+        const effect = selectedEffects[i];
+        if (effect.isCombat) {
+          continue;
+        }
+        const buffEntry = createLoanSealBuffEntry(effect, i);
+        if (!buffEntry) {
+          continue;
+        }
+        for (const actionTypeHrid of skillingActionTypes) {
+          if (!loanPersonalActionTypeBuffsDict[actionTypeHrid]) {
+            loanPersonalActionTypeBuffsDict[actionTypeHrid] = [];
+          }
+          loanPersonalActionTypeBuffsDict[actionTypeHrid].push({
+            ...buffEntry
+          });
+        }
+      }
+      return {
+        loanPersonalActionTypeBuffsDict,
+        selectedSealItemHrids: selectedEffects.map((effect) => String(effect?.itemHrid || "")).filter(Boolean),
+        selectedEffects
+      };
+    }
+    function normalizeLoanSimulationOptions(rawOptions) {
+      return null;
+    }
+    function getActivePersonalSealItemHrids(state) {
+      const result = [];
+      const buffs = Array.isArray(state?.characterBuffs) ? state.characterBuffs : [];
+      for (const buff of buffs) {
+        const hrid = String(buff?.hrid || "");
+        if (!hrid.startsWith("/personal_buff_types/")) {
+          continue;
+        }
+        const tail = hrid.slice("/personal_buff_types/".length);
+        if (!tail) {
+          continue;
+        }
+        const itemHrid = `/items/seal_of_${tail}`;
+        if (!SIMULATOR_PERSONAL_BUFF_ITEM_HRIDS.has(itemHrid)) {
+          continue;
+        }
+        result.push(itemHrid);
+      }
+      return Array.from(new Set(result));
+    }
+    function getSimulatorPersonalBuffItemHrids(state) {
+      return [];
+    }
+    function getCombatSimulatorPersonalSealItemHrids(state, options = {}) {
+      return [];
+    }
+    function getSkillLevel(skillMap, skillHrid) {
+      if (!skillMap) {
+        return 0;
+      }
+      if (skillMap instanceof Map) {
+        return Number(skillMap.get(skillHrid)?.level || 0);
+      }
+      return Number(skillMap[skillHrid]?.level || 0);
+    }
+    function getCrateBuffs(initClientData, teaCrateItemHrid) {
+      if (!initClientData || !teaCrateItemHrid) {
+        return [];
+      }
+      const map = initClientData.labyrinthCrateDetailMap || {};
+      const buffs = map[teaCrateItemHrid];
+      return Array.isArray(buffs) ? buffs : [];
+    }
+    function normalizeCombatBuffEntry(buff) {
+      if (!buff?.typeHrid) {
+        return null;
+      }
+      return {
+        uniqueHrid: String(buff.uniqueHrid || ""),
+        typeHrid: String(buff.typeHrid || ""),
+        ratioBoost: finiteNumber(buff.ratioBoost, 0),
+        ratioBoostLevelBonus: finiteNumber(buff.ratioBoostLevelBonus, 0),
+        flatBoost: finiteNumber(buff.flatBoost, 0),
+        flatBoostLevelBonus: finiteNumber(buff.flatBoostLevelBonus, 0),
+        startTime: String(buff.startTime || "0001-01-01T00:00:00Z"),
+        duration: Math.max(0, finiteNumber(buff.duration, 0))
+      };
+    }
+    function createLabyrinthCombatBuff(uniqueKey, typeHrid, level, valueKey) {
+      const normalizedLevel = Math.max(0, Math.floor(finiteNumber(level, 0)));
+      if (!typeHrid || normalizedLevel <= 0) {
+        return null;
+      }
+      return normalizeCombatBuffEntry({
+        uniqueHrid: `/buff_uniques/labyrinth_upgrade_${uniqueKey}`,
+        typeHrid,
+        [valueKey]: normalizedLevel * LABYRINTH_UPGRADE_STEP_RATIO,
+        startTime: "0001-01-01T00:00:00Z",
+        duration: 0
+      });
+    }
+    function buildLabyrinthCombatBuffs(levels) {
+      const buffs = [];
+      const definitions = [
+        [LABYRINTH_UPGRADE_KEY_COMBAT_DAMAGE, "combat_damage", "/buff_types/damage", "ratioBoost"],
+        [LABYRINTH_UPGRADE_KEY_ATTACK_SPEED, "attack_speed", "/buff_types/attack_speed", "ratioBoost"],
+        [LABYRINTH_UPGRADE_KEY_CAST_SPEED, "cast_speed", "/buff_types/cast_speed", "flatBoost"],
+        [LABYRINTH_UPGRADE_KEY_CRITICAL_RATE, "critical_rate", "/buff_types/critical_rate", "flatBoost"]
+      ];
+      for (const [upgradeKey, uniqueKey, typeHrid, valueKey] of definitions) {
+        const buff = createLabyrinthCombatBuff(uniqueKey, typeHrid, getLabyrinthUpgradeLevel(levels, upgradeKey), valueKey);
+        if (buff) {
+          buffs.push(buff);
+        }
+      }
+      return buffs;
+    }
+    function appendNormalizedCombatBuffs(target, seen, rawBuffs) {
+      if (!Array.isArray(rawBuffs)) {
+        return target;
+      }
+      const dedupeSet = seen instanceof Set ? seen : /* @__PURE__ */ new Set();
+      for (const buff of rawBuffs) {
+        const normalized = normalizeCombatBuffEntry(buff);
+        if (!normalized || !normalized.typeHrid) {
+          continue;
+        }
+        const dedupeKey = [
+          normalized.typeHrid,
+          normalized.ratioBoost,
+          normalized.ratioBoostLevelBonus,
+          normalized.flatBoost,
+          normalized.flatBoostLevelBonus,
+          normalized.duration
+        ].join("|");
+        if (dedupeSet.has(dedupeKey)) {
+          continue;
+        }
+        dedupeSet.add(dedupeKey);
+        target.push(normalized);
+      }
+      return target;
+    }
+    function getCombatPersonalBuffs(state) {
+      const actionTypeHrid = "/action_types/combat";
+      const personalBuffs = state?.personalActionTypeBuffsDict?.[actionTypeHrid];
+      const combatBuffs = [];
+      appendNormalizedCombatBuffs(combatBuffs, /* @__PURE__ */ new Set(), Array.isArray(personalBuffs) ? personalBuffs : []);
+      return combatBuffs;
+    }
+    function isLabyrinthRunActiveForCrateSelection(state) {
+      if (!state?.characterLabyrinth) {
+        return false;
+      }
+      const labyrinth = state.characterLabyrinth;
+      if (Array.isArray(labyrinth.roomData) && labyrinth.roomData.length > 0) {
+        return true;
+      }
+      const path = parseLabyrinthPathData(labyrinth.pathData);
+      if (Array.isArray(path) && path.length > 0) {
+        return true;
+      }
+      if (state.labyrinthRoomProgress) {
+        return true;
+      }
+      return Array.isArray(state.labyrinthBattleMonsters) && state.labyrinthBattleMonsters.length > 0;
+    }
+    function getLabyrinthCrateSelection(state) {
+      const labyrinth = state?.characterLabyrinth || {};
+      const setting = state?.characterSetting || {};
+      const fromLabyrinth = {
+        teaCrateItemHrid: String(labyrinth?.teaCrateItemHrid || ""),
+        coffeeCrateItemHrid: String(labyrinth?.coffeeCrateItemHrid || ""),
+        foodCrateItemHrid: String(labyrinth?.foodCrateItemHrid || ""),
+        source: "labyrinth"
+      };
+      const runActive = isLabyrinthRunActiveForCrateSelection(state);
+      const hasSettingCrateKeys = Object.prototype.hasOwnProperty.call(setting, "labyrinthTeaCrateHrid") || Object.prototype.hasOwnProperty.call(setting, "labyrinthCoffeeCrateHrid") || Object.prototype.hasOwnProperty.call(setting, "labyrinthFoodCrateHrid");
+      if (!runActive && hasSettingCrateKeys) {
+        return {
+          teaCrateItemHrid: String(setting?.labyrinthTeaCrateHrid || ""),
+          coffeeCrateItemHrid: String(setting?.labyrinthCoffeeCrateHrid || ""),
+          foodCrateItemHrid: String(setting?.labyrinthFoodCrateHrid || ""),
+          source: "setting"
+        };
+      }
+      return fromLabyrinth;
+    }
+    function getCombatCrateBuffs(state, initClientData) {
+      const crateSelection = getLabyrinthCrateSelection(state);
+      const teaCrateItemHrid = String(crateSelection?.teaCrateItemHrid || "");
+      const coffeeCrateItemHrid = String(crateSelection?.coffeeCrateItemHrid || "");
+      const foodCrateItemHrid = String(crateSelection?.foodCrateItemHrid || "");
+      const combatCrateItemHrids = [];
+      if (coffeeCrateItemHrid) {
+        combatCrateItemHrids.push(coffeeCrateItemHrid);
+      }
+      if (foodCrateItemHrid) {
+        combatCrateItemHrids.push(foodCrateItemHrid);
+      }
+      if (!combatCrateItemHrids.length && teaCrateItemHrid) {
+        if (teaCrateItemHrid.includes("coffee_crate") || teaCrateItemHrid.includes("food_crate")) {
+          combatCrateItemHrids.push(teaCrateItemHrid);
+        }
+      }
+      const combatBuffs = [];
+      const seen = /* @__PURE__ */ new Set();
+      for (const itemHrid of combatCrateItemHrids) {
+        const crateBuffs = getCrateBuffs(initClientData, itemHrid);
+        appendNormalizedCombatBuffs(combatBuffs, seen, crateBuffs);
+      }
+      const combatCrateSignature = combatCrateItemHrids.join("+");
+      return {
+        teaCrateItemHrid,
+        coffeeCrateItemHrid,
+        foodCrateItemHrid,
+        combatCrateItemHrids,
+        combatCrateSignature,
+        combatBuffs
+      };
+    }
+    function computeNonEnhancingClearStats(params) {
+      const { attempts, successChance, doubleChance, progressPerSuccess, targetProgress } = params;
+      const effectiveProgressPerSuccess = getEffectiveSkillingProgressPerSuccess(progressPerSuccess);
+      if (!Number.isFinite(targetProgress) || targetProgress <= 0) {
+        return { clearChance: 1, expectedAttemptsOnClear: 0 };
+      }
+      if (!Number.isFinite(attempts) || attempts <= 0) {
+        return { clearChance: 0, expectedAttemptsOnClear: null };
+      }
+      if (!Number.isFinite(effectiveProgressPerSuccess) || effectiveProgressPerSuccess <= 0) {
+        return { clearChance: 0, expectedAttemptsOnClear: null };
+      }
+      const p = clamp01(successChance);
+      const d = clamp01(doubleChance);
+      if (p <= 0) {
+        return { clearChance: 0, expectedAttemptsOnClear: null };
+      }
+      const neededUnits = Math.ceil(targetProgress / effectiveProgressPerSuccess - 1e-9);
+      if (neededUnits <= 0) {
+        return { clearChance: 1, expectedAttemptsOnClear: 0 };
+      }
+      if (neededUnits > attempts * 2) {
+        return { clearChance: 0, expectedAttemptsOnClear: null };
+      }
+      const q0 = 1 - p;
+      const q1 = p * (1 - d);
+      const q2 = p * d;
+      let stateDist = new Float64Array(neededUnits + 1);
+      stateDist[0] = 1;
+      let expectedAttemptsNumerator = 0;
+      for (let attempt = 1; attempt <= attempts; attempt += 1) {
+        const nextDist = new Float64Array(neededUnits + 1);
+        for (let units = 0; units <= neededUnits; units += 1) {
+          const prob = stateDist[units];
+          if (prob <= 0) {
+            continue;
+          }
+          if (units === neededUnits) {
+            nextDist[neededUnits] += prob;
+            continue;
+          }
+          nextDist[units] += prob * q0;
+          nextDist[Math.min(neededUnits, units + 1)] += prob * q1;
+          nextDist[Math.min(neededUnits, units + 2)] += prob * q2;
+        }
+        const reachedNow = nextDist[neededUnits] - stateDist[neededUnits];
+        if (reachedNow > 0) {
+          expectedAttemptsNumerator += attempt * reachedNow;
+        }
+        stateDist = nextDist;
+      }
+      const clearChance = clamp01(stateDist[neededUnits]);
+      const expectedAttemptsOnClear = clearChance > 0 ? expectedAttemptsNumerator / clearChance : null;
+      return {
+        clearChance,
+        expectedAttemptsOnClear
+      };
+    }
+    function computeEnhancingClearStats(params) {
+      const { attempts, successChance, doubleChance, targetLevel, startLevel } = params;
+      const target = Math.max(0, Math.floor(finiteNumber(targetLevel, 0)));
+      const start = Math.max(0, Math.floor(finiteNumber(startLevel, 0)));
+      if (target <= 0) {
+        return { clearChance: 1, expectedAttemptsOnClear: 0 };
+      }
+      if (!Number.isFinite(attempts) || attempts <= 0) {
+        return { clearChance: 0, expectedAttemptsOnClear: null };
+      }
+      const p = clamp01(successChance);
+      const d = clamp01(doubleChance);
+      const failChance = 1 - p;
+      const singleSuccessChance = p * (1 - d);
+      const doubleSuccessChance = p * d;
+      let stateDist = new Float64Array(target + 1);
+      stateDist[Math.min(start, target)] = 1;
+      let expectedAttemptsNumerator = 0;
+      for (let attempt = 1; attempt <= attempts; attempt += 1) {
+        const nextDist = new Float64Array(target + 1);
+        for (let level = 0; level <= target; level += 1) {
+          const prob = stateDist[level];
+          if (prob <= 0) {
+            continue;
+          }
+          if (level === target) {
+            nextDist[target] += prob;
+            continue;
+          }
+          nextDist[Math.max(0, level - 1)] += prob * failChance;
+          nextDist[Math.min(target, level + 1)] += prob * singleSuccessChance;
+          nextDist[Math.min(target, level + 2)] += prob * doubleSuccessChance;
+        }
+        const reachedNow = nextDist[target] - stateDist[target];
+        if (reachedNow > 0) {
+          expectedAttemptsNumerator += attempt * reachedNow;
+        }
+        stateDist = nextDist;
+      }
+      const clearChance = clamp01(stateDist[target]);
+      const expectedAttemptsOnClear = clearChance > 0 ? expectedAttemptsNumerator / clearChance : null;
+      return {
+        clearChance,
+        expectedAttemptsOnClear
+      };
+    }
+    function getEnhancingTargetLevelByRoomLevel(roomLevel) {
+      return 5;
+    }
+    function getBadgeColor(probability) {
+      if (probability >= 0.95) {
+        return "#1fbf60";
+      }
+      if (probability >= 0.8) {
+        return "#77b82a";
+      }
+      if (probability >= 0.6) {
+        return "#d2ac19";
+      }
+      if (probability >= 0.4) {
+        return "#d27a1f";
+      }
+      return "#d84b4b";
+    }
+    function ensureStyle() {
+      if (document.getElementById(STYLE_ID)) {
+        return;
+      }
+      const style = document.createElement("style");
+      style.id = STYLE_ID;
+      style.setAttribute("data-mwi-lite", "1");
+      style.textContent = `
+.${BADGE_CLASS} {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  z-index: 9;
+  max-width: calc(100% - 2px);
+  max-height: 24%;
+  padding: 1px 3px;
+  border-radius: 3px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 2px;
+  white-space: nowrap;
+  background: rgba(0, 0, 0, 0.35);
+  color: #ffffff;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  user-select: none;
+}
+.${BADGE_CLASS}__chance {
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+.${BADGE_CLASS}__eta {
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 1;
+  opacity: 0.95;
+  flex: 0 0 auto;
+}
+.${LIVE_ACTION_RATE_CLASS} {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: ${LIVE_ACTION_RATE_MWITOOLS_FONT_SIZE};
+  font-weight: 500;
+  line-height: 1.2;
+  color: ${LIVE_ACTION_RATE_MWITOOLS_COLOR};
+  white-space: nowrap;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+}
+.${CONTROL_CLASS} {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 4px;
+  row-gap: 2px;
+  width: min(372px, calc(100vw - 16px));
+  box-sizing: border-box;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #f0f4ff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+  user-select: none;
+  overflow: visible;
+}
+.${CONTROL_CLASS}--inline {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+.${CONTROL_CLASS}--block {
+  margin: 0 0 8px 0;
+}
+.${CONTROL_CLASS}__button {
+  min-width: 96px;
+  width: auto;
+  padding: 0 10px;
+  height: 18px;
+  border: 0;
+  border-radius: 5px;
+  background: #3a88ff;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.${CONTROL_CLASS}__button:disabled {
+  opacity: 0.75;
+  cursor: wait;
+}
+.${CONTROL_LOAN_TOGGLE_CLASS} {
+  min-width: 74px;
+  width: auto;
+  padding: 0 10px;
+  height: 18px;
+  border: 0;
+  border-radius: 5px;
+  background: rgba(84, 126, 224, 0.95);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+.${CONTROL_LOAN_TOGGLE_CLASS}:disabled {
+  opacity: 0.75;
+  cursor: wait;
+}
+.${CONTROL_LOAN_PANEL_CLASS} {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 8px);
+  width: 250px;
+  max-height: 320px;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid rgba(128, 170, 255, 0.45);
+  border-radius: 6px;
+  background: rgba(12, 16, 24, 0.96);
+  color: #f2f7ff;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+  z-index: 2147483645;
+  pointer-events: auto;
+}
+.${CONTROL_LOAN_PANEL_CLASS}[hidden] {
+  display: none !important;
+}
+.${CONTROL_LOAN_PANEL_CLASS} * {
+  pointer-events: auto;
+}
+.${CONTROL_LOAN_PANEL_CLASS}__title {
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #9ec4ff;
+}
+.${CONTROL_LOAN_LIST_CLASS} {
+  max-height: 230px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 2px;
+}
+.${CONTROL_LOAN_ITEM_CLASS} {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+  line-height: 1.2;
+}
+.${CONTROL_LOAN_ITEM_CLASS} input[type="checkbox"] {
+  margin: 0;
+}
+.${CONTROL_LOAN_ITEM_CLASS}__name {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.${CONTROL_LOAN_ITEM_STATUS_CLASS} {
+  font-size: 10px;
+  opacity: 0.85;
+  white-space: nowrap;
+}
+.${CONTROL_LOAN_ITEM_STATUS_CLASS}--warn {
+  color: #ff7b7b;
+  opacity: 1;
+  font-weight: 700;
+}
+.${CONTROL_LOAN_CALC_CLASS} {
+  margin-top: 8px;
+  width: 100%;
+  height: 22px;
+  border: 0;
+  border-radius: 5px;
+  background: #3a88ff;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.${CONTROL_LOAN_CALC_CLASS}:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+.${CONTROL_LOG_TOGGLE_CLASS} {
+  min-width: 54px;
+  width: auto;
+  padding: 0 10px;
+  height: 18px;
+  border: 0;
+  border-radius: 5px;
+  background: rgba(77, 151, 255, 0.95);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.${CONTROL_LOG_TOGGLE_CLASS}:disabled {
+  opacity: 0.75;
+  cursor: wait;
+}
+.${ROOM_LOG_FLOAT_CLASS} {
+  position: fixed;
+  top: 92px;
+  right: 14px;
+  width: 340px;
+  max-height: min(62vh, 470px);
+  box-sizing: border-box;
+  border: 1px solid rgba(128, 170, 255, 0.5);
+  border-radius: 8px;
+  background: rgba(10, 14, 22, 0.97);
+  color: #f2f7ff;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.55);
+  z-index: 2147483646;
+  pointer-events: auto;
+  user-select: none;
+}
+.${ROOM_LOG_FLOAT_CLASS}[hidden] {
+  display: none !important;
+}
+.${ROOM_LOG_FLOAT_HEADER_CLASS} {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px 6px;
+  border-bottom: 1px solid rgba(146, 182, 255, 0.24);
+  cursor: move;
+}
+.${ROOM_LOG_FLOAT_TITLE_CLASS} {
+  min-width: 0;
+  color: #9ec4ff;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.${ROOM_LOG_FLOAT_ACTIONS_CLASS} {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.${ROOM_LOG_FLOAT_CLEAR_CLASS} {
+  min-width: 40px;
+  height: 18px;
+  border: 0;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 6px;
+}
+.${ROOM_LOG_FLOAT_CLEAR_CLASS}:hover {
+  background: rgba(255, 181, 94, 0.45);
+}
+.${ROOM_LOG_FLOAT_CLOSE_CLASS} {
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.${ROOM_LOG_FLOAT_CLOSE_CLASS}:hover {
+  background: rgba(255, 108, 108, 0.45);
+}
+.${CONTROL_LOG_PANEL_CLASS} {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-sizing: border-box;
+  padding: 8px;
+}
+.${CONTROL_LOG_PANEL_CLASS}__title {
+  display: none;
+}
+.${CONTROL_LOG_LIST_CLASS} {
+  max-height: calc(min(62vh, 470px) - 60px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 2px;
+}
+.${CONTROL_LOG_ITEM_CLASS} {
+  border: 1px solid rgba(146, 182, 255, 0.25);
+  border-radius: 5px;
+  background: rgba(22, 31, 45, 0.92);
+  padding: 6px 7px;
+  font-size: 11px;
+  line-height: 1.25;
+}
+.${CONTROL_LOG_ITEM_CLASS}__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-weight: 700;
+  color: #eef6ff;
+}
+.${CONTROL_LOG_ITEM_CLASS}__time {
+  opacity: 0.85;
+  font-weight: 600;
+}
+.${CONTROL_LOG_META_CLASS} {
+  font-size: 10px;
+  color: rgba(221, 232, 255, 0.9);
+  margin-bottom: 4px;
+}
+.${CONTROL_LOG_INCOMPLETE_CLASS} {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 6px;
+  background: rgba(244, 124, 71, 0.22);
+  color: #ffba92;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.${CONTROL_LOG_ITEM_CLASS}__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.${CONTROL_LOG_ITEM_CLASS}__sep {
+  opacity: 0.65;
+}
+.${CONTROL_LOG_ACTION_CLASS} {
+  font-weight: 700;
+}
+.${CONTROL_LOG_ACTION_CLASS}--success {
+  color: #3ddc84;
+}
+.${CONTROL_LOG_ACTION_CLASS}--fail {
+  color: #ff6464;
+}
+.${CONTROL_LOG_ACTION_CLASS}--double {
+  color: #ffcf5c;
+  background-image: linear-gradient(90deg, #ff5e7e 0%, #ffb55e 24%, #ffe45e 42%, #63e67c 60%, #59c8ff 78%, #d78bff 100%);
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.${CONTROL_LOG_ACTION_CLASS}--unknown {
+  color: #9ab0d8;
+}
+.${CONTROL_CLASS}__settings {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.${CONTROL_CLASS}__settings-label {
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.92;
+}
+.${CONTROL_CLASS}__settings-input {
+  width: 46px;
+  height: 18px;
+  box-sizing: border-box;
+  border: 1px solid rgba(150, 190, 255, 0.45);
+  border-radius: 4px;
+  background: rgba(20, 28, 42, 0.9);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  outline: none;
+}
+.${CONTROL_CLASS}__settings-input:disabled {
+  opacity: 0.75;
+  cursor: wait;
+}
+.${CONTROL_CLASS}__progress {
+  flex: 1 1 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.${CONTROL_CLASS}__track {
+  width: 100%;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+}
+.${CONTROL_CLASS}__bar {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, #57d08a 0%, #8ed447 100%);
+  transition: width 0.08s linear;
+}
+.${CONTROL_CLASS}__text {
+  display: none;
+}
+.${AUTOMATION_ESTIMATE_CONTROL_CLASS} {
+  margin: 6px 0 8px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.${AUTOMATION_ESTIMATE_CONTROL_CLASS}__settings {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.${AUTOMATION_ESTIMATE_CONTROL_CLASS}__settings-label {
+  font-size: 11px;
+  color: rgba(240, 244, 255, 0.92);
+}
+.${AUTOMATION_ESTIMATE_CONTROL_TRIALS_INPUT_CLASS} {
+  width: 68px;
+  height: 22px;
+  box-sizing: border-box;
+  border: 1px solid rgba(150, 190, 255, 0.45);
+  border-radius: 4px;
+  background: rgba(20, 28, 42, 0.9);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  outline: none;
+}
+.${AUTOMATION_ESTIMATE_CONTROL_TARGET_RATE_LABEL_CLASS} {
+  font-size: 11px;
+  color: rgba(240, 244, 255, 0.92);
+}
+.${AUTOMATION_ESTIMATE_CONTROL_TARGET_RATE_INPUT_CLASS} {
+  width: 64px;
+  height: 22px;
+  box-sizing: border-box;
+  border: 1px solid rgba(150, 190, 255, 0.45);
+  border-radius: 4px;
+  background: rgba(20, 28, 42, 0.9);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  outline: none;
+}
+.${AUTOMATION_ESTIMATE_CONTROL_CLASS}__button {
+  min-width: 74px;
+  width: auto;
+  padding: 0 10px;
+  height: 24px;
+  border: 0;
+  border-radius: 5px;
+  background: #3a88ff;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.${AUTOMATION_ESTIMATE_CONTROL_CLASS}__button:disabled {
+  opacity: 0.75;
+  cursor: wait;
+}
+.${AUTOMATION_ESTIMATE_CONTROL_RECOMMEND_BUTTON_CLASS} {
+  min-width: 88px;
+}
+.${AUTOMATION_ESTIMATE_CONTROL_CLASS}__status {
+  font-size: 12px;
+  line-height: 1.2;
+  color: rgba(240, 244, 255, 0.9);
+}
+.${AUTOMATION_MAX_FLOOR_TABLE_HEADER_CLASS} {
+  width: 64px;
+  min-width: 64px;
+  max-width: 64px;
+  white-space: nowrap;
+  text-align: right;
+}
+.${AUTOMATION_MAX_FLOOR_CELL_CLASS} {
+  width: 64px;
+  min-width: 64px;
+  max-width: 64px;
+  color: rgba(240, 244, 255, 0.95);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-align: right;
+  padding-right: 6px;
+}
+.${AUTOMATION_ESTIMATE_TABLE_HEADER_CLASS} {
+  width: 84px;
+  min-width: 84px;
+  max-width: 84px;
+  white-space: nowrap;
+  text-align: right;
+}
+.${AUTOMATION_RECOMMEND_TABLE_HEADER_CLASS} {
+  width: 96px;
+  min-width: 96px;
+  max-width: 96px;
+  white-space: nowrap;
+  text-align: right;
+}
+.${AUTOMATION_ESTIMATE_CELL_CLASS} {
+  width: 84px;
+  min-width: 84px;
+  max-width: 84px;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: default;
+  text-align: right;
+  padding-right: 6px;
+}
+.${AUTOMATION_RECOMMEND_CELL_CLASS} {
+  width: 96px;
+  min-width: 96px;
+  max-width: 96px;
+  color: rgba(240, 244, 255, 0.95);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-align: right;
+  padding-right: 6px;
+}
+.${AUTOMATION_ESTIMATE_CELL_CLASS}__text {
+  color: rgba(240, 244, 255, 0.95);
+  font-weight: 600;
+}
+.${AUTOMATION_ESTIMATE_CELL_CHANCE_CLASS} {
+  font-size: 11px;
+  font-weight: 700;
+}
+.${AUTOMATION_ESTIMATE_CELL_ETA_CLASS} {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.92;
+}
+.${AUTOMATION_ESTIMATE_CELL_ETA_DANGER_CLASS} {
+  color: #ff5a5a;
+  opacity: 1;
+  font-weight: 700;
+}
+div[class*="LabyrinthPanel_automationSection"] table[class*="LabyrinthPanel_automationTable"] {
+  width: 100%;
+  max-width: 100%;
+}
+table[class*="LabyrinthPanel_automationTable"] thead th:nth-child(3),
+table[class*="LabyrinthPanel_automationTable"] tbody td:nth-child(3) {
+  white-space: nowrap;
+}
+.${PREVIEW_TOOLTIP_CLASS} {
+  position: fixed;
+  z-index: 2147483646;
+  min-width: 140px;
+  max-width: 220px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(128, 170, 255, 0.45);
+  background: rgba(12, 16, 24, 0.95);
+  color: #f2f7ff;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+  font-size: 11px;
+  line-height: 1.35;
+  pointer-events: none;
+  display: none;
+}
+.${PREVIEW_TOOLTIP_CLASS}__title {
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #9ec4ff;
+}
+.${PREVIEW_TOOLTIP_CLASS}__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  white-space: nowrap;
+}
+.${PREVIEW_TOOLTIP_CLASS}__label {
+  opacity: 0.78;
+}
+.${PREVIEW_TOOLTIP_CLASS}__value {
+  font-weight: 700;
+  color: #ffffff;
+}
+`;
+      document.head.appendChild(style);
+    }
+    function getPreviewTooltip() {
+      return document.getElementById(PREVIEW_TOOLTIP_ID);
+    }
+    function ensurePreviewTooltip() {
+      let tooltip = getPreviewTooltip();
+      if (tooltip) {
+        return tooltip;
+      }
+      tooltip = document.createElement("div");
+      tooltip.id = PREVIEW_TOOLTIP_ID;
+      tooltip.className = PREVIEW_TOOLTIP_CLASS;
+      document.body.appendChild(tooltip);
+      return tooltip;
+    }
+    function hidePreviewTooltip() {
+      const tooltip = getPreviewTooltip();
+      if (!tooltip) {
+        return;
+      }
+      tooltip.style.display = "none";
+      tooltip.style.left = "-9999px";
+      tooltip.style.top = "-9999px";
+      tooltip.textContent = "";
+    }
+    function formatPreviewPercent(value) {
+      return `${(clamp01(value) * 100).toFixed(1)}%`;
+    }
+    function formatPreviewDeltaPercent(value, digits = 2) {
+      if (!Number.isFinite(value)) {
+        return "--";
+      }
+      const percent = Math.max(0, finiteNumber(value, 0)) * 100;
+      return `+${percent.toFixed(Math.max(0, Math.floor(digits)))}%`;
+    }
+    function computeEfficiencyDeltaForOneLessProgressUnit(targetProgress, effectiveSkillLevel, currentEfficiencyBonus, neededUnits) {
+      const target = finiteNumber(targetProgress, 0);
+      const skillLevel = finiteNumber(effectiveSkillLevel, 0);
+      const efficiency = finiteNumber(currentEfficiencyBonus, 0);
+      const units = Math.floor(finiteNumber(neededUnits, 0));
+      if (!(target > 0) || !(skillLevel > 0) || units <= 1) {
+        return null;
+      }
+      const requiredProgressPerSuccess = Math.ceil(target / (units - 1) - 1e-9);
+      const requiredEfficiency = requiredProgressPerSuccess / skillLevel - 1;
+      if (!Number.isFinite(requiredEfficiency)) {
+        return null;
+      }
+      return Math.max(0, requiredEfficiency - efficiency);
+    }
+    function computeActionSpeedDeltaForOneMoreAttempt(baseActionSeconds, currentActionSpeedBonus, attempts) {
+      const baseSeconds = finiteNumber(baseActionSeconds, 0);
+      const speed = finiteNumber(currentActionSpeedBonus, 0);
+      const currentAttempts = Math.max(0, Math.floor(finiteNumber(attempts, 0)));
+      if (!(baseSeconds > 0)) {
+        return null;
+      }
+      const requiredSpeed = baseSeconds * (currentAttempts + 1) / ROOM_DURATION_SECONDS - 1;
+      if (!Number.isFinite(requiredSpeed)) {
+        return null;
+      }
+      return Math.max(0, requiredSpeed - speed);
+    }
+    function formatExpectedRewardCount(value) {
+      const n = Math.max(0, finiteNumber(value, 0));
+      if (Math.abs(n - Math.round(n)) < 1e-9) {
+        return `${Math.round(n)}`;
+      }
+      return n.toFixed(2).replace(/\.?0+$/, "");
+    }
+    function getCurrentLabyrinthFloor(state) {
+      const floor = Math.floor(finiteNumber(state?.characterLabyrinth?.currentFloor, 1));
+      return Math.max(1, floor);
+    }
+    function createRoomRewardPreview(state, room) {
+      if (!room || !room.roomType) {
+        return null;
+      }
+      const roomType = String(room.roomType || "");
+      const floor = getCurrentLabyrinthFloor(state);
+      const rows = [];
+      if (roomType === LABYRINTH_COMBAT_ROOM_TYPE || roomType === LABYRINTH_SKILLING_ROOM_TYPE) {
+        const tokenChance = Math.min(floor * 0.05, 0.5);
+        const boxChance = Math.min(floor * 0.01, 0.1);
+        const boxLabel = roomType === LABYRINTH_SKILLING_ROOM_TYPE ? t("skillingBoxExpected") : t("combatBoxExpected");
+        rows.push({
+          label: t("tokenExpected"),
+          value: formatExpectedRewardCount(tokenChance)
+        });
+        rows.push({
+          label: boxLabel,
+          value: formatExpectedRewardCount(boxChance)
+        });
+      } else if (roomType === LABYRINTH_TREASURE_ROOM_TYPE) {
+        const tokenCount = Math.min(floor, 10);
+        const boxChance = Math.min(floor * 0.05, 0.5);
+        rows.push({
+          label: t("tokenExpected"),
+          value: formatExpectedRewardCount(tokenCount)
+        });
+        rows.push({
+          label: t("skillingBoxExpected"),
+          value: formatExpectedRewardCount(boxChance)
+        });
+        rows.push({
+          label: t("combatBoxExpected"),
+          value: formatExpectedRewardCount(boxChance)
+        });
+      } else if (roomType === LABYRINTH_DESCEND_ROOM_TYPE) {
+        const tokenCount = 5 * floor;
+        const boxAverage = floor >= 4 ? (floor - 3) / 2 : 0;
+        const refineAverage = floor >= 6 ? (floor - 4) / 2 : 0;
+        rows.push({
+          label: t("tokenExpected"),
+          value: formatExpectedRewardCount(tokenCount)
+        });
+        rows.push({
+          label: t("skillingBoxExpected"),
+          value: formatExpectedRewardCount(boxAverage)
+        });
+        rows.push({
+          label: t("combatBoxExpected"),
+          value: formatExpectedRewardCount(boxAverage)
+        });
+        rows.push({
+          label: t("refiningChestExpected"),
+          value: formatExpectedRewardCount(refineAverage)
+        });
+      } else {
+        return null;
+      }
+      return {
+        floor,
+        rows
+      };
+    }
+    function appendRewardPreviewRows(tooltip, rewardPreview) {
+      if (!tooltip || !rewardPreview || !Array.isArray(rewardPreview.rows) || rewardPreview.rows.length === 0) {
+        return;
+      }
+      for (const row of rewardPreview.rows) {
+        if (!row || !row.label) {
+          continue;
+        }
+        appendPreviewRow(tooltip, String(row.label), String(row.value ?? "--"));
+      }
+    }
+    function getRoomPreviewTitle(roomType) {
+      const type = String(roomType || "");
+      if (type === LABYRINTH_SKILLING_ROOM_TYPE) {
+        return t("skillingRoomPreview");
+      }
+      if (type === LABYRINTH_COMBAT_ROOM_TYPE) {
+        return t("combatRoomPreview");
+      }
+      if (type === LABYRINTH_TREASURE_ROOM_TYPE) {
+        return t("treasureRoomPreview");
+      }
+      if (type === LABYRINTH_DESCEND_ROOM_TYPE) {
+        return t("floorExitPreview");
+      }
+      return t("roomPreview");
+    }
+    function buildRewardOnlyPreview(state, room) {
+      const rewardPreview = createRoomRewardPreview(state, room);
+      if (!rewardPreview) {
+        return null;
+      }
+      return {
+        type: "reward-only",
+        title: getRoomPreviewTitle(room?.roomType),
+        rewardPreview
+      };
+    }
+    function formatPreviewDecimal(value, digits = 1) {
+      const n = finiteNumber(value, 0);
+      return n.toFixed(digits);
+    }
+    function getEffectiveSkillingProgressPerSuccess(workPower) {
+      return Math.max(0, Math.floor(finiteNumber(workPower, 0)));
+    }
+    function formatSkillingWorkPowerWithEffectiveProgress(workPower, effectiveProgress) {
+      const raw = finiteNumber(workPower, 0);
+      const effective = getEffectiveSkillingProgressPerSuccess(
+        effectiveProgress === null || effectiveProgress === void 0 ? raw : effectiveProgress
+      );
+      const rawText = formatPreviewDecimal(raw, 2);
+      if (Math.abs(raw - effective) < 1e-9) {
+        return rawText;
+      }
+      return `${rawText} -> ${effective}`;
+    }
+    function formatPreviewInteger(value) {
+      return `${Math.round(finiteNumber(value, 0))}`;
+    }
+    function formatPreviewExperience(value) {
+      const n = Math.max(0, finiteNumber(value, 0));
+      if (Math.abs(n - Math.round(n)) < 1e-9) {
+        return `${Math.round(n)}`;
+      }
+      return n.toFixed(1).replace(/\.0$/, "");
+    }
+    function formatPreviewExperiencePerHourK(value) {
+      const n = Math.max(0, finiteNumber(value, 0));
+      return `${(n / 1e3).toFixed(1)}K`;
+    }
+    function formatPreviewPercentValue(value, digits = 0) {
+      const percent = finiteNumber(value, 0) * 100;
+      if (digits <= 0) {
+        return `${Math.round(percent)}%`;
+      }
+      return `${percent.toFixed(digits)}%`;
+    }
+    function getCombatStylePreviewLabel(styleHrid) {
+      switch (styleHrid) {
+        case "/combat_styles/stab":
+          return t("styleStab");
+        case "/combat_styles/slash":
+          return t("styleSlash");
+        case "/combat_styles/smash":
+          return t("styleSmash");
+        case "/combat_styles/ranged":
+          return t("styleRanged");
+        case "/combat_styles/magic":
+          return t("styleMagic");
+        default:
+          return t("unknown");
+      }
+    }
+    function getCombatStyleAccuracyLabel(styleHrid) {
+      const joiner = isChineseUi() ? "" : " ";
+      return `${getCombatStylePreviewLabel(styleHrid)}${joiner}${t("accuracySuffix")}`;
+    }
+    function getCombatStyleDamageLabel(styleHrid) {
+      const joiner = isChineseUi() ? "" : " ";
+      return `${getCombatStylePreviewLabel(styleHrid)}${joiner}${t("damageSuffix")}`;
+    }
+    function getCombatStyleEvasionLabel(styleHrid) {
+      const joiner = isChineseUi() ? "" : " ";
+      return `${getCombatStylePreviewLabel(styleHrid)}${joiner}${t("evasionSuffix")}`;
+    }
+    function getDamageTypePreviewLabel(damageTypeHrid) {
+      switch (damageTypeHrid) {
+        case "/damage_types/water":
+          return t("water");
+        case "/damage_types/nature":
+          return t("nature");
+        case "/damage_types/fire":
+          return t("fire");
+        case "/damage_types/physical":
+          return t("physical");
+        default:
+          return t("unknown");
+      }
+    }
+    function getDamageTypeMitigationLabel(damageTypeHrid) {
+      switch (damageTypeHrid) {
+        case "/damage_types/water":
+          return t("waterResistance");
+        case "/damage_types/nature":
+          return t("natureResistance");
+        case "/damage_types/fire":
+          return t("fireResistance");
+        case "/damage_types/physical":
+        default:
+          return t("armor");
+      }
+    }
+    function appendPreviewRow(tooltip, label, value) {
+      const row = document.createElement("div");
+      row.className = `${PREVIEW_TOOLTIP_CLASS}__row`;
+      const labelNode = document.createElement("span");
+      labelNode.className = `${PREVIEW_TOOLTIP_CLASS}__label`;
+      labelNode.textContent = label;
+      const valueNode = document.createElement("span");
+      valueNode.className = `${PREVIEW_TOOLTIP_CLASS}__value`;
+      valueNode.textContent = value;
+      row.appendChild(labelNode);
+      row.appendChild(valueNode);
+      tooltip.appendChild(row);
+    }
+    function deriveCombatFailureReasonFromCounts(totalFailures, failedByTimeout, failedByDeath) {
+      const failures = Math.max(0, Math.floor(finiteNumber(totalFailures, 0)));
+      if (failures <= 0) {
+        return "";
+      }
+      const timeoutCount = Math.max(0, Math.floor(finiteNumber(failedByTimeout, 0)));
+      const deathCount = Math.max(0, Math.floor(finiteNumber(failedByDeath, 0)));
+      if (deathCount > timeoutCount) {
+        return t("failureDefense");
+      }
+      return t("failureDamage");
+    }
+    function renderSkillingPreviewTooltip(preview) {
+      const tooltip = ensurePreviewTooltip();
+      tooltip.textContent = "";
+      const titleNode = document.createElement("div");
+      titleNode.className = `${PREVIEW_TOOLTIP_CLASS}__title`;
+      titleNode.textContent = t("skillingRoomPreview");
+      tooltip.appendChild(titleNode);
+      if (preview.type === "enhancing") {
+        appendPreviewRow(tooltip, t("targetEnhancement"), `+${Math.max(0, Math.floor(finiteNumber(preview.targetLevel, 0)))}`);
+        appendPreviewRow(tooltip, t("successRate"), formatPreviewPercent(preview.successChance));
+        appendPreviewRow(tooltip, t("doubleProgress"), formatPreviewPercent(preview.doubleChance));
+        appendPreviewRow(tooltip, t("twoMinuteActions"), `${Math.max(0, Math.floor(finiteNumber(preview.attempts, 0)))}`);
+        appendPreviewRow(tooltip, t("actionDuration"), `${formatPreviewDecimal(preview.actionSeconds, 2)}s`);
+        appendPreviewRow(tooltip, t("experiencePerRoom"), formatPreviewExperience(preview.experiencePerRoom));
+        appendPreviewRow(tooltip, t("experiencePerHour"), formatPreviewExperiencePerHourK(preview.experiencePerHour));
+        appendPreviewRow(tooltip, t("needSpeedForOneMoreAction"), formatPreviewDeltaPercent(preview.speedDeltaForOneMoreAttempt, 2));
+        appendPreviewRow(
+          tooltip,
+          t("speedTierClearChance"),
+          Number.isFinite(preview.speedTierClearChance) ? formatPreviewPercent(preview.speedTierClearChance) : "--"
+        );
+        appendPreviewRow(
+          tooltip,
+          t("nextLevelClearChance"),
+          Number.isFinite(preview.nextLevelClearChance) ? formatPreviewPercent(preview.nextLevelClearChance) : "--"
+        );
+        if (Number.isFinite(preview.nextSkillingSuccessClearChance)) {
+          appendPreviewRow(
+            tooltip,
+            t("nextSkillingSuccessClearChance"),
+            formatPreviewPercent(preview.nextSkillingSuccessClearChance)
+          );
+        }
+        if (Number.isFinite(preview.nextSkillingDoubleProgressClearChance)) {
+          appendPreviewRow(
+            tooltip,
+            t("nextSkillingDoubleProgressClearChance"),
+            formatPreviewPercent(preview.nextSkillingDoubleProgressClearChance)
+          );
+        }
+      } else {
+        appendPreviewRow(
+          tooltip,
+          t("workPower"),
+          formatSkillingWorkPowerWithEffectiveProgress(preview.workPower, preview.effectiveProgressPerSuccess)
+        );
+        appendPreviewRow(tooltip, t("successRate"), formatPreviewPercent(preview.successChance));
+        appendPreviewRow(tooltip, t("doubleProgress"), formatPreviewPercent(preview.doubleChance));
+        appendPreviewRow(tooltip, t("twoMinuteActions"), `${Math.max(0, Math.floor(finiteNumber(preview.attempts, 0)))}`);
+        appendPreviewRow(tooltip, t("actionDuration"), `${formatPreviewDecimal(preview.actionSeconds, 2)}s`);
+        appendPreviewRow(tooltip, t("experiencePerRoom"), formatPreviewExperience(preview.experiencePerRoom));
+        appendPreviewRow(tooltip, t("experiencePerHour"), formatPreviewExperiencePerHourK(preview.experiencePerHour));
+        appendPreviewRow(
+          tooltip,
+          t("needEfficiencyForOneLessProgress"),
+          preview.efficiencyDeltaForOneLessProgressUnit === null ? t("alreadyOptimal") : formatPreviewDeltaPercent(preview.efficiencyDeltaForOneLessProgressUnit, 2)
+        );
+        appendPreviewRow(tooltip, t("needSpeedForOneMoreAction"), formatPreviewDeltaPercent(preview.speedDeltaForOneMoreAttempt, 2));
+        appendPreviewRow(
+          tooltip,
+          t("nextLevelClearChance"),
+          Number.isFinite(preview.nextLevelClearChance) ? formatPreviewPercent(preview.nextLevelClearChance) : "--"
+        );
+        appendPreviewRow(
+          tooltip,
+          t("efficiencyTierClearChance"),
+          Number.isFinite(preview.efficiencyTierClearChance) ? formatPreviewPercent(preview.efficiencyTierClearChance) : t("alreadyOptimal")
+        );
+        appendPreviewRow(
+          tooltip,
+          t("speedTierClearChance"),
+          Number.isFinite(preview.speedTierClearChance) ? formatPreviewPercent(preview.speedTierClearChance) : "--"
+        );
+        if (Number.isFinite(preview.nextSkillingSuccessClearChance)) {
+          appendPreviewRow(
+            tooltip,
+            t("nextSkillingSuccessClearChance"),
+            formatPreviewPercent(preview.nextSkillingSuccessClearChance)
+          );
+        }
+        if (Number.isFinite(preview.nextSkillingDoubleProgressClearChance)) {
+          appendPreviewRow(
+            tooltip,
+            t("nextSkillingDoubleProgressClearChance"),
+            formatPreviewPercent(preview.nextSkillingDoubleProgressClearChance)
+          );
+        }
+      }
+      appendRewardPreviewRows(tooltip, preview.rewardPreview);
+      return tooltip;
+    }
+    function renderCombatPreviewTooltip(preview) {
+      const tooltip = ensurePreviewTooltip();
+      tooltip.textContent = "";
+      const titleNode = document.createElement("div");
+      titleNode.className = `${PREVIEW_TOOLTIP_CLASS}__title`;
+      titleNode.textContent = String(preview.monsterName || "--");
+      tooltip.appendChild(titleNode);
+      appendPreviewRow(tooltip, t("combatStyle"), String(preview.styleLabel || "--"));
+      appendPreviewRow(tooltip, t("damageType"), String(preview.damageTypeLabel || "--"));
+      appendPreviewRow(tooltip, t("attackInterval"), `${formatPreviewDecimal(preview.attackIntervalSeconds, 2)}s`);
+      appendPreviewRow(tooltip, t("castSpeed"), formatPreviewPercentValue(preview.totalCastSpeed, 0));
+      appendPreviewRow(tooltip, String(preview.styleAccuracyLabel || t("accuracyDefault")), formatPreviewInteger(preview.styleAccuracy));
+      appendPreviewRow(tooltip, String(preview.styleDamageLabel || t("damageDefault")), formatPreviewInteger(preview.styleDamage));
+      appendPreviewRow(tooltip, t("maxHp"), formatPreviewInteger(preview.maxHitpoints));
+      appendPreviewRow(tooltip, String(preview.targetEvasionLabel || t("evasionDefault")), formatPreviewInteger(preview.targetEvasionRating));
+      appendPreviewRow(tooltip, String(preview.targetMitigationLabel || t("mitigationDefault")), formatPreviewInteger(preview.targetMitigationValue));
+      if (Array.isArray(preview.abilities) && preview.abilities.length > 0) {
+        for (const ability of preview.abilities) {
+          appendPreviewRow(
+            tooltip,
+            `Lv.${Math.max(1, Math.floor(finiteNumber(ability.level, 1)))}`,
+            String(ability.name || "--")
+          );
+        }
+      }
+      appendRewardPreviewRows(tooltip, preview.rewardPreview);
+      appendPreviewRow(tooltip, t("operation"), t("rightClickOpenSimulator"));
+      if (preview.failureReason) {
+        appendPreviewRow(tooltip, t("failureReason"), String(preview.failureReason));
+      }
+      return tooltip;
+    }
+    function renderRewardOnlyPreviewTooltip(preview) {
+      const tooltip = ensurePreviewTooltip();
+      tooltip.textContent = "";
+      const titleNode = document.createElement("div");
+      titleNode.className = `${PREVIEW_TOOLTIP_CLASS}__title`;
+      titleNode.textContent = String(preview?.title || t("roomPreview"));
+      tooltip.appendChild(titleNode);
+      appendRewardPreviewRows(tooltip, preview?.rewardPreview || null);
+      return tooltip;
+    }
+    function buildCombatPreview(state, room, initClientData, result = null) {
+      if (!room || room.roomType !== LABYRINTH_COMBAT_ROOM_TYPE || !room.monsterHrid) {
+        return null;
+      }
+      const monster = initClientData?.combatMonsterDetailMap?.[room.monsterHrid];
+      const baseDetails = monster?.combatDetails;
+      if (!baseDetails || !baseDetails.combatStats) {
+        return null;
+      }
+      const scaledTemplate = createMonsterCombatTemplate(initClientData, room);
+      const details = scaledTemplate?.combatDetails || baseDetails;
+      const stats = details.combatStats || baseDetails.combatStats;
+      const roomLevel = positiveNumber(room?.recommendedLevel, positiveNumber(baseDetails.combatLevel, 100));
+      const combatLevel = Math.max(1, Math.floor(roomLevel));
+      const baseCombatLevel = positiveNumber(baseDetails.combatLevel, combatLevel);
+      const abilityLevelScale = roomLevel / Math.max(1, baseCombatLevel);
+      const styleHrid = getCombatStyleHrid(stats);
+      const damageTypeHrid = getDamageTypeHrid(stats);
+      const loadoutWeaponMeta = getLoadoutWeaponCombatMetaForRoom(state, initClientData, room);
+      const currentPlayerCombatStats = state?.combatUnit?.combatDetails?.combatStats || null;
+      const targetStyleHrid = loadoutWeaponMeta?.styleHrid || getCombatStyleHrid(currentPlayerCombatStats);
+      const targetDamageTypeHrid = loadoutWeaponMeta?.damageTypeHrid || getDamageTypeHrid(currentPlayerCombatStats);
+      const rewardPreview = createRoomRewardPreview(state, room);
+      const attackIntervalNs = positiveNumber(details.attackInterval || stats.attackInterval, COMBAT_ONE_SECOND_NS);
+      const abilityMap = initClientData?.abilityDetailMap || {};
+      const abilities = [];
+      if (Array.isArray(monster?.abilities)) {
+        for (const rawAbility of monster.abilities) {
+          if (!rawAbility || !rawAbility.abilityHrid) {
+            continue;
+          }
+          const abilityHrid = String(rawAbility.abilityHrid);
+          const abilityDetail = getAbilityDetailByHrid(state, initClientData, abilityHrid) || getContainerValue(abilityMap, abilityHrid);
+          const fallbackName = abilityHrid.split("/").pop() || abilityHrid;
+          const localizedName = isChineseUi() ? LABYRINTH_ABILITY_NAME_ZH_MAP[abilityHrid] : "";
+          const baseAbilityLevel = positiveNumber(rawAbility.level, 1);
+          abilities.push({
+            level: Math.max(1, Math.round(baseAbilityLevel * abilityLevelScale)),
+            name: String(localizedName || abilityDetail?.name || fallbackName)
+          });
+        }
+      }
+      return {
+        type: "combat",
+        monsterName: String(
+          isChineseUi() && (LABYRINTH_MONSTER_NAME_ZH_BY_TAIL[String(room.monsterHrid || "").split("/").pop() || ""] || LABYRINTH_MONSTER_NAME_ZH_MAP[room.monsterHrid]) || monster?.name || room.monsterHrid.split("/").pop() || room.monsterHrid
+        ),
+        baseCombatLevel: combatLevel,
+        styleLabel: getCombatStylePreviewLabel(styleHrid),
+        damageTypeLabel: getDamageTypePreviewLabel(damageTypeHrid),
+        attackIntervalSeconds: attackIntervalNs / COMBAT_ONE_SECOND_NS,
+        totalCastSpeed: finiteNumber(details.totalCastSpeed, finiteNumber(baseDetails.totalCastSpeed, 0)),
+        styleAccuracyLabel: getCombatStyleAccuracyLabel(styleHrid),
+        styleDamageLabel: getCombatStyleDamageLabel(styleHrid),
+        maxHitpoints: positiveNumber(details.maxHitpoints, 1),
+        maxManapoints: positiveNumber(details.maxManapoints, 1),
+        styleAccuracy: getAccuracyRating(details, styleHrid),
+        styleDamage: getMaxDamage(details, styleHrid),
+        defensiveMaxDamage: positiveNumber(details.defensiveMaxDamage, 0),
+        targetEvasionLabel: getCombatStyleEvasionLabel(targetStyleHrid),
+        targetEvasionRating: getEvasionRating(details, targetStyleHrid),
+        targetMitigationLabel: getDamageTypeMitigationLabel(targetDamageTypeHrid),
+        targetMitigationValue: getResistance(details, targetDamageTypeHrid),
+        totalThreat: positiveNumber(details.totalThreat, 100),
+        rewardPreview,
+        failureReason: String(result?.combatMeta?.failureReason || ""),
+        abilities
+      };
+    }
+    function getLoadoutWeaponCombatMetaForRoom(state, initClientData, room) {
+      const loadoutInfo = resolveCombatRoomLoadout(state, room);
+      const loadout = loadoutInfo?.loadout;
+      if (!isCombatLoadout(loadout)) {
+        return null;
+      }
+      const wearableMap = loadout.wearableMap || {};
+      const weaponSlots = ["/item_locations/two_hand", "/item_locations/main_hand"];
+      let styleHrid = "";
+      let damageTypeHrid = "";
+      for (const slotKey of weaponSlots) {
+        const entry = parseWearableReference(wearableMap[slotKey]);
+        if (!entry || !entry.itemHrid) {
+          continue;
+        }
+        const itemDetail = getItemDetailByHrid(state, initClientData, entry.itemHrid);
+        const baseStats = itemDetail?.equipmentDetail?.combatStats || {};
+        if (!styleHrid) {
+          if (Array.isArray(baseStats.combatStyleHrids) && baseStats.combatStyleHrids.length > 0) {
+            styleHrid = String(baseStats.combatStyleHrids[0] || "");
+          } else if (typeof baseStats.combatStyleHrid === "string" && baseStats.combatStyleHrid) {
+            styleHrid = baseStats.combatStyleHrid;
+          }
+        }
+        if (!damageTypeHrid && typeof baseStats.damageType === "string" && baseStats.damageType) {
+          damageTypeHrid = baseStats.damageType;
+        }
+        if (styleHrid && damageTypeHrid) {
+          break;
+        }
+      }
+      if (!styleHrid && !damageTypeHrid) {
+        return null;
+      }
+      return {
+        styleHrid,
+        damageTypeHrid
+      };
+    }
+    function getCellPreview(cell) {
+      if (!cell) {
+        return null;
+      }
+      const combatPreview = combatPreviewByCell.get(cell);
+      if (combatPreview) {
+        return combatPreview;
+      }
+      return skillingPreviewByCell.get(cell) || null;
+    }
+    function renderCellPreviewTooltip(preview) {
+      if (preview?.type === "combat") {
+        return renderCombatPreviewTooltip(preview);
+      }
+      if (preview?.type === "reward-only") {
+        return renderRewardOnlyPreviewTooltip(preview);
+      }
+      return renderSkillingPreviewTooltip(preview);
+    }
+    function positionPreviewTooltip(tooltip, x, y) {
+      const offset = 12;
+      const margin = 8;
+      tooltip.style.display = "block";
+      tooltip.style.left = "0px";
+      tooltip.style.top = "0px";
+      const width = tooltip.offsetWidth || 180;
+      const height = tooltip.offsetHeight || 100;
+      let left = x + offset;
+      let top = y + offset;
+      if (left + width + margin > window.innerWidth) {
+        left = Math.max(margin, x - width - offset);
+      }
+      if (top + height + margin > window.innerHeight) {
+        top = Math.max(margin, y - height - offset);
+      }
+      tooltip.style.left = `${left}px`;
+      tooltip.style.top = `${top}px`;
+    }
+    function showSkillingPreviewTooltip(cell, event) {
+      const preview = getCellPreview(cell);
+      if (!preview) {
+        hidePreviewTooltip();
+        return;
+      }
+      const tooltip = renderCellPreviewTooltip(preview);
+      positionPreviewTooltip(tooltip, event.clientX, event.clientY);
+    }
+    function bindSkillingPreviewEvents(cell) {
+      if (!cell || cell[PREVIEW_CELL_BOUND_FLAG]) {
+        return;
+      }
+      cell[PREVIEW_CELL_BOUND_FLAG] = true;
+      cell.addEventListener("mouseenter", (event) => {
+        showSkillingPreviewTooltip(cell, event);
+      });
+      cell.addEventListener("mousemove", (event) => {
+        showSkillingPreviewTooltip(cell, event);
+      });
+      cell.addEventListener("mouseleave", () => {
+        hidePreviewTooltip();
+      });
+      cell.addEventListener("contextmenu", (event) => {
+        const preview = getCellPreview(cell);
+        if (!preview || preview.type !== "combat") {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        openCombatRoomSimulatorFromCell(cell);
+      });
+    }
+    function setCellSkillingPreview(cell, preview) {
+      if (!cell || !preview) {
+        return;
+      }
+      bindSkillingPreviewEvents(cell);
+      skillingPreviewByCell.set(cell, preview);
+    }
+    function setCellCombatPreview(cell, preview) {
+      if (!cell || !preview) {
+        return;
+      }
+      bindSkillingPreviewEvents(cell);
+      combatPreviewByCell.set(cell, preview);
+    }
+    function clearCellSkillingPreview(cell) {
+      if (!cell) {
+        return;
+      }
+      skillingPreviewByCell.delete(cell);
+    }
+    function clearCellCombatPreview(cell) {
+      if (!cell) {
+        return;
+      }
+      combatPreviewByCell.delete(cell);
+    }
+    function isLabyrinthPanelInstance(value) {
+      return Boolean(
+        value && typeof value === "object" && typeof value.getSkillingRoomTypes === "function" && typeof value.getCombatRoomTypes === "function" && typeof value.getEffectiveLevelForRoom === "function"
+      );
+    }
+    function findLabyrinthPanelInstanceFromFiber(rootFiber) {
+      if (!rootFiber || typeof rootFiber !== "object") {
+        return null;
+      }
+      const queue = [rootFiber];
+      const visited = /* @__PURE__ */ new Set();
+      let steps = 0;
+      while (queue.length > 0 && steps < 12e3) {
+        const fiber = queue.shift();
+        if (!fiber || typeof fiber !== "object" || visited.has(fiber)) {
+          continue;
+        }
+        visited.add(fiber);
+        steps += 1;
+        if (isLabyrinthPanelInstance(fiber.stateNode)) {
+          return fiber.stateNode;
+        }
+        if (fiber.child) {
+          queue.push(fiber.child);
+        }
+        if (fiber.sibling) {
+          queue.push(fiber.sibling);
+        }
+        if (fiber.return) {
+          queue.push(fiber.return);
+        }
+      }
+      return null;
+    }
+    function getLabyrinthPanelInstance() {
+      const panelElement = document.querySelector('div[class*="LabyrinthPanel_labyrinthPanel"]');
+      if (!panelElement) {
+        return null;
+      }
+      const reactKey = Object.keys(panelElement).find((key) => key.startsWith("__reactFiber$"));
+      if (!reactKey) {
+        return null;
+      }
+      const fiberNode = panelElement[reactKey];
+      return findLabyrinthPanelInstanceFromFiber(fiberNode);
+    }
+    function getAutomationEstimateTable() {
+      const direct = document.querySelector('table[class*="LabyrinthPanel_automationTable"]');
+      if (direct) {
+        return direct;
+      }
+      const panel = document.querySelector('div[class*="LabyrinthPanel_labyrinthPanel"]');
+      if (!panel) {
+        return null;
+      }
+      const tables = Array.from(panel.querySelectorAll("table"));
+      for (const table of tables) {
+        const headerCells = Array.from(table.querySelectorAll("thead th")).map(
+          (th) => String(th.textContent || "").trim()
+        );
+        if (!headerCells.length) {
+          continue;
+        }
+        const hasRoomType = headerCells.some((text) => /房间类型|room\s*type/i.test(text));
+        const hasSkip = headerCells.some((text) => /跳过如果高出等级|跳过等级|skip.*level|skip\s*if/i.test(text));
+        if (hasRoomType && hasSkip) {
+          return table;
+        }
+      }
+      return null;
+    }
+    function getAutomationEstimateSection(table) {
+      if (!table) {
+        return null;
+      }
+      return table.closest('div[class*="LabyrinthPanel_automationSection"]') || table.parentElement || null;
+    }
+    function clearAutomationWideLayout() {
+      if (!Array.isArray(automationWideLayoutNodes) || automationWideLayoutNodes.length === 0) {
+        return;
+      }
+      for (const node of automationWideLayoutNodes) {
+        if (!node || !node.style) {
+          continue;
+        }
+        node.style.removeProperty("width");
+        node.style.removeProperty("max-width");
+        node.style.removeProperty("min-width");
+      }
+      automationWideLayoutNodes = [];
+    }
+    function applyAutomationWideLayout(section, table) {
+      clearAutomationWideLayout();
+      if (!section) {
+        return;
+      }
+      const currentWidth = Math.max(0, Math.floor(section.getBoundingClientRect().width));
+      if (!currentWidth) {
+        return;
+      }
+      const maxAllowed = Math.max(320, Math.floor(window.innerWidth - 24));
+      const targetWidth = Math.min(maxAllowed, currentWidth + 100);
+      section.style.setProperty("width", `${targetWidth}px`, "important");
+      section.style.setProperty("max-width", `${targetWidth}px`, "important");
+      section.style.setProperty("min-width", "0px", "important");
+      if (table && table.style) {
+        table.style.setProperty("width", "100%", "important");
+        table.style.setProperty("max-width", "100%", "important");
+      }
+      automationWideLayoutNodes = table ? [section, table] : [section];
+    }
+    function isAutomationEstimatePanelVisible() {
+      return Boolean(getAutomationEstimateTable());
+    }
+    function hasAnyLabyrinthCrateSelected(state) {
+      const selection = getLabyrinthCrateSelection(state);
+      const tea = String(selection?.teaCrateItemHrid || "");
+      const coffee = String(selection?.coffeeCrateItemHrid || "");
+      const food = String(selection?.foodCrateItemHrid || "");
+      return Boolean(tea || coffee || food);
+    }
+    function getAutomationMissingCratesForEntry(entry, crateSelection) {
+      const tea = String(crateSelection?.teaCrateItemHrid || "");
+      const coffee = String(crateSelection?.coffeeCrateItemHrid || "");
+      const food = String(crateSelection?.foodCrateItemHrid || "");
+      if (entry?.isCombat) {
+        const missing = [];
+        if (!coffee) {
+          missing.push(t("missingCoffeeCrate"));
+        }
+        if (!food) {
+          missing.push(t("missingFoodCrate"));
+        }
+        return missing;
+      }
+      return tea ? [] : [t("missingTeaCrate")];
+    }
+    function formatAutomationMissingCratesMessage(missingCrates) {
+      if (!Array.isArray(missingCrates) || missingCrates.length === 0) {
+        return "";
+      }
+      const joiner = isChineseUi() ? "、" : " / ";
+      return t("missingCrateFmt", { crates: missingCrates.join(joiner) });
+    }
+    function normalizeAutomationRoomTypeEntry(rawEntry, isCombat) {
+      const key = String(rawEntry?.key || "");
+      if (!key) {
+        return null;
+      }
+      if (isCombat) {
+        const monsterHrid = String(rawEntry?.monsterHrid || "");
+        if (!monsterHrid) {
+          return null;
+        }
+        return {
+          key,
+          isCombat: true,
+          monsterHrid
+        };
+      }
+      const skillHrid = String(rawEntry?.skillHrid || "");
+      if (!skillHrid) {
+        return null;
+      }
+      return {
+        key,
+        isCombat: false,
+        skillHrid
+      };
+    }
+    function getAutomationRoomTypeEntries(panelInstance) {
+      const skillingFromPanel = typeof panelInstance?.getSkillingRoomTypes === "function" ? panelInstance.getSkillingRoomTypes() : null;
+      const combatFromPanel = typeof panelInstance?.getCombatRoomTypes === "function" ? panelInstance.getCombatRoomTypes() : null;
+      const skillingRaw = Array.isArray(skillingFromPanel) && skillingFromPanel.length > 0 ? skillingFromPanel : LABYRINTH_AUTOMATION_SKILL_ROOM_TYPES;
+      const combatRaw = Array.isArray(combatFromPanel) && combatFromPanel.length > 0 ? combatFromPanel : LABYRINTH_AUTOMATION_COMBAT_ROOM_TYPES;
+      const result = [];
+      for (const rawEntry of Array.isArray(skillingRaw) ? skillingRaw : []) {
+        const normalized = normalizeAutomationRoomTypeEntry(rawEntry, false);
+        if (normalized) {
+          result.push(normalized);
+        }
+      }
+      for (const rawEntry of Array.isArray(combatRaw) ? combatRaw : []) {
+        const normalized = normalizeAutomationRoomTypeEntry(rawEntry, true);
+        if (normalized) {
+          result.push(normalized);
+        }
+      }
+      return result;
+    }
+    function getAutomationRoomTypeEntryByKey(roomTypeKey, panelInstance = null) {
+      const key = String(roomTypeKey || "");
+      if (!key) {
+        return null;
+      }
+      const panel = panelInstance || getLabyrinthPanelInstance();
+      const entries = getAutomationRoomTypeEntries(panel);
+      for (const entry of entries) {
+        if (String(entry?.key || "") === key) {
+          return entry;
+        }
+      }
+      return null;
+    }
+    function createAutomationRoomFromEntry(entry, roomLevel) {
+      const level = Math.max(1, Math.floor(finiteNumber(roomLevel, 1)));
+      if (entry?.isCombat) {
+        return {
+          roomType: LABYRINTH_COMBAT_ROOM_TYPE,
+          monsterHrid: String(entry.monsterHrid || ""),
+          recommendedLevel: level
+        };
+      }
+      return {
+        roomType: LABYRINTH_SKILLING_ROOM_TYPE,
+        skillHrid: String(entry?.skillHrid || ""),
+        recommendedLevel: level
+      };
+    }
+    function resolveAutomationRoomLoadoutId(panelInstance, key, state) {
+      let value = null;
+      if (typeof panelInstance?.getLoadoutIdForRoomType === "function") {
+        value = panelInstance.getLoadoutIdForRoomType(key);
+      }
+      if (!Number.isFinite(Number(value))) {
+        const settingKey = `labyrinthLoadout${toPascalCase(key)}`;
+        value = state?.characterSetting?.[settingKey];
+      }
+      return Math.max(0, Math.floor(finiteNumber(value, 0)));
+    }
+    function resolveAutomationSkipThreshold(panelInstance, key, state, skipThresholdOverrides = null) {
+      let value = null;
+      if (skipThresholdOverrides instanceof Map && skipThresholdOverrides.has(String(key || ""))) {
+        value = skipThresholdOverrides.get(String(key || ""));
+      }
+      if (typeof panelInstance?.getSkipThresholdForRoomType === "function") {
+        const panelValue = panelInstance.getSkipThresholdForRoomType(key);
+        if (!Number.isFinite(Number(value))) {
+          value = panelValue;
+        }
+      }
+      if (!Number.isFinite(Number(value))) {
+        const settingKey = `labyrinthSkip${toPascalCase(key)}`;
+        value = state?.characterSetting?.[settingKey];
+      }
+      if (!Number.isFinite(Number(value))) {
+        value = AUTOMATION_ESTIMATE_DEFAULT_SKIP_THRESHOLD;
+      }
+      return Math.floor(finiteNumber(value, AUTOMATION_ESTIMATE_DEFAULT_SKIP_THRESHOLD));
+    }
+    function getAutomationCombatBaseLevel(state) {
+      const fromCombatSkill = finiteNumber(getSkillLevel(state?.characterSkillMap, COMBAT_LEVEL_SKILL_HRID), NaN);
+      if (Number.isFinite(fromCombatSkill) && fromCombatSkill > 0) {
+        return fromCombatSkill;
+      }
+      const fromCombatDetails = finiteNumber(state?.combatUnit?.combatDetails?.combatLevel, NaN);
+      if (Number.isFinite(fromCombatDetails) && fromCombatDetails > 0) {
+        return fromCombatDetails;
+      }
+      const fromCombatUnit = finiteNumber(state?.combatUnit?.combatLevel, NaN);
+      if (Number.isFinite(fromCombatUnit) && fromCombatUnit > 0) {
+        return fromCombatUnit;
+      }
+      const fromCharacter = finiteNumber(state?.character?.combatLevel, NaN);
+      if (Number.isFinite(fromCharacter) && fromCharacter > 0) {
+        return fromCharacter;
+      }
+      const levels = getCombatSkillLevelsFromState(state);
+      const avg = (finiteNumber(levels.stamina, 1) + finiteNumber(levels.intelligence, 1) + finiteNumber(levels.attack, 1) + finiteNumber(levels.defense, 1) + finiteNumber(levels.melee, 1) + finiteNumber(levels.ranged, 1) + finiteNumber(levels.magic, 1)) / 7;
+      return Math.max(0, avg);
+    }
+    function getAutomationCombatCrateLevelBonus(state, initClientData) {
+      if (!state || !initClientData) {
+        return 0;
+      }
+      const combatCrate = getCombatCrateBuffs(state, initClientData);
+      const buffs = Array.isArray(combatCrate?.combatBuffs) ? combatCrate.combatBuffs : [];
+      if (!buffs.length) {
+        return 0;
+      }
+      const skillLevelTypes = /* @__PURE__ */ new Set([
+        "/buff_types/stamina_level",
+        "/buff_types/intelligence_level",
+        "/buff_types/attack_level",
+        "/buff_types/defense_level",
+        "/buff_types/melee_level",
+        "/buff_types/ranged_level",
+        "/buff_types/magic_level"
+      ]);
+      let directLevelBonus = 0;
+      let skillLevelSum = 0;
+      let skillLevelCount = 0;
+      for (const buff of buffs) {
+        const typeHrid = String(buff?.typeHrid || "");
+        if (!typeHrid) {
+          continue;
+        }
+        const amount = getBuffAmount(buff);
+        if (!Number.isFinite(amount) || amount === 0) {
+          continue;
+        }
+        if (typeHrid === "/buff_types/combat_level" || typeHrid === "/buff_types/action_level") {
+          directLevelBonus += amount;
+          continue;
+        }
+        if (skillLevelTypes.has(typeHrid)) {
+          skillLevelSum += amount;
+          skillLevelCount += 1;
+        }
+      }
+      const averagedSkillLevelBonus = skillLevelCount > 0 ? skillLevelSum / skillLevelCount : 0;
+      return Math.max(0, directLevelBonus + averagedSkillLevelBonus);
+    }
+    function resolveAutomationEffectiveLevel(panelInstance, entry, state, initClientData, options = {}) {
+      const includePersonalBuffs = !(options && options.includePersonalBuffs === false);
+      if (!entry?.isCombat) {
+        if (includePersonalBuffs) {
+          const testRoom = createAutomationRoomFromEntry(entry, 1);
+          const fromPanel = typeof panelInstance?.getEffectiveLevelForRoom === "function" ? finiteNumber(panelInstance.getEffectiveLevelForRoom(testRoom), NaN) : NaN;
+          if (Number.isFinite(fromPanel)) {
+            return Math.max(0, fromPanel);
+          }
+        }
+        const baseLevel = positiveNumber(getSkillLevel(state?.characterSkillMap, entry.skillHrid), 1);
+        const selection = getLabyrinthCrateSelection(state);
+        const teaCrateItemHrid = String(selection?.teaCrateItemHrid || "");
+        const skillId = skillHridToSkillId(entry.skillHrid);
+        const crateMetrics = getSkillingBuffMetrics(skillId, getCrateBuffs(initClientData, teaCrateItemHrid));
+        return Math.max(0, baseLevel + finiteNumber(crateMetrics.skillLevelBonus, 0));
+      }
+      const baseCombatLevel = getAutomationCombatBaseLevel(state);
+      const crateLevelBonus = getAutomationCombatCrateLevelBonus(state, initClientData);
+      return Math.max(0, baseCombatLevel + crateLevelBonus);
+    }
+    function computeAutomationTargetRoomLevel(effectiveLevel, skipThreshold) {
+      const effective = finiteNumber(effectiveLevel, 0);
+      const threshold = Math.floor(finiteNumber(skipThreshold, AUTOMATION_ESTIMATE_DEFAULT_SKIP_THRESHOLD));
+      return Math.floor(effective + threshold - 1);
+    }
+    function computeAutomationMaxFloorByRoomLevel(roomLevel) {
+      const level = Math.max(0, Math.floor(finiteNumber(roomLevel, 0)));
+      if (level <= 0) {
+        return 0;
+      }
+      return Math.max(0, Math.floor(level / 20));
+    }
+    function getAutomationRoomLabel(entry, initClientData = null) {
+      if (entry?.isCombat) {
+        const monsterHrid = String(entry?.monsterHrid || "");
+        const monsterDetail = monsterHrid ? getContainerValue(initClientData?.combatMonsterDetailMap, monsterHrid) : null;
+        return String(
+          isChineseUi() && (LABYRINTH_MONSTER_NAME_ZH_MAP[monsterHrid] || LABYRINTH_MONSTER_NAME_ZH_BY_TAIL[monsterHrid.split("/").pop() || ""]) || monsterDetail?.name || monsterHrid.split("/").pop() || monsterHrid || "--"
+        );
+      }
+      const key = String(entry?.key || "");
+      return isChineseUi() ? LABYRINTH_AUTOMATION_SKILL_NAME_ZH_BY_KEY[key] || key || "--" : LABYRINTH_AUTOMATION_SKILL_NAME_EN_BY_KEY[key] || key || "--";
+    }
+    function parseAutomationSkipThresholdFromRow(row) {
+      if (!row) {
+        return NaN;
+      }
+      const cells = Array.from(row.querySelectorAll("td"));
+      const skipCell = cells[2] || null;
+      const rawText = String(skipCell?.textContent || "");
+      const match = rawText.match(/-?\d+/);
+      if (!match) {
+        return NaN;
+      }
+      return Math.floor(finiteNumber(Number(match[0]), NaN));
+    }
+    function buildAutomationSkipThresholdOverrideMap(entries) {
+      const overrides = /* @__PURE__ */ new Map();
+      if (!Array.isArray(entries) || entries.length === 0) {
+        return overrides;
+      }
+      const table = getAutomationEstimateTable();
+      if (!table) {
+        return overrides;
+      }
+      const rows = Array.from(table.querySelectorAll("tbody tr"));
+      const count = Math.min(entries.length, rows.length);
+      for (let i = 0; i < count; i += 1) {
+        const entry = entries[i];
+        if (!entry?.key) {
+          continue;
+        }
+        const parsed = parseAutomationSkipThresholdFromRow(rows[i]);
+        if (!Number.isFinite(parsed)) {
+          continue;
+        }
+        overrides.set(String(entry.key), parsed);
+      }
+      return overrides;
+    }
+    function buildAutomationEstimateSharedSignature(state) {
+      if (!state || !state.characterLabyrinth) {
+        return "";
+      }
+      const selection = getLabyrinthCrateSelection(state);
+      const crateSignature = [
+        String(selection?.teaCrateItemHrid || ""),
+        String(selection?.coffeeCrateItemHrid || ""),
+        String(selection?.foodCrateItemHrid || "")
+      ].join("|");
+      const trials = getSelectedAutomationCombatTrials();
+      return `crate=${crateSignature}|trials=${trials}`;
+    }
+    function buildAutomationRecommendSharedSignature(state, targetWinRate) {
+      if (!state || !state.characterLabyrinth) {
+        return "";
+      }
+      const selection = getLabyrinthCrateSelection(state);
+      const crateSignature = [
+        String(selection?.teaCrateItemHrid || ""),
+        String(selection?.coffeeCrateItemHrid || ""),
+        String(selection?.foodCrateItemHrid || "")
+      ].join("|");
+      const trials = getSelectedAutomationCombatTrials();
+      const target = normalizeAutomationTargetWinRate(targetWinRate);
+      return `crate=${crateSignature}|trials=${trials}|target=${target}`;
+    }
+    function buildAutomationEstimateEntrySignature(panelInstance, entry, state, sharedSignature, skipThresholdOverrides) {
+      if (!entry?.key || !state) {
+        return "";
+      }
+      const threshold = resolveAutomationSkipThreshold(panelInstance, entry.key, state, skipThresholdOverrides);
+      const loadoutId = resolveAutomationRoomLoadoutId(panelInstance, entry.key, state);
+      const effective = resolveAutomationEffectiveLevel(panelInstance, entry, state, null, {
+        includePersonalBuffs: false
+      });
+      const roundedEffective = Math.round(effective * 100) / 100;
+      return `${sharedSignature}|${entry.key}:${threshold}:${loadoutId}:${roundedEffective}`;
+    }
+    function buildAutomationRecommendEntrySignature(panelInstance, entry, state, sharedSignature) {
+      if (!entry?.key || !state) {
+        return "";
+      }
+      const loadoutId = resolveAutomationRoomLoadoutId(panelInstance, entry.key, state);
+      const effective = resolveAutomationEffectiveLevel(panelInstance, entry, state, null, {
+        includePersonalBuffs: false
+      });
+      const roundedEffective = Math.round(effective * 100) / 100;
+      return `${sharedSignature}|${entry.key}:${loadoutId}:${roundedEffective}`;
+    }
+    function renderAutomationEstimateTooltip(estimate) {
+      if (!estimate || estimate.status !== "ready") {
+        const tooltip2 = ensurePreviewTooltip();
+        tooltip2.textContent = "";
+        const titleNode = document.createElement("div");
+        titleNode.className = `${PREVIEW_TOOLTIP_CLASS}__title`;
+        titleNode.textContent = String(estimate?.roomLabel || t("automationPreview"));
+        tooltip2.appendChild(titleNode);
+        appendPreviewRow(tooltip2, t("status"), String(estimate?.message || t("pending")));
+        return tooltip2;
+      }
+      const tooltip = estimate.detailPreview ? renderCellPreviewTooltip(estimate.detailPreview) : ensurePreviewTooltip();
+      const hiddenLabels = /* @__PURE__ */ new Set([t("combatTrials"), "Combat Trials", "战斗次数", t("successRate"), "胜率", "ETA", "耗时", t("tokenExpected"), "代币期望"]);
+      const hiddenLabelIncludes = ["Box Expected", "盒子期望", "盒期望", "紫盒期望", "宝箱期望"];
+      const rows = Array.from(tooltip.querySelectorAll(`.${PREVIEW_TOOLTIP_CLASS}__row`));
+      for (const row of rows) {
+        const labelNode = row.querySelector(`.${PREVIEW_TOOLTIP_CLASS}__label`);
+        const labelText = String(labelNode?.textContent || "").trim();
+        if (!labelText) {
+          continue;
+        }
+        if (hiddenLabels.has(labelText) || hiddenLabelIncludes.some((part) => labelText.includes(part))) {
+          row.remove();
+        }
+      }
+      if (!estimate.detailPreview) {
+        tooltip.textContent = "";
+        const titleNode = document.createElement("div");
+        titleNode.className = `${PREVIEW_TOOLTIP_CLASS}__title`;
+        titleNode.textContent = String(estimate.roomLabel || t("automationPreview"));
+        tooltip.appendChild(titleNode);
+      }
+      appendPreviewRow(tooltip, t("level"), `Lv.${Math.max(1, Math.floor(finiteNumber(estimate.roomLevel, 1)))}`);
+      if (!estimate.detailPreview && estimate.isCombat && estimate.failureReason) {
+        appendPreviewRow(tooltip, t("failureReason"), String(estimate.failureReason));
+      }
+      return tooltip;
+    }
+    function getAutomationEstimateFromCell(cell) {
+      if (!cell) {
+        return null;
+      }
+      const roomTypeKey = String(cell.getAttribute("data-mwi-auto-room-key") || "");
+      if (!roomTypeKey) {
+        return null;
+      }
+      return automationEstimateByRoomTypeKey.get(roomTypeKey) || null;
+    }
+    function getAutomationRecommendFromCell(cell) {
+      if (!cell) {
+        return null;
+      }
+      const roomTypeKey = String(cell.getAttribute("data-mwi-auto-room-key") || "");
+      if (!roomTypeKey) {
+        return null;
+      }
+      return automationRecommendByRoomTypeKey.get(roomTypeKey) || null;
+    }
+    function showAutomationEstimateTooltip(cell, event) {
+      const estimate = getAutomationEstimateFromCell(cell);
+      if (!estimate) {
+        hidePreviewTooltip();
+        return;
+      }
+      const tooltip = renderAutomationEstimateTooltip(estimate);
+      positionPreviewTooltip(tooltip, event.clientX, event.clientY);
+    }
+    function showAutomationRecommendTooltip(cell, event) {
+      const estimate = getAutomationRecommendFromCell(cell);
+      if (!estimate) {
+        hidePreviewTooltip();
+        return;
+      }
+      const tooltip = renderAutomationEstimateTooltip(estimate);
+      positionPreviewTooltip(tooltip, event.clientX, event.clientY);
+    }
+    function bindAutomationEstimateCellEvents(cell) {
+      if (!cell || cell[AUTOMATION_ESTIMATE_CELL_BOUND_FLAG]) {
+        return;
+      }
+      cell[AUTOMATION_ESTIMATE_CELL_BOUND_FLAG] = true;
+      cell.addEventListener("mouseenter", (event) => {
+        showAutomationEstimateTooltip(cell, event);
+      });
+      cell.addEventListener("mousemove", (event) => {
+        showAutomationEstimateTooltip(cell, event);
+      });
+      cell.addEventListener("mouseleave", () => {
+        hidePreviewTooltip();
+      });
+      cell.addEventListener("contextmenu", (event) => {
+        const roomTypeKey = String(cell.getAttribute("data-mwi-auto-room-key") || "");
+        if (!roomTypeKey) {
+          return;
+        }
+        const estimate = getAutomationEstimateFromCell(cell);
+        const entry = getAutomationRoomTypeEntryByKey(roomTypeKey);
+        const isCombat = Boolean(estimate?.isCombat || entry?.isCombat);
+        if (!isCombat) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        openCombatRoomSimulatorFromAutomationCell(cell);
+      });
+    }
+    function bindAutomationRecommendCellEvents(cell) {
+      if (!cell || cell[AUTOMATION_RECOMMEND_CELL_BOUND_FLAG]) {
+        return;
+      }
+      cell[AUTOMATION_RECOMMEND_CELL_BOUND_FLAG] = true;
+      cell.addEventListener("mouseenter", (event) => {
+        showAutomationRecommendTooltip(cell, event);
+      });
+      cell.addEventListener("mousemove", (event) => {
+        showAutomationRecommendTooltip(cell, event);
+      });
+      cell.addEventListener("mouseleave", () => {
+        hidePreviewTooltip();
+      });
+      cell.addEventListener("contextmenu", (event) => {
+        const roomTypeKey = String(cell.getAttribute("data-mwi-auto-room-key") || "");
+        if (!roomTypeKey) {
+          return;
+        }
+        const recommend = getAutomationRecommendFromCell(cell);
+        const entry = getAutomationRoomTypeEntryByKey(roomTypeKey);
+        const isCombat = Boolean(recommend?.isCombat || entry?.isCombat);
+        if (!isCombat) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        openCombatRoomSimulatorFromAutomationCell(cell);
+      });
+    }
+    function ensureAutomationMaxFloorHeader(table) {
+      const headRow = table?.querySelector("thead tr");
+      if (!headRow) {
+        return;
+      }
+      if (headRow.querySelector(`.${AUTOMATION_MAX_FLOOR_TABLE_HEADER_CLASS}`)) {
+        return;
+      }
+      const th = document.createElement("th");
+      th.className = AUTOMATION_MAX_FLOOR_TABLE_HEADER_CLASS;
+      th.textContent = t("maxFloor");
+      const estimateHeader = headRow.querySelector(`.${AUTOMATION_ESTIMATE_TABLE_HEADER_CLASS}`);
+      if (estimateHeader) {
+        headRow.insertBefore(th, estimateHeader);
+      } else {
+        headRow.appendChild(th);
+      }
+    }
+    function ensureAutomationEstimateHeader(table) {
+      const headRow = table?.querySelector("thead tr");
+      if (!headRow) {
+        return;
+      }
+      if (headRow.querySelector(`.${AUTOMATION_ESTIMATE_TABLE_HEADER_CLASS}`)) {
+        return;
+      }
+      const th = document.createElement("th");
+      th.className = AUTOMATION_ESTIMATE_TABLE_HEADER_CLASS;
+      th.textContent = t("chanceEta");
+      headRow.appendChild(th);
+    }
+    function ensureAutomationRecommendHeader(table) {
+      const headRow = table?.querySelector("thead tr");
+      if (!headRow) {
+        return;
+      }
+      const existingHeader = headRow.querySelector(`.${AUTOMATION_RECOMMEND_TABLE_HEADER_CLASS}`);
+      if (existingHeader) {
+        if (existingHeader.textContent !== t("recommendSettingLevel")) {
+          existingHeader.textContent = t("recommendSettingLevel");
+        }
+        return;
+      }
+      const th = document.createElement("th");
+      th.className = AUTOMATION_RECOMMEND_TABLE_HEADER_CLASS;
+      th.textContent = t("recommendSettingLevel");
+      headRow.appendChild(th);
+    }
+    function updateAutomationSkipHeaderText(table, compact = false) {
+      const headers = Array.from(table?.querySelectorAll("thead th") || []);
+      if (headers.length === 0) {
+        return;
+      }
+      const nextText = compact ? t("skipLevel") : t("skipLevelLong");
+      for (const th of headers) {
+        const text = String(th?.textContent || "").trim();
+        if (!text) {
+          continue;
+        }
+        if (text === nextText) {
+          return;
+        }
+        if (/跳过如果高出等级|跳过等级|skip.*level|skip\s*if/i.test(text)) {
+          th.textContent = nextText;
+          return;
+        }
+      }
+    }
+    function removeAutomationEstimateColumn(table) {
+      if (!table) {
+        return;
+      }
+      const floorHeader = table.querySelector(`thead th.${AUTOMATION_MAX_FLOOR_TABLE_HEADER_CLASS}`);
+      if (floorHeader) {
+        floorHeader.remove();
+      }
+      const header = table.querySelector(`thead th.${AUTOMATION_ESTIMATE_TABLE_HEADER_CLASS}`);
+      if (header) {
+        header.remove();
+      }
+      const floorCells = Array.from(table.querySelectorAll(`tbody td.${AUTOMATION_MAX_FLOOR_CELL_CLASS}`));
+      for (const cell of floorCells) {
+        cell.remove();
+      }
+      const cells = Array.from(table.querySelectorAll(`tbody td.${AUTOMATION_ESTIMATE_CELL_CLASS}`));
+      for (const cell of cells) {
+        cell.remove();
+      }
+    }
+    function removeAutomationRecommendColumn(table) {
+      if (!table) {
+        return;
+      }
+      const header = table.querySelector(`thead th.${AUTOMATION_RECOMMEND_TABLE_HEADER_CLASS}`);
+      if (header) {
+        header.remove();
+      }
+      const cells = Array.from(table.querySelectorAll(`tbody td.${AUTOMATION_RECOMMEND_CELL_CLASS}`));
+      for (const cell of cells) {
+        cell.remove();
+      }
+    }
+    function getAutomationEstimateCellRenderToken(estimate) {
+      if (!estimate) {
+        return "none";
+      }
+      if (estimate.status !== "ready") {
+        return `status:${String(estimate.status || "")}:${String(estimate.message || "")}`;
+      }
+      const roomLevel = Math.max(1, Math.floor(finiteNumber(estimate.roomLevel, 1)));
+      const chancePercent = Math.round(clamp01(estimate.clearChance) * 100);
+      const etaText = String(estimate.etaText || ETA_INFINITE_TEXT);
+      return `ready:${roomLevel}:${chancePercent}:${etaText}`;
+    }
+    function getAutomationMaxFloorText(estimate) {
+      if (!estimate) {
+        return "--";
+      }
+      if (String(estimate.status || "") === "skipped") {
+        return t("skipRoom");
+      }
+      const roomLevel = finiteNumber(estimate?.roomLevel, NaN);
+      if (!Number.isFinite(roomLevel) || roomLevel <= 0) {
+        return t("skipRoom");
+      }
+      const floor = computeAutomationMaxFloorByRoomLevel(roomLevel);
+      if (!Number.isFinite(floor) || floor < 1) {
+        return t("skipRoom");
+      }
+      return String(floor);
+    }
+    function upsertAutomationMaxFloorCellContent(cell, estimate) {
+      if (!cell) {
+        return;
+      }
+      const nextText = getAutomationMaxFloorText(estimate);
+      if (cell.textContent !== nextText) {
+        cell.textContent = nextText;
+      }
+      cell.classList.add(AUTOMATION_MAX_FLOOR_CELL_CLASS);
+      cell.removeAttribute("title");
+    }
+    function upsertAutomationEstimateCellContent(cell, estimate) {
+      if (!cell) {
+        return;
+      }
+      const nextToken = getAutomationEstimateCellRenderToken(estimate);
+      const currentToken = String(cell.getAttribute(AUTOMATION_ESTIMATE_CELL_RENDER_TOKEN_ATTR) || "");
+      if (currentToken === nextToken) {
+        return;
+      }
+      cell.setAttribute(AUTOMATION_ESTIMATE_CELL_RENDER_TOKEN_ATTR, nextToken);
+      cell.classList.add(AUTOMATION_ESTIMATE_CELL_CLASS);
+      cell.removeAttribute("title");
+      cell.textContent = "";
+      const statusText = document.createElement("span");
+      statusText.className = `${AUTOMATION_ESTIMATE_CELL_CLASS}__text`;
+      if (!estimate) {
+        statusText.textContent = "--";
+        cell.appendChild(statusText);
+        return;
+      }
+      if (estimate.status !== "ready") {
+        statusText.textContent = String(estimate.message || t("pending"));
+        cell.appendChild(statusText);
+        return;
+      }
+      const chanceNode = document.createElement("span");
+      chanceNode.className = AUTOMATION_ESTIMATE_CELL_CHANCE_CLASS;
+      chanceNode.textContent = `${Math.round(clamp01(estimate.clearChance) * 100)}%`;
+      const etaNode = document.createElement("span");
+      etaNode.className = AUTOMATION_ESTIMATE_CELL_ETA_CLASS;
+      const etaText = String(estimate.etaText || ETA_INFINITE_TEXT);
+      etaNode.textContent = ` / ${etaText}`;
+      const expectedSeconds = finiteNumber(estimate.expectedSeconds, Infinity);
+      const etaIsDanger = etaText === ETA_INFINITE_TEXT || expectedSeconds > 999;
+      chanceNode.classList.toggle(AUTOMATION_ESTIMATE_CELL_ETA_DANGER_CLASS, etaIsDanger);
+      etaNode.classList.toggle(AUTOMATION_ESTIMATE_CELL_ETA_DANGER_CLASS, etaIsDanger);
+      cell.appendChild(chanceNode);
+      cell.appendChild(etaNode);
+    }
+    function getAutomationRecommendCellRenderToken(estimate) {
+      if (!estimate) {
+        return "none";
+      }
+      if (estimate.status !== "ready") {
+        return `status:${String(estimate.status || "")}:${String(estimate.message || "")}`;
+      }
+      const delta = Math.floor(finiteNumber(estimate.levelDelta, 0));
+      const roomLevel = Math.max(1, Math.floor(finiteNumber(estimate.roomLevel, 1)));
+      const chancePercent = Math.round(clamp01(finiteNumber(estimate.clearChance, 0)) * 1e3) / 10;
+      return `ready:${delta}:${roomLevel}:${chancePercent}`;
+    }
+    function formatAutomationSignedDelta(value) {
+      const n = Math.floor(finiteNumber(value, 0));
+      if (n > 0) {
+        return `+${n}`;
+      }
+      return String(n);
+    }
+    function upsertAutomationRecommendCellContent(cell, estimate) {
+      if (!cell) {
+        return;
+      }
+      const nextToken = getAutomationRecommendCellRenderToken(estimate);
+      const currentToken = String(cell.getAttribute(AUTOMATION_RECOMMEND_CELL_RENDER_TOKEN_ATTR) || "");
+      if (currentToken === nextToken) {
+        return;
+      }
+      cell.setAttribute(AUTOMATION_RECOMMEND_CELL_RENDER_TOKEN_ATTR, nextToken);
+      cell.classList.add(AUTOMATION_RECOMMEND_CELL_CLASS);
+      cell.removeAttribute("title");
+      cell.textContent = "";
+      if (!estimate) {
+        cell.textContent = "--";
+        return;
+      }
+      if (estimate.status !== "ready") {
+        cell.textContent = String(estimate.message || t("pending"));
+        return;
+      }
+      const settingLevel = Math.floor(finiteNumber(estimate.levelDelta, 0)) + 1;
+      cell.textContent = formatAutomationSignedDelta(settingLevel);
+    }
+    function ensureAutomationEstimateControl(section) {
+      if (!section) {
+        return null;
+      }
+      let root = section.querySelector(`#${AUTOMATION_ESTIMATE_CONTROL_ID}`);
+      if (root && root.getAttribute(AUTOMATION_ESTIMATE_CONTROL_SCHEMA_ATTR) !== AUTOMATION_ESTIMATE_CONTROL_SCHEMA_VERSION) {
+        root.remove();
+        root = null;
+      }
+      if (!root) {
+        const initialTrials = loadAutomationCombatSimTrialsSetting();
+        const initialTargetWinRate = loadAutomationTargetWinRateSetting();
+        root = document.createElement("div");
+        root.id = AUTOMATION_ESTIMATE_CONTROL_ID;
+        root.className = AUTOMATION_ESTIMATE_CONTROL_CLASS;
+        root.setAttribute(AUTOMATION_ESTIMATE_CONTROL_SCHEMA_ATTR, AUTOMATION_ESTIMATE_CONTROL_SCHEMA_VERSION);
+        root.innerHTML = `
+<div class="${AUTOMATION_ESTIMATE_CONTROL_CLASS}__settings">
+  <span class="${AUTOMATION_ESTIMATE_CONTROL_CLASS}__settings-label">${t("combatTrials")}</span>
+  <input type="number" class="${AUTOMATION_ESTIMATE_CONTROL_TRIALS_INPUT_CLASS}" min="${MIN_COMBAT_SIM_TRIALS}" max="${MAX_COMBAT_SIM_TRIALS}" step="1" value="${initialTrials}" inputmode="numeric" />
+</div>
+<button type="button" class="${AUTOMATION_ESTIMATE_CONTROL_CLASS}__button">${t("calcChance")}</button>
+<div class="${AUTOMATION_ESTIMATE_CONTROL_CLASS}__settings">
+  <span class="${AUTOMATION_ESTIMATE_CONTROL_TARGET_RATE_LABEL_CLASS}">${t("targetWinRate")}</span>
+  <input type="number" class="${AUTOMATION_ESTIMATE_CONTROL_TARGET_RATE_INPUT_CLASS}" min="0" max="100" step="0.1" value="${initialTargetWinRate}" inputmode="decimal" />
+</div>
+<button type="button" class="${AUTOMATION_ESTIMATE_CONTROL_CLASS}__button ${AUTOMATION_ESTIMATE_CONTROL_RECOMMEND_BUTTON_CLASS}">${t("recommendDelta")}</button>
+<span class="${AUTOMATION_ESTIMATE_CONTROL_CLASS}__status">${t("pending")}</span>`;
+        section.insertBefore(root, section.firstChild);
+      }
+      const settingsLabel = root.querySelector(`.${AUTOMATION_ESTIMATE_CONTROL_CLASS}__settings-label`);
+      if (settingsLabel) {
+        settingsLabel.textContent = t("combatTrials");
+      }
+      const targetRateLabel = root.querySelector(`.${AUTOMATION_ESTIMATE_CONTROL_TARGET_RATE_LABEL_CLASS}`);
+      if (targetRateLabel) {
+        targetRateLabel.textContent = t("targetWinRate");
+      }
+      const statusNode = root.querySelector(`.${AUTOMATION_ESTIMATE_CONTROL_CLASS}__status`);
+      if (statusNode && !String(statusNode.textContent || "").trim()) {
+        statusNode.textContent = t("pending");
+      }
+      const button = root.querySelector(`.${AUTOMATION_ESTIMATE_CONTROL_CLASS}__button`);
+      if (button && !button.dataset.bound) {
+        button.dataset.bound = "1";
+        button.addEventListener("click", () => {
+          runAutomationEstimateCalculation();
+        });
+      }
+      if (button) {
+        button.textContent = t("calcChance");
+      }
+      const recommendButton = root.querySelector(`.${AUTOMATION_ESTIMATE_CONTROL_RECOMMEND_BUTTON_CLASS}`);
+      if (recommendButton && !recommendButton.dataset.bound) {
+        recommendButton.dataset.bound = "1";
+        recommendButton.addEventListener("click", () => {
+          runAutomationRecommendCalculation();
+        });
+      }
+      if (recommendButton) {
+        recommendButton.textContent = t("recommendDelta");
+      }
+      const trialsInput = root.querySelector(`.${AUTOMATION_ESTIMATE_CONTROL_TRIALS_INPUT_CLASS}`);
+      if (trialsInput && !trialsInput.dataset.bound) {
+        trialsInput.dataset.bound = "1";
+        trialsInput.value = String(loadAutomationCombatSimTrialsSetting());
+        const syncTrials = (finalize = false) => {
+          const raw = String(trialsInput.value ?? "").trim();
+          if (!raw) {
+            if (finalize) {
+              const fallback = saveAutomationCombatSimTrialsSetting(DEFAULT_AUTOMATION_COMBAT_SIM_TRIALS);
+              trialsInput.value = String(fallback);
+            }
+            return;
+          }
+          const parsed = Number(raw);
+          if (!Number.isFinite(parsed)) {
+            if (finalize) {
+              const fallback = saveAutomationCombatSimTrialsSetting(DEFAULT_AUTOMATION_COMBAT_SIM_TRIALS);
+              trialsInput.value = String(fallback);
+            }
+            return;
+          }
+          const normalized = saveAutomationCombatSimTrialsSetting(parsed);
+          if (finalize || /^\d+$/.test(raw)) {
+            trialsInput.value = String(normalized);
+          }
+        };
+        trialsInput.addEventListener("input", () => {
+          syncTrials(false);
+        });
+        trialsInput.addEventListener("change", () => {
+          syncTrials(true);
+        });
+        trialsInput.addEventListener("blur", () => {
+          syncTrials(true);
+        });
+      }
+      const targetRateInput = root.querySelector(`.${AUTOMATION_ESTIMATE_CONTROL_TARGET_RATE_INPUT_CLASS}`);
+      if (targetRateInput && !targetRateInput.dataset.bound) {
+        targetRateInput.dataset.bound = "1";
+        targetRateInput.value = String(loadAutomationTargetWinRateSetting());
+        const syncTargetRate = (finalize = false) => {
+          const raw = String(targetRateInput.value ?? "").trim();
+          if (!raw) {
+            if (finalize) {
+              const fallback = saveAutomationTargetWinRateSetting(DEFAULT_AUTOMATION_TARGET_WIN_RATE);
+              targetRateInput.value = String(fallback);
+            }
+            return;
+          }
+          const parsed = Number(raw);
+          if (!Number.isFinite(parsed)) {
+            if (finalize) {
+              const fallback = saveAutomationTargetWinRateSetting(DEFAULT_AUTOMATION_TARGET_WIN_RATE);
+              targetRateInput.value = String(fallback);
+            }
+            return;
+          }
+          const normalized = saveAutomationTargetWinRateSetting(parsed);
+          if (finalize) {
+            targetRateInput.value = String(normalized);
+          }
+        };
+        targetRateInput.addEventListener("input", () => {
+          syncTargetRate(false);
+        });
+        targetRateInput.addEventListener("change", () => {
+          syncTargetRate(true);
+        });
+        targetRateInput.addEventListener("blur", () => {
+          syncTargetRate(true);
+        });
+      }
+      return root;
+    }
+    function getAutomationEstimateTrialsInput() {
+      const root = document.getElementById(AUTOMATION_ESTIMATE_CONTROL_ID);
+      if (!root) {
+        return null;
+      }
+      return root.querySelector(`.${AUTOMATION_ESTIMATE_CONTROL_TRIALS_INPUT_CLASS}`);
+    }
+    function getAutomationTargetWinRateInput() {
+      const root = document.getElementById(AUTOMATION_ESTIMATE_CONTROL_ID);
+      if (!root) {
+        return null;
+      }
+      return root.querySelector(`.${AUTOMATION_ESTIMATE_CONTROL_TARGET_RATE_INPUT_CLASS}`);
+    }
+    function getSelectedAutomationCombatTrials() {
+      const input = getAutomationEstimateTrialsInput();
+      if (!input) {
+        return loadAutomationCombatSimTrialsSetting();
+      }
+      const normalized = normalizeCombatSimTrials(Number(input.value));
+      if (input.value !== String(normalized)) {
+        input.value = String(normalized);
+      }
+      return normalized;
+    }
+    function getSelectedAutomationTargetWinRate() {
+      const input = getAutomationTargetWinRateInput();
+      if (!input) {
+        return loadAutomationTargetWinRateSetting();
+      }
+      const normalized = normalizeAutomationTargetWinRate(Number(input.value));
+      if (input.value !== String(normalized)) {
+        input.value = String(normalized);
+      }
+      return normalized;
+    }
+    function setAutomationEstimateControlStatus(status = {}) {
+      const root = document.getElementById(AUTOMATION_ESTIMATE_CONTROL_ID);
+      if (!root) {
+        return;
+      }
+      const button = root.querySelector(`.${AUTOMATION_ESTIMATE_CONTROL_CLASS}__button`);
+      const recommendButton = root.querySelector(`.${AUTOMATION_ESTIMATE_CONTROL_RECOMMEND_BUTTON_CLASS}`);
+      const text = root.querySelector(`.${AUTOMATION_ESTIMATE_CONTROL_CLASS}__status`);
+      const trialsInput = root.querySelector(`.${AUTOMATION_ESTIMATE_CONTROL_TRIALS_INPUT_CLASS}`);
+      const targetRateInput = root.querySelector(`.${AUTOMATION_ESTIMATE_CONTROL_TARGET_RATE_INPUT_CLASS}`);
+      if (button && Object.prototype.hasOwnProperty.call(status, "running")) {
+        const running = Boolean(status.running);
+        const runningMode = String(automationEstimateRunningMode || "");
+        const nextCalcText = running && runningMode === "estimate" ? t("calculating") : t("calcChance");
+        const nextRecommendText = running && runningMode === "recommend" ? t("calculating") : t("recommendDelta");
+        if (button.disabled !== running) {
+          button.disabled = running;
+        }
+        if (recommendButton && recommendButton.disabled !== running) {
+          recommendButton.disabled = running;
+        }
+        if (trialsInput && trialsInput.disabled !== running) {
+          trialsInput.disabled = running;
+        }
+        if (targetRateInput && targetRateInput.disabled !== running) {
+          targetRateInput.disabled = running;
+        }
+        if (button.textContent !== nextCalcText) {
+          button.textContent = nextCalcText;
+        }
+        if (recommendButton && recommendButton.textContent !== nextRecommendText) {
+          recommendButton.textContent = nextRecommendText;
+        }
+      }
+      if (text && typeof status.message === "string" && text.textContent !== status.message) {
+        text.textContent = status.message;
+      }
+    }
+    function renderAutomationEstimateTable(entries) {
+      const table = getAutomationEstimateTable();
+      if (!table) {
+        return;
+      }
+      const showEstimateColumns = automationEstimateColumnEnabled;
+      const showRecommendColumn = automationRecommendColumnEnabled;
+      updateAutomationSkipHeaderText(table, showEstimateColumns || showRecommendColumn);
+      if (!showEstimateColumns) {
+        removeAutomationEstimateColumn(table);
+      }
+      if (!showRecommendColumn) {
+        removeAutomationRecommendColumn(table);
+      }
+      if (!showEstimateColumns && !showRecommendColumn) {
+        return;
+      }
+      if (!Array.isArray(entries) || entries.length === 0) {
+        removeAutomationEstimateColumn(table);
+        removeAutomationRecommendColumn(table);
+        return;
+      }
+      const rowList = Array.from(table.querySelectorAll("tbody tr"));
+      if (showEstimateColumns) {
+        ensureAutomationMaxFloorHeader(table);
+        ensureAutomationEstimateHeader(table);
+        for (let i = 0; i < rowList.length; i += 1) {
+          const row = rowList[i];
+          const entry = entries[i] || null;
+          const estimate = entry ? automationEstimateByRoomTypeKey.get(entry.key) || null : null;
+          let estimateCell = row.querySelector(`td.${AUTOMATION_ESTIMATE_CELL_CLASS}`);
+          let floorCell = row.querySelector(`td.${AUTOMATION_MAX_FLOOR_CELL_CLASS}`);
+          if (!floorCell) {
+            floorCell = document.createElement("td");
+            floorCell.className = AUTOMATION_MAX_FLOOR_CELL_CLASS;
+            if (estimateCell) {
+              row.insertBefore(floorCell, estimateCell);
+            } else {
+              row.appendChild(floorCell);
+            }
+          }
+          if (!estimateCell) {
+            estimateCell = document.createElement("td");
+            estimateCell.className = AUTOMATION_ESTIMATE_CELL_CLASS;
+            row.appendChild(estimateCell);
+          }
+          upsertAutomationMaxFloorCellContent(floorCell, estimate);
+          if (!entry) {
+            if (estimateCell.getAttribute("data-mwi-auto-room-key") !== "") {
+              estimateCell.setAttribute("data-mwi-auto-room-key", "");
+            }
+            upsertAutomationEstimateCellContent(estimateCell, null);
+            continue;
+          }
+          if (estimateCell.getAttribute("data-mwi-auto-room-key") !== entry.key) {
+            estimateCell.setAttribute("data-mwi-auto-room-key", entry.key);
+          }
+          bindAutomationEstimateCellEvents(estimateCell);
+          upsertAutomationEstimateCellContent(estimateCell, estimate);
+        }
+      }
+      if (showRecommendColumn) {
+        ensureAutomationRecommendHeader(table);
+        for (let i = 0; i < rowList.length; i += 1) {
+          const row = rowList[i];
+          const entry = entries[i] || null;
+          const recommend = entry ? automationRecommendByRoomTypeKey.get(entry.key) || null : null;
+          let recommendCell = row.querySelector(`td.${AUTOMATION_RECOMMEND_CELL_CLASS}`);
+          if (!recommendCell) {
+            recommendCell = document.createElement("td");
+            recommendCell.className = AUTOMATION_RECOMMEND_CELL_CLASS;
+            row.appendChild(recommendCell);
+          }
+          if (!entry) {
+            if (recommendCell.getAttribute("data-mwi-auto-room-key") !== "") {
+              recommendCell.setAttribute("data-mwi-auto-room-key", "");
+            }
+            upsertAutomationRecommendCellContent(recommendCell, null);
+            continue;
+          }
+          if (recommendCell.getAttribute("data-mwi-auto-room-key") !== entry.key) {
+            recommendCell.setAttribute("data-mwi-auto-room-key", entry.key);
+          }
+          bindAutomationRecommendCellEvents(recommendCell);
+          upsertAutomationRecommendCellContent(recommendCell, recommend);
+        }
+      }
+    }
+    async function computeAutomationEntryClearChanceByRoomLevel(params, roomLevel) {
+      const safeRoomLevel = Math.max(1, Math.floor(finiteNumber(roomLevel, 1)));
+      const room = createAutomationRoomFromEntry(params.entry, safeRoomLevel);
+      const combatTrials = normalizeCombatSimTrials(
+        params.entry?.isCombat ? params.recommendCombatTrials : params.combatTrials
+      );
+      const result = params.entry.isCombat ? await computeCombatRoomClearChance(
+        params.state,
+        params.initClientData,
+        room,
+        params.maxEnhancementByItem,
+        null,
+        combatTrials,
+        `auto:recommend:${params.entry.key}:${safeRoomLevel}:target${Math.round(params.targetChance * 1e3)}`,
+        { includePersonalBuffs: false }
+      ) : computeRoomClearChance(params.state, params.initClientData, room, params.maxEnhancementByItem, {
+        includePersonalBuffs: false
+      });
+      if (!result) {
+        return null;
+      }
+      return {
+        room,
+        roomLevel: safeRoomLevel,
+        clearChance: clamp01(finiteNumber(result.clearChance, 0)),
+        result
+      };
+    }
+    function getAutomationRecommendStepByChanceDiff(chanceDiff) {
+      const diffPercent = Math.abs(clamp01(finiteNumber(chanceDiff, 0))) * 100;
+      if (diffPercent >= 70) {
+        return 64;
+      }
+      if (diffPercent >= 55) {
+        return 48;
+      }
+      if (diffPercent >= 40) {
+        return 32;
+      }
+      if (diffPercent >= 25) {
+        return 20;
+      }
+      if (diffPercent >= 15) {
+        return 12;
+      }
+      if (diffPercent >= 8) {
+        return 6;
+      }
+      if (diffPercent >= 4) {
+        return 3;
+      }
+      if (diffPercent >= 2) {
+        return 2;
+      }
+      return 1;
+    }
+    async function findAutomationRecommendedLevelDelta(params) {
+      const targetChance = clamp01(finiteNumber(params.targetChance, 0));
+      const targetPercent = targetChance * 100;
+      const effectiveLevel = Math.max(0, finiteNumber(params.effectiveLevel, 0));
+      const maxDelta = Math.max(0, Math.floor(AUTOMATION_RECOMMEND_MAX_DELTA));
+      const minDelta = Math.min(-1, Math.floor(AUTOMATION_RECOMMEND_MIN_DELTA));
+      const isCombatEntry = Boolean(params?.entry?.isCombat);
+      const evalCacheByDelta = /* @__PURE__ */ new Map();
+      let bestMatch = null;
+      const getDisplayPercentFromChance = (chance) => {
+        return Math.round(clamp01(finiteNumber(chance, 0)) * 100);
+      };
+      const isAtOrAboveTarget = (sample) => {
+        if (!sample) {
+          return false;
+        }
+        return getDisplayPercentFromChance(sample.clearChance) >= targetPercent;
+      };
+      const shouldValidateHighTarget = targetPercent >= 99;
+      const upwardValidationMaxSteps = isCombatEntry ? 14 : 48;
+      const upwardValidationFailStreak = isCombatEntry ? 5 : 14;
+      const sweepUpwardForHighestPass = async (startDelta) => {
+        let highestPassDelta = Math.max(minDelta, Math.min(maxDelta, Math.floor(finiteNumber(startDelta, minDelta))));
+        let failStreak = 0;
+        let steps = 0;
+        let probeDelta = highestPassDelta + 1;
+        while (probeDelta <= maxDelta && steps < upwardValidationMaxSteps) {
+          const sample = await evaluateDelta(probeDelta);
+          steps += 1;
+          if (isAtOrAboveTarget(sample)) {
+            highestPassDelta = probeDelta;
+            failStreak = 0;
+          } else {
+            failStreak += 1;
+            if (failStreak >= upwardValidationFailStreak) {
+              break;
+            }
+          }
+          probeDelta += 1;
+        }
+        return highestPassDelta;
+      };
+      const getInitialProbeStep = (chanceDiff) => {
+        const dynamicStep = Math.max(1, Math.floor(getAutomationRecommendStepByChanceDiff(chanceDiff)));
+        const minStep = isCombatEntry ? 8 : 4;
+        return Math.max(minStep, dynamicStep);
+      };
+      const getNextProbeStep = (currentStep, chanceDiff) => {
+        const dynamicStep = Math.max(1, Math.floor(getAutomationRecommendStepByChanceDiff(chanceDiff)));
+        const doubledStep = Math.max(1, currentStep * 2);
+        const maxStep = isCombatEntry ? 96 : 64;
+        return Math.max(dynamicStep, Math.min(maxStep, doubledStep));
+      };
+      const rememberBest = (sample) => {
+        if (!sample) {
+          return;
+        }
+        const sampleDisplayPercent = getDisplayPercentFromChance(sample.clearChance);
+        const diff = Math.abs(sampleDisplayPercent - targetPercent);
+        const sampleDelta = Math.floor(finiteNumber(sample.levelDelta, 0));
+        const bestDelta = bestMatch ? Math.floor(finiteNumber(bestMatch.levelDelta, 0)) : -Infinity;
+        if (!bestMatch || diff < bestMatch.diff - 1e-9 || Math.abs(diff - bestMatch.diff) <= 1e-9 && sampleDelta > bestDelta) {
+          bestMatch = {
+            ...sample,
+            displayChancePercent: sampleDisplayPercent,
+            diff
+          };
+        }
+      };
+      const evaluateDelta = async (rawDelta) => {
+        const levelDelta = Math.max(minDelta, Math.min(maxDelta, Math.floor(finiteNumber(rawDelta, 0))));
+        if (evalCacheByDelta.has(levelDelta)) {
+          return evalCacheByDelta.get(levelDelta);
+        }
+        const roomLevel = Math.max(1, Math.floor(effectiveLevel + levelDelta));
+        const computed = await computeAutomationEntryClearChanceByRoomLevel(params, roomLevel);
+        const sample = computed ? {
+          levelDelta,
+          roomLevel,
+          clearChance: computed.clearChance,
+          result: computed.result
+        } : null;
+        evalCacheByDelta.set(levelDelta, sample);
+        rememberBest(sample);
+        return sample;
+      };
+      const base = await evaluateDelta(0);
+      if (!base) {
+        return null;
+      }
+      if (isAtOrAboveTarget(base)) {
+        let passDelta = 0;
+        let failDelta = maxDelta + 1;
+        let probeStep = getInitialProbeStep(base.clearChance - targetChance);
+        let probeDelta = Math.min(maxDelta, passDelta + probeStep);
+        while (probeDelta <= maxDelta) {
+          const probeSample = await evaluateDelta(probeDelta);
+          if (!probeSample) {
+            failDelta = probeDelta;
+            break;
+          }
+          if (isAtOrAboveTarget(probeSample)) {
+            passDelta = probeDelta;
+            if (passDelta >= maxDelta) {
+              break;
+            }
+            probeStep = getNextProbeStep(probeStep, probeSample.clearChance - targetChance);
+            probeDelta = Math.min(maxDelta, passDelta + probeStep);
+            if (probeDelta <= passDelta) {
+              break;
+            }
+            continue;
+          }
+          failDelta = probeDelta;
+          break;
+        }
+        if (failDelta <= maxDelta) {
+          while (failDelta - passDelta > 1) {
+            const mid = Math.floor((passDelta + failDelta) / 2);
+            const midSample = await evaluateDelta(mid);
+            if (!midSample) {
+              failDelta = mid;
+              continue;
+            }
+            if (isAtOrAboveTarget(midSample)) {
+              passDelta = mid;
+            } else {
+              failDelta = mid;
+            }
+          }
+          await evaluateDelta(passDelta);
+          await evaluateDelta(failDelta);
+        } else {
+          await evaluateDelta(passDelta);
+          if (passDelta < maxDelta) {
+            await evaluateDelta(maxDelta);
+          }
+        }
+        if (shouldValidateHighTarget && passDelta < maxDelta) {
+          passDelta = await sweepUpwardForHighestPass(passDelta);
+          await evaluateDelta(passDelta);
+        }
+      } else {
+        let passDelta = minDelta - 1;
+        let failDelta = 0;
+        let probeStep = getInitialProbeStep(base.clearChance - targetChance);
+        let probeDelta = Math.max(minDelta, failDelta - probeStep);
+        while (probeDelta >= minDelta) {
+          const probeSample = await evaluateDelta(probeDelta);
+          if (!probeSample) {
+            break;
+          }
+          if (isAtOrAboveTarget(probeSample)) {
+            passDelta = probeDelta;
+            break;
+          }
+          if (probeDelta === minDelta) {
+            break;
+          }
+          failDelta = probeDelta;
+          probeStep = getNextProbeStep(probeStep, probeSample.clearChance - targetChance);
+          probeDelta = Math.max(minDelta, failDelta - probeStep);
+          if (probeDelta >= failDelta) {
+            break;
+          }
+        }
+        if (passDelta >= minDelta) {
+          while (failDelta - passDelta > 1) {
+            const mid = Math.floor((passDelta + failDelta) / 2);
+            const midSample = await evaluateDelta(mid);
+            if (!midSample) {
+              failDelta = mid;
+              continue;
+            }
+            if (isAtOrAboveTarget(midSample)) {
+              passDelta = mid;
+            } else {
+              failDelta = mid;
+            }
+          }
+          await evaluateDelta(passDelta);
+          await evaluateDelta(failDelta);
+          if (shouldValidateHighTarget && passDelta < maxDelta) {
+            passDelta = await sweepUpwardForHighestPass(passDelta);
+            await evaluateDelta(passDelta);
+          }
+        } else {
+          await evaluateDelta(failDelta);
+          if (failDelta > minDelta) {
+            await evaluateDelta(minDelta);
+          }
+        }
+      }
+      return bestMatch;
+    }
+    async function runAutomationRecommendCalculation() {
+      if (automationEstimateRunning) {
+        return;
+      }
+      automationEstimateRunningMode = "";
+      const state = getGameState();
+      const panelInstance = getLabyrinthPanelInstance();
+      const table = getAutomationEstimateTable();
+      if (!state?.characterLabyrinth || !table) {
+        automationEstimateStatusText = t("automationListNotFound");
+        setAutomationEstimateControlStatus({
+          running: false,
+          message: automationEstimateStatusText
+        });
+        return;
+      }
+      const entries = getAutomationRoomTypeEntries(panelInstance);
+      if (!entries.length) {
+        automationEstimateStatusText = t("noCalculableRooms");
+        setAutomationEstimateControlStatus({
+          running: false,
+          message: automationEstimateStatusText
+        });
+        return;
+      }
+      automationEstimateColumnEnabled = false;
+      automationRecommendColumnEnabled = true;
+      renderAutomationEstimateTable(entries);
+      const initClientData = getInitClientData();
+      if (!initClientData) {
+        automationEstimateStatusText = t("missingClientData");
+        setAutomationEstimateControlStatus({
+          running: false,
+          message: automationEstimateStatusText
+        });
+        return;
+      }
+      automationEstimateRunning = true;
+      automationEstimateRunningMode = "recommend";
+      setAutomationEstimateControlStatus({
+        running: true,
+        message: t("preparing")
+      });
+      try {
+        const maxEnhancementByItem = buildMaxEnhancementByItem(state);
+        const recommendCombatTrials = normalizeCombatSimTrials(AUTOMATION_RECOMMEND_COMBAT_TRIALS);
+        const targetWinRate = saveAutomationTargetWinRateSetting(getSelectedAutomationTargetWinRate());
+        const targetChance = clamp01(targetWinRate / 100);
+        automationRecommendByRoomTypeKey.clear();
+        let computedCount = 0;
+        for (let i = 0; i < entries.length; i += 1) {
+          const entry = entries[i];
+          automationEstimateStatusText = t("calculatingProgressFmt", { current: i + 1, total: entries.length });
+          setAutomationEstimateControlStatus({
+            running: true,
+            message: automationEstimateStatusText
+          });
+          const roomLabel = getAutomationRoomLabel(entry, initClientData);
+          const effectiveLevel = resolveAutomationEffectiveLevel(panelInstance, entry, state, initClientData, {
+            includePersonalBuffs: false
+          });
+          try {
+            const match = await findAutomationRecommendedLevelDelta({
+              state,
+              initClientData,
+              entry,
+              maxEnhancementByItem,
+              recommendCombatTrials,
+              effectiveLevel,
+              targetChance
+            });
+            if (!match) {
+              automationRecommendByRoomTypeKey.set(entry.key, {
+                status: "error",
+                roomLabel,
+                isCombat: entry.isCombat,
+                message: t("calcFailed")
+              });
+            } else {
+              const recommendedRoomLevel = Math.max(1, Math.floor(finiteNumber(match.roomLevel, 1)));
+              const recommendedRoom = createAutomationRoomFromEntry(entry, recommendedRoomLevel);
+              const detailPreview = entry.isCombat ? buildCombatPreview(state, recommendedRoom, initClientData, match.result) : match.result?.skillingPreview || null;
+              automationRecommendByRoomTypeKey.set(entry.key, {
+                status: "ready",
+                roomLabel,
+                isCombat: entry.isCombat,
+                levelDelta: Math.floor(finiteNumber(match.levelDelta, 0)),
+                roomLevel: recommendedRoomLevel,
+                clearChance: clamp01(finiteNumber(match.clearChance, 0)),
+                detailPreview,
+                failureReason: String(match.result?.failureReason || "")
+              });
+              computedCount += 1;
+            }
+          } catch (error) {
+            console.error("[Lab Clear Rate] automation recommend failed:", error);
+            automationRecommendByRoomTypeKey.set(entry.key, {
+              status: "error",
+              roomLabel,
+              isCombat: entry.isCombat,
+              message: t("calcFailed")
+            });
+          }
+          renderAutomationEstimateTable(entries);
+          if ((i + 1) % 2 === 0) {
+            await nextFrame();
+          }
+        }
+        if (computedCount > 0) {
+          automationEstimateStatusText = t("calcDone");
+        } else {
+          automationEstimateStatusText = t("calcDone");
+        }
+        setAutomationEstimateControlStatus({
+          running: false,
+          message: automationEstimateStatusText
+        });
+      } finally {
+        automationEstimateRunning = false;
+        automationEstimateRunningMode = "";
+        setAutomationEstimateControlStatus({
+          running: false,
+          message: automationEstimateStatusText
+        });
+      }
+    }
+    async function runAutomationEstimateCalculation() {
+      if (automationEstimateRunning) {
+        return;
+      }
+      automationEstimateRunningMode = "";
+      const state = getGameState();
+      const panelInstance = getLabyrinthPanelInstance();
+      const table = getAutomationEstimateTable();
+      if (!state?.characterLabyrinth || !table) {
+        automationEstimateStatusText = t("automationListNotFound");
+        setAutomationEstimateControlStatus({
+          running: false,
+          message: automationEstimateStatusText
+        });
+        return;
+      }
+      const entries = getAutomationRoomTypeEntries(panelInstance);
+      if (!entries.length) {
+        automationEstimateStatusText = t("noCalculableRooms");
+        setAutomationEstimateControlStatus({
+          running: false,
+          message: automationEstimateStatusText
+        });
+        return;
+      }
+      automationRecommendColumnEnabled = false;
+      automationEstimateColumnEnabled = true;
+      automationRecommendByRoomTypeKey.clear();
+      automationRecommendSignatureByRoomTypeKey.clear();
+      renderAutomationEstimateTable(entries);
+      const initClientData = getInitClientData();
+      if (!initClientData) {
+        automationEstimateStatusText = t("missingClientData");
+        setAutomationEstimateControlStatus({
+          running: false,
+          message: automationEstimateStatusText
+        });
+        return;
+      }
+      automationEstimateRunning = true;
+      automationEstimateRunningMode = "estimate";
+      setAutomationEstimateControlStatus({
+        running: true,
+        message: t("preparing")
+      });
+      try {
+        const maxEnhancementByItem = buildMaxEnhancementByItem(state);
+        const combatTrials = saveAutomationCombatSimTrialsSetting(getSelectedAutomationCombatTrials());
+        const skipThresholdOverrides = buildAutomationSkipThresholdOverrideMap(entries);
+        automationEstimateByRoomTypeKey.clear();
+        let computedCount = 0;
+        let skippedCount = 0;
+        for (let i = 0; i < entries.length; i += 1) {
+          const entry = entries[i];
+          automationEstimateStatusText = t("calculatingProgressFmt", { current: i + 1, total: entries.length });
+          setAutomationEstimateControlStatus({
+            running: true,
+            message: automationEstimateStatusText
+          });
+          const roomLabel = getAutomationRoomLabel(entry, initClientData);
+          const skipThreshold = resolveAutomationSkipThreshold(panelInstance, entry.key, state, skipThresholdOverrides);
+          const effectiveLevel = resolveAutomationEffectiveLevel(panelInstance, entry, state, initClientData, {
+            includePersonalBuffs: false
+          });
+          const roomLevel = computeAutomationTargetRoomLevel(effectiveLevel, skipThreshold);
+          if (roomLevel < 1) {
+            automationEstimateByRoomTypeKey.set(entry.key, {
+              status: "skipped",
+              roomLabel,
+              roomLevel,
+              isCombat: entry.isCombat,
+              message: t("skipRoom")
+            });
+            skippedCount += 1;
+            renderAutomationEstimateTable(entries);
+            if ((i + 1) % 2 === 0) {
+              await nextFrame();
+            }
+            continue;
+          }
+          const room = createAutomationRoomFromEntry(entry, roomLevel);
+          try {
+            const result = entry.isCombat ? await computeCombatRoomClearChance(
+              state,
+              initClientData,
+              room,
+              maxEnhancementByItem,
+              null,
+              combatTrials,
+              `auto:${entry.key}:${roomLevel}`,
+              { disableCache: true, includePersonalBuffs: false }
+            ) : computeRoomClearChance(state, initClientData, room, maxEnhancementByItem, {
+              includePersonalBuffs: false
+            });
+            if (!result) {
+              automationEstimateByRoomTypeKey.set(entry.key, {
+                status: "error",
+                roomLabel,
+                roomLevel,
+                isCombat: entry.isCombat,
+                message: t("calcFailed")
+              });
+            } else {
+              const clearChance = clamp01(finiteNumber(result.clearChance, 0));
+              const shownPercent = Math.round(clearChance * 100);
+              const expectedSeconds = finiteNumber(result.expectedSecondsPerClear, Infinity);
+              const etaText = formatEtaText(expectedSeconds, shownPercent);
+              const detailPreview = entry.isCombat ? buildCombatPreview(state, room, initClientData, result) : result.skillingPreview || null;
+              automationEstimateByRoomTypeKey.set(entry.key, {
+                status: "ready",
+                roomLabel,
+                roomLevel,
+                isCombat: entry.isCombat,
+                clearChance,
+                expectedSeconds,
+                etaText,
+                failureReason: String(result?.combatMeta?.failureReason || ""),
+                combatTrials: entry.isCombat ? combatTrials : 0,
+                detailPreview
+              });
+              computedCount += 1;
+            }
+          } catch (error) {
+            console.error("[Lab Clear Rate] automation estimate failed:", error);
+            automationEstimateByRoomTypeKey.set(entry.key, {
+              status: "error",
+              roomLabel,
+              roomLevel,
+              isCombat: entry.isCombat,
+              message: t("calcFailed")
+            });
+          }
+          renderAutomationEstimateTable(entries);
+          if ((i + 1) % 2 === 0) {
+            await nextFrame();
+          }
+        }
+        if (computedCount > 0) {
+          automationEstimateStatusText = t("calcDone");
+        } else if (skippedCount > 0) {
+          automationEstimateStatusText = t("skippedRooms");
+        } else {
+          automationEstimateStatusText = t("calcDone");
+        }
+        setAutomationEstimateControlStatus({
+          running: false,
+          message: automationEstimateStatusText
+        });
+      } finally {
+        automationEstimateRunning = false;
+        automationEstimateRunningMode = "";
+        setAutomationEstimateControlStatus({
+          running: false,
+          message: automationEstimateStatusText
+        });
+      }
+    }
+    function refreshAutomationEstimatePanel(state) {
+      const table = getAutomationEstimateTable();
+      if (!table) {
+        clearAutomationWideLayout();
+        return;
+      }
+      const panelInstance = getLabyrinthPanelInstance();
+      const entries = getAutomationRoomTypeEntries(panelInstance);
+      if (entries.length > 0) {
+        const sharedSignature = buildAutomationEstimateSharedSignature(state);
+        const skipThresholdOverrides = buildAutomationSkipThresholdOverrideMap(entries);
+        const nextSignatures = /* @__PURE__ */ new Map();
+        let invalidated = false;
+        const recommendSharedSignature = buildAutomationRecommendSharedSignature(state, getSelectedAutomationTargetWinRate());
+        const nextRecommendSignatures = /* @__PURE__ */ new Map();
+        let recommendInvalidated = false;
+        for (const entry of entries) {
+          const key = String(entry?.key || "");
+          if (!key) {
+            continue;
+          }
+          const nextSignature = buildAutomationEstimateEntrySignature(
+            panelInstance,
+            entry,
+            state,
+            sharedSignature,
+            skipThresholdOverrides
+          );
+          nextSignatures.set(key, nextSignature);
+          const prevSignature = automationEstimateSignatureByRoomTypeKey.get(key);
+          if (!automationEstimateRunning && prevSignature && prevSignature !== nextSignature) {
+            if (automationEstimateByRoomTypeKey.has(key)) {
+              automationEstimateByRoomTypeKey.delete(key);
+            }
+            invalidated = true;
+          }
+          const nextRecommendSignature = buildAutomationRecommendEntrySignature(
+            panelInstance,
+            entry,
+            state,
+            recommendSharedSignature
+          );
+          nextRecommendSignatures.set(key, nextRecommendSignature);
+          const prevRecommendSignature = automationRecommendSignatureByRoomTypeKey.get(key);
+          if (!automationEstimateRunning && prevRecommendSignature && prevRecommendSignature !== nextRecommendSignature) {
+            if (automationRecommendByRoomTypeKey.has(key)) {
+              automationRecommendByRoomTypeKey.delete(key);
+            }
+            recommendInvalidated = true;
+          }
+        }
+        for (const key of Array.from(automationEstimateSignatureByRoomTypeKey.keys())) {
+          if (nextSignatures.has(key)) {
+            continue;
+          }
+          automationEstimateSignatureByRoomTypeKey.delete(key);
+          if (automationEstimateByRoomTypeKey.has(key)) {
+            automationEstimateByRoomTypeKey.delete(key);
+            invalidated = true;
+          }
+        }
+        for (const key of Array.from(automationRecommendSignatureByRoomTypeKey.keys())) {
+          if (nextRecommendSignatures.has(key)) {
+            continue;
+          }
+          automationRecommendSignatureByRoomTypeKey.delete(key);
+          if (automationRecommendByRoomTypeKey.has(key)) {
+            automationRecommendByRoomTypeKey.delete(key);
+            recommendInvalidated = true;
+          }
+        }
+        automationEstimateSignatureByRoomTypeKey = nextSignatures;
+        automationRecommendSignatureByRoomTypeKey = nextRecommendSignatures;
+        if (!automationEstimateRunning && (invalidated || recommendInvalidated)) {
+          automationEstimateStatusText = t("pending");
+        }
+      } else {
+        automationEstimateSignatureByRoomTypeKey.clear();
+        automationRecommendSignatureByRoomTypeKey.clear();
+      }
+      const section = getAutomationEstimateSection(table);
+      applyAutomationWideLayout(section, table);
+      ensureAutomationEstimateControl(section);
+      setAutomationEstimateControlStatus({
+        running: automationEstimateRunning,
+        message: automationEstimateStatusText
+      });
+      renderAutomationEstimateTable(entries);
+    }
+    function getControlPanel() {
+      return document.getElementById(CONTROL_ID);
+    }
+    function getControlCombatTrialsInput() {
+      const root = getControlPanel();
+      if (!root) {
+        return null;
+      }
+      return root.querySelector(`.${CONTROL_CLASS}__settings-input`);
+    }
+    function getSelectedCombatSimTrials() {
+      const input = getControlCombatTrialsInput();
+      if (!input) {
+        return loadCombatSimTrialsSetting();
+      }
+      const normalized = normalizeCombatSimTrials(Number(input.value));
+      if (input.value !== String(normalized)) {
+        input.value = String(normalized);
+      }
+      return normalized;
+    }
+    function getSelectedLoanSealItemHrids() {
+      const selected = [];
+      for (const [itemHrid, enabled] of loanSealSelectionByItemHrid.entries()) {
+        if (enabled) {
+          selected.push(String(itemHrid || ""));
+        }
+      }
+      return selected;
+    }
+    function updateLoanCalcButtonState(panelRoot = null) {
+      const root = panelRoot || getControlPanel();
+      if (!root) {
+        return;
+      }
+      const loanCalcButton = root.querySelector(`.${CONTROL_LOAN_CALC_CLASS}`);
+      if (!loanCalcButton) {
+        return;
+      }
+      const checkedCount = Array.from(
+        root.querySelectorAll(`.${CONTROL_LOAN_LIST_CLASS} input[type="checkbox"]:not(:disabled):checked`)
+      ).length;
+      loanCalcButton.disabled = checkedCount <= 0;
+    }
+    function resolveLoanPanelGridRect() {
+      const state = getGameState();
+      const roomRows = Array.isArray(state?.characterLabyrinth?.roomData) ? state.characterLabyrinth.roomData : [];
+      const totalCells = roomRows.flat().length;
+      let gridParent = totalCells > 0 ? findRoomGridParent(totalCells) : null;
+      if (!gridParent) {
+        const anyCell = document.querySelector('div[class*="LabyrinthPanel_roomCell"]');
+        gridParent = anyCell ? anyCell.parentElement : null;
+      }
+      if (!gridParent) {
+        return null;
+      }
+      return gridParent.getBoundingClientRect();
+    }
+    function positionLoanSealPanel(panelRoot = null) {
+      const root = panelRoot || getControlPanel();
+      if (!root) {
+        return;
+      }
+      const panel = root.querySelector(`.${CONTROL_LOAN_PANEL_CLASS}`);
+      const list = root.querySelector(`.${CONTROL_LOAN_LIST_CLASS}`);
+      if (!panel || panel.hasAttribute("hidden")) {
+        return;
+      }
+      const gridRect = resolveLoanPanelGridRect();
+      if (!gridRect) {
+        panel.style.position = "absolute";
+        panel.style.top = "0";
+        panel.style.left = "calc(100% + 8px)";
+        panel.style.right = "auto";
+        panel.style.maxHeight = "320px";
+        if (list) {
+          list.style.maxHeight = "230px";
+        }
+        return;
+      }
+      const viewportWidth = Math.max(0, window.innerWidth || document.documentElement.clientWidth || 0);
+      const viewportHeight = Math.max(0, window.innerHeight || document.documentElement.clientHeight || 0);
+      const margin = 8;
+      const gutter = 10;
+      const panelWidth = Math.max(240, Math.ceil(panel.getBoundingClientRect().width || 250));
+      let left = Math.round(gridRect.right + gutter);
+      if (left + panelWidth > viewportWidth - margin) {
+        left = Math.round(Math.max(margin, gridRect.left - panelWidth - gutter));
+      }
+      let top = Math.round(Math.max(margin, gridRect.top));
+      if (viewportHeight > 0) {
+        top = Math.min(top, Math.max(margin, viewportHeight - 140));
+      }
+      const panelMaxHeight = Math.max(180, Math.min(420, Math.floor(Math.max(240, viewportHeight - top - margin))));
+      panel.style.position = "fixed";
+      panel.style.left = `${left}px`;
+      panel.style.top = `${top}px`;
+      panel.style.right = "auto";
+      panel.style.maxHeight = `${panelMaxHeight}px`;
+      if (list) {
+        const listMaxHeight = Math.max(110, panelMaxHeight - 90);
+        list.style.maxHeight = `${listMaxHeight}px`;
+      }
+    }
+    function isLoanSealPanelOpen(root = null) {
+      const panelRoot = root || getControlPanel();
+      if (!panelRoot) {
+        return false;
+      }
+      const panel = panelRoot.querySelector(`.${CONTROL_LOAN_PANEL_CLASS}`);
+      return Boolean(panel) && !panel.hasAttribute("hidden");
+    }
+    function renderLoanSealPanel(root = null) {
+      const panelRoot = root || getControlPanel();
+      if (!panelRoot) {
+        return;
+      }
+      const panel = panelRoot.querySelector(`.${CONTROL_LOAN_PANEL_CLASS}`);
+      const list = panelRoot.querySelector(`.${CONTROL_LOAN_LIST_CLASS}`);
+      const loanCalcButton = panelRoot.querySelector(`.${CONTROL_LOAN_CALC_CLASS}`);
+      if (!panel || !list || !loanCalcButton) {
+        return;
+      }
+      const state = getGameState();
+      const initClientData = getInitClientData();
+      const catalog = buildLoanSealEffectCatalog(state, initClientData);
+      const catalogMap = new Map(catalog.map((effect) => [String(effect.itemHrid || ""), effect]));
+      if (catalog.length > 0) {
+        for (const itemHrid of Array.from(loanSealSelectionByItemHrid.keys())) {
+          if (!catalogMap.has(itemHrid)) {
+            loanSealSelectionByItemHrid.delete(itemHrid);
+          }
+        }
+      }
+      list.textContent = "";
+      if (!catalog.length) {
+        const empty = document.createElement("div");
+        empty.className = CONTROL_LOAN_ITEM_STATUS_CLASS;
+        empty.textContent = t("loanNoOptions");
+        list.appendChild(empty);
+        loanCalcButton.disabled = true;
+        positionLoanSealPanel(panelRoot);
+        return;
+      }
+      for (const effect of catalog) {
+        const itemHrid = String(effect.itemHrid || "");
+        const canSelect = !effect.isActive && effect.canApply;
+        if (!canSelect && loanSealSelectionByItemHrid.get(itemHrid)) {
+          loanSealSelectionByItemHrid.set(itemHrid, false);
+        }
+        const row = document.createElement("div");
+        row.className = CONTROL_LOAN_ITEM_CLASS;
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.disabled = !canSelect;
+        checkbox.checked = canSelect && loanSealSelectionByItemHrid.get(itemHrid) === true;
+        checkbox.addEventListener("change", (event) => {
+          const checked = Boolean(event?.target?.checked);
+          loanSealSelectionByItemHrid.set(itemHrid, checked);
+          updateLoanCalcButtonState(panelRoot);
+        });
+        row.addEventListener("click", (event) => {
+          const target = event?.target;
+          if (target && typeof target.closest === "function" && target.closest('input[type="checkbox"]')) {
+            return;
+          }
+          if (!canSelect || checkbox.disabled) {
+            return;
+          }
+          checkbox.checked = !checkbox.checked;
+          loanSealSelectionByItemHrid.set(itemHrid, checkbox.checked);
+          updateLoanCalcButtonState(panelRoot);
+        });
+        const nameNode = document.createElement("span");
+        nameNode.className = `${CONTROL_LOAN_ITEM_CLASS}__name`;
+        nameNode.textContent = effect.labelText;
+        const statusNode = document.createElement("span");
+        statusNode.className = CONTROL_LOAN_ITEM_STATUS_CLASS;
+        if (effect.isActive) {
+          statusNode.classList.add(`${CONTROL_LOAN_ITEM_STATUS_CLASS}--warn`);
+          statusNode.textContent = `${t("loanAlreadyActive")} x${effect.quantity}`;
+          if (effect.activeBuff?.expiresAt) {
+            statusNode.title = String(effect.activeBuff.expiresAt);
+          }
+        } else if (!effect.canApply) {
+          statusNode.classList.add(`${CONTROL_LOAN_ITEM_STATUS_CLASS}--warn`);
+          statusNode.textContent = `${t("loanCannotApply")} x${effect.quantity}`;
+        } else {
+          statusNode.textContent = `x${effect.quantity}`;
+        }
+        row.appendChild(checkbox);
+        row.appendChild(nameNode);
+        row.appendChild(statusNode);
+        list.appendChild(row);
+      }
+      updateLoanCalcButtonState(panelRoot);
+      positionLoanSealPanel(panelRoot);
+    }
+    function refreshLoanSealPanelOnOpen(root = null) {
+      const panelRoot = root || getControlPanel();
+      if (!panelRoot || !isLoanSealPanelOpen(panelRoot)) {
+        return;
+      }
+      renderLoanSealPanel(panelRoot);
+      window.setTimeout(() => {
+        if (!panelRoot.isConnected || !isLoanSealPanelOpen(panelRoot)) {
+          return;
+        }
+        renderLoanSealPanel(panelRoot);
+      }, 180);
+    }
+    function loadRoomLogPanelPosition() {
+      const fallback = {
+        left: Math.max(10, (window.innerWidth || 1280) - 360),
+        top: 92
+      };
+      try {
+        const raw = localStorage.getItem(ROOM_LOG_POSITION_STORAGE_KEY);
+        if (!raw) {
+          return fallback;
+        }
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object") {
+          return fallback;
+        }
+        const left = Math.floor(finiteNumber(parsed.left, fallback.left));
+        const top = Math.floor(finiteNumber(parsed.top, fallback.top));
+        return { left, top };
+      } catch (_error) {
+        return fallback;
+      }
+    }
+    function saveRoomLogPanelPosition(position) {
+      if (!position || typeof position !== "object") {
+        return;
+      }
+      const payload = {
+        left: Math.floor(finiteNumber(position.left, 0)),
+        top: Math.floor(finiteNumber(position.top, 0))
+      };
+      try {
+        localStorage.setItem(ROOM_LOG_POSITION_STORAGE_KEY, JSON.stringify(payload));
+      } catch (_error) {
+      }
+    }
+    function clampRoomLogPanelPosition(panel, position) {
+      const panelRect = panel ? panel.getBoundingClientRect() : null;
+      const panelWidth = Math.max(280, Math.ceil(panelRect?.width || 340));
+      const panelHeight = Math.max(180, Math.ceil(panelRect?.height || 320));
+      const viewportWidth = Math.max(320, window.innerWidth || document.documentElement.clientWidth || 1280);
+      const viewportHeight = Math.max(240, window.innerHeight || document.documentElement.clientHeight || 720);
+      const margin = 8;
+      const maxLeft = Math.max(margin, viewportWidth - panelWidth - margin);
+      const maxTop = Math.max(margin, viewportHeight - panelHeight - margin);
+      return {
+        left: Math.min(maxLeft, Math.max(margin, Math.floor(finiteNumber(position?.left, margin)))),
+        top: Math.min(maxTop, Math.max(margin, Math.floor(finiteNumber(position?.top, margin))))
+      };
+    }
+    function applyRoomLogPanelPosition(panel, position, persist = false) {
+      if (!panel) {
+        return;
+      }
+      const clamped = clampRoomLogPanelPosition(panel, position);
+      panel.style.left = `${clamped.left}px`;
+      panel.style.top = `${clamped.top}px`;
+      panel.style.right = "auto";
+      if (persist) {
+        saveRoomLogPanelPosition(clamped);
+      }
+    }
+    function ensureRoomLogFloatingPanel() {
+      let root = getRoomLogFloatingPanel();
+      if (root) {
+        return root;
+      }
+      root = document.createElement("div");
+      root.id = ROOM_LOG_FLOAT_ID;
+      root.className = ROOM_LOG_FLOAT_CLASS;
+      root.setAttribute("hidden", "hidden");
+      root.innerHTML = `
+<div class="${ROOM_LOG_FLOAT_HEADER_CLASS}">
+  <div class="${ROOM_LOG_FLOAT_TITLE_CLASS}">${t("roomLogTitleFmt", { count: ROOM_LOG_MAX_SESSIONS })}</div>
+  <div class="${ROOM_LOG_FLOAT_ACTIONS_CLASS}">
+    <button type="button" class="${ROOM_LOG_FLOAT_CLEAR_CLASS}">${t("roomLogClear")}</button>
+    <button type="button" class="${ROOM_LOG_FLOAT_CLOSE_CLASS}" title="${t("roomLogClose")}">×</button>
+  </div>
+</div>
+<div class="${CONTROL_LOG_PANEL_CLASS}">
+  <div class="${CONTROL_LOG_LIST_CLASS}"></div>
+</div>
+`;
+      document.body.appendChild(root);
+      applyRoomLogPanelPosition(root, loadRoomLogPanelPosition(), false);
+      const closeButton = root.querySelector(`.${ROOM_LOG_FLOAT_CLOSE_CLASS}`);
+      if (closeButton) {
+        closeButton.addEventListener("click", (event) => {
+          if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+          root.setAttribute("hidden", "hidden");
+        });
+      }
+      const clearButton = root.querySelector(`.${ROOM_LOG_FLOAT_CLEAR_CLASS}`);
+      if (clearButton) {
+        clearButton.addEventListener("click", (event) => {
+          if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+          clearRoomLogData();
+        });
+      }
+      const header = root.querySelector(`.${ROOM_LOG_FLOAT_HEADER_CLASS}`);
+      if (header) {
+        header.addEventListener("pointerdown", (event) => {
+          const target = event?.target;
+          if (target && typeof target.closest === "function" && target.closest(`.${ROOM_LOG_FLOAT_CLOSE_CLASS}`)) {
+            return;
+          }
+          if (!(event instanceof PointerEvent) || event.button !== 0) {
+            return;
+          }
+          event.preventDefault();
+          const initialRect = root.getBoundingClientRect();
+          const startX = event.clientX;
+          const startY = event.clientY;
+          const startLeft = initialRect.left;
+          const startTop = initialRect.top;
+          const onMove = (moveEvent) => {
+            const nextLeft = startLeft + (moveEvent.clientX - startX);
+            const nextTop = startTop + (moveEvent.clientY - startY);
+            applyRoomLogPanelPosition(root, { left: nextLeft, top: nextTop }, false);
+          };
+          const onUp = () => {
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", onUp);
+            window.removeEventListener("pointercancel", onUp);
+            const finalRect = root.getBoundingClientRect();
+            applyRoomLogPanelPosition(root, { left: finalRect.left, top: finalRect.top }, true);
+          };
+          window.addEventListener("pointermove", onMove);
+          window.addEventListener("pointerup", onUp);
+          window.addEventListener("pointercancel", onUp);
+        });
+      }
+      if (!ensureRoomLogFloatingPanel.__resizeBound) {
+        ensureRoomLogFloatingPanel.__resizeBound = true;
+        window.addEventListener("resize", () => {
+          const panel = getRoomLogFloatingPanel();
+          if (!panel || panel.hasAttribute("hidden")) {
+            return;
+          }
+          const rect = panel.getBoundingClientRect();
+          applyRoomLogPanelPosition(panel, { left: rect.left, top: rect.top }, true);
+        });
+      }
+      return root;
+    }
+    function isRoomLogPanelOpen() {
+      const panel = getRoomLogFloatingPanel();
+      return Boolean(panel) && !panel.hasAttribute("hidden");
+    }
+    function setRoomLogPanelOpen(opening) {
+      let panel = getRoomLogFloatingPanel();
+      if (!panel && !opening) {
+        return;
+      }
+      if (!panel) {
+        panel = ensureRoomLogFloatingPanel();
+      }
+      if (!panel) {
+        return;
+      }
+      if (opening) {
+        panel.removeAttribute("hidden");
+        applyRoomLogPanelPosition(panel, loadRoomLogPanelPosition(), false);
+        renderRoomLogPanel();
+        return;
+      }
+      panel.setAttribute("hidden", "hidden");
+    }
+    function clearRoomLogData() {
+      roomLogSessions = [];
+      activeRoomLogSession = null;
+      persistRoomLogStorage();
+      refreshRoomLogPanelIfVisible();
+    }
+    function formatRoomLogDurationSeconds(session) {
+      if (!session || typeof session !== "object") {
+        return "--";
+      }
+      const startedAt = Math.max(0, Math.floor(finiteNumber(session.startedAt, 0)));
+      if (!startedAt) {
+        return "--";
+      }
+      const endedAtRaw = Math.max(0, Math.floor(finiteNumber(session.endedAt, 0)));
+      const endedAt = endedAtRaw > 0 ? endedAtRaw : Date.now();
+      const durationMs = Math.max(0, endedAt - startedAt);
+      const seconds = Math.max(0, Math.round(durationMs / 1e3));
+      return t("roomLogDurationFmt", { seconds });
+    }
+    function normalizeRoomLogDisplaySkillName(rawName) {
+      const input = String(rawName || "").trim();
+      if (!input) {
+        return "--";
+      }
+      const cleaned = input.replace(/^(技能|skill|skilling|强化|enhancing)\s*[·\.:：\-]?\s*/i, "").trim();
+      return cleaned || input;
+    }
+    function getRoomLogActionOutcomeClass(action) {
+      const outcome = String(action?.outcome || ROOM_LOG_ACTION_OUTCOME_UNKNOWN);
+      if (outcome === ROOM_LOG_ACTION_OUTCOME_DOUBLE) {
+        return `${CONTROL_LOG_ACTION_CLASS} ${CONTROL_LOG_ACTION_CLASS}--double`;
+      }
+      if (outcome === ROOM_LOG_ACTION_OUTCOME_SUCCESS) {
+        return `${CONTROL_LOG_ACTION_CLASS} ${CONTROL_LOG_ACTION_CLASS}--success`;
+      }
+      if (outcome === ROOM_LOG_ACTION_OUTCOME_FAIL) {
+        return `${CONTROL_LOG_ACTION_CLASS} ${CONTROL_LOG_ACTION_CLASS}--fail`;
+      }
+      return `${CONTROL_LOG_ACTION_CLASS} ${CONTROL_LOG_ACTION_CLASS}--unknown`;
+    }
+    function getRoomLogMetaText(session) {
+      if (session?.mode === "combat") {
+        return t("roomLogComingSoon");
+      }
+      const successText = formatRoomLogPercent(clamp01(finiteNumber(session?.successRate, 0)) * 100);
+      const doubleText = formatRoomLogPercent(clamp01(finiteNumber(session?.doubleChance, 0)) * 100);
+      const parts = [t("roomLogRateFmt", { success: successText, double: doubleText })];
+      if (session?.mode === "enhancing") {
+        parts.push(
+          t("roomLogEnhFmt", {
+            current: Math.max(0, Math.floor(finiteNumber(session?.currentEnhLevel, 0))),
+            target: Math.max(0, Math.floor(finiteNumber(session?.targetLevel, 0)))
+          })
+        );
+      } else {
+        parts.push(
+          t("roomLogWorkFmt", {
+            value: getEffectiveSkillingProgressPerSuccess(session?.progressPerAction)
+          })
+        );
+        parts.push(
+          t("roomLogProgressFmt", {
+            current: formatRoomLogPercent(Math.max(0, finiteNumber(session?.currentProgressPct, 0))),
+            target: 100
+          })
+        );
+      }
+      return parts.join(" | ");
+    }
+    function getRoomLogIncompleteText(session) {
+      const reasons = Array.isArray(session?.incompleteReasons) ? session.incompleteReasons : [];
+      if (reasons.includes("action_gap")) {
+        return `${t("roomLogIncomplete")} · ${t("roomLogActionGap")}`;
+      }
+      return t("roomLogIncomplete");
+    }
+    function appendRoomLogActionNodes(container, actions) {
+      if (!container) {
+        return;
+      }
+      const actionList = Array.isArray(actions) ? actions : [];
+      if (!actionList.length) {
+        const empty = document.createElement("span");
+        empty.className = `${CONTROL_LOG_ACTION_CLASS} ${CONTROL_LOG_ACTION_CLASS}--unknown`;
+        empty.textContent = "--";
+        container.appendChild(empty);
+        return;
+      }
+      for (let i = 0; i < actionList.length; i += 1) {
+        if (i > 0) {
+          const separator = document.createElement("span");
+          separator.className = `${CONTROL_LOG_ITEM_CLASS}__sep`;
+          separator.textContent = " - ";
+          container.appendChild(separator);
+        }
+        const action = actionList[i];
+        const node = document.createElement("span");
+        node.className = getRoomLogActionOutcomeClass(action);
+        node.textContent = String(action?.text || "?");
+        container.appendChild(node);
+      }
+    }
+    function renderRoomLogPanel() {
+      const panelRoot = ensureRoomLogFloatingPanel();
+      if (!panelRoot) {
+        return;
+      }
+      const title = panelRoot.querySelector(`.${ROOM_LOG_FLOAT_TITLE_CLASS}`);
+      const clearButton = panelRoot.querySelector(`.${ROOM_LOG_FLOAT_CLEAR_CLASS}`);
+      const closeButton = panelRoot.querySelector(`.${ROOM_LOG_FLOAT_CLOSE_CLASS}`);
+      const list = panelRoot.querySelector(`.${CONTROL_LOG_LIST_CLASS}`);
+      if (!title || !list) {
+        return;
+      }
+      title.textContent = t("roomLogTitleFmt", { count: ROOM_LOG_MAX_SESSIONS });
+      if (clearButton) {
+        clearButton.textContent = t("roomLogClear");
+        clearButton.title = t("roomLogClear");
+      }
+      if (closeButton) {
+        closeButton.title = t("roomLogClose");
+      }
+      list.textContent = "";
+      if (!Array.isArray(roomLogSessions) || roomLogSessions.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = CONTROL_LOG_META_CLASS;
+        empty.textContent = t("roomLogEmpty");
+        list.appendChild(empty);
+        return;
+      }
+      const displaySessions = roomLogSessions.slice(0, ROOM_LOG_MAX_SESSIONS);
+      for (const session of displaySessions) {
+        const card = document.createElement("div");
+        card.className = CONTROL_LOG_ITEM_CLASS;
+        const header = document.createElement("div");
+        header.className = `${CONTROL_LOG_ITEM_CLASS}__header`;
+        const level = Math.max(0, Math.floor(finiteNumber(session?.recommendedLevel, 0)));
+        const displaySkillName = normalizeRoomLogDisplaySkillName(session?.skillName);
+        const nameText = level > 0 ? `${displaySkillName} Lv.${level}` : displaySkillName;
+        const titleText = document.createElement("span");
+        titleText.textContent = nameText;
+        const timeText = document.createElement("span");
+        timeText.className = `${CONTROL_LOG_ITEM_CLASS}__time`;
+        const durationText = formatRoomLogDurationSeconds(session);
+        if (session?.mode === "combat") {
+          timeText.textContent = durationText;
+        } else {
+          const expText = t("roomLogExpFmt", { value: formatRoomLogExperience(session?.totalExperience) });
+          timeText.textContent = `${durationText} | ${expText}`;
+        }
+        header.appendChild(titleText);
+        header.appendChild(timeText);
+        if (session?.incomplete || !session?.completed) {
+          const incomplete = document.createElement("span");
+          incomplete.className = CONTROL_LOG_INCOMPLETE_CLASS;
+          incomplete.textContent = getRoomLogIncompleteText(session);
+          header.appendChild(incomplete);
+        }
+        card.appendChild(header);
+        const meta = document.createElement("div");
+        meta.className = CONTROL_LOG_META_CLASS;
+        meta.textContent = getRoomLogMetaText(session);
+        card.appendChild(meta);
+        const actionRow = document.createElement("div");
+        actionRow.className = `${CONTROL_LOG_ITEM_CLASS}__actions`;
+        appendRoomLogActionNodes(actionRow, session?.actions);
+        card.appendChild(actionRow);
+        list.appendChild(card);
+      }
+    }
+    function createControlPanel() {
+      let root = getControlPanel();
+      if (root && root.getAttribute(CONTROL_SCHEMA_ATTR) !== CONTROL_SCHEMA_VERSION) {
+        root.remove();
+        root = null;
+      }
+      if (root) {
+        const settingsLabel = root.querySelector(`.${CONTROL_CLASS}__settings-label`);
+        if (settingsLabel) {
+          settingsLabel.textContent = t("combatTrials");
+        }
+        const logToggle = root.querySelector(`.${CONTROL_LOG_TOGGLE_CLASS}`);
+        if (logToggle) {
+          logToggle.textContent = t("roomLog");
+        }
+        const text = root.querySelector(`.${CONTROL_CLASS}__text`);
+        if (text && !String(text.textContent || "").trim()) {
+          text.textContent = t("pending");
+        }
+        bindControlPanelInteractions(root);
+        refreshRoomLogPanelIfVisible();
+        return root;
+      }
+      root = document.createElement("div");
+      root.id = CONTROL_ID;
+      root.className = CONTROL_CLASS;
+      root.setAttribute(CONTROL_SCHEMA_ATTR, CONTROL_SCHEMA_VERSION);
+      root.innerHTML = `
+<button type="button" class="${CONTROL_CLASS}__button">${t("calcMaze")}</button>
+<div class="${CONTROL_CLASS}__settings">
+  <span class="${CONTROL_CLASS}__settings-label">${t("combatTrials")}</span>
+  <input type="number" class="${CONTROL_CLASS}__settings-input" min="${MIN_COMBAT_SIM_TRIALS}" max="${MAX_COMBAT_SIM_TRIALS}" step="1" value="${DEFAULT_COMBAT_SIM_TRIALS}" inputmode="numeric" />
+</div>
+<button type="button" class="${CONTROL_LOG_TOGGLE_CLASS}">${t("roomLog")}</button>
+<div class="${CONTROL_CLASS}__progress">
+  <div class="${CONTROL_CLASS}__track"><div class="${CONTROL_CLASS}__bar"></div></div>
+  <div class="${CONTROL_CLASS}__text">${t("pending")}</div>
+</div>
+`;
+      bindControlPanelInteractions(root);
+      refreshRoomLogPanelIfVisible();
+      return root;
+    }
+    function bindControlPanelInteractions(root) {
+      if (!root || root[CONTROL_BOUND_FLAG]) {
+        return;
+      }
+      const button = root.querySelector(`.${CONTROL_CLASS}__button`);
+      if (button) {
+        button.addEventListener(
+          "click",
+          (event) => {
+            if (event) {
+              event.preventDefault();
+              if (typeof event.stopImmediatePropagation === "function") {
+                event.stopImmediatePropagation();
+              }
+              event.stopPropagation();
+            }
+            runManualUpdate();
+          },
+          true
+        );
+      }
+      const loanToggle = root.querySelector(`.${CONTROL_LOAN_TOGGLE_CLASS}`);
+      if (loanToggle) {
+        loanToggle.addEventListener(
+          "click",
+          (event) => {
+            if (event) {
+              event.preventDefault();
+              if (typeof event.stopImmediatePropagation === "function") {
+                event.stopImmediatePropagation();
+              }
+              event.stopPropagation();
+            }
+            const panel = root.querySelector(`.${CONTROL_LOAN_PANEL_CLASS}`);
+            if (!panel) {
+              return;
+            }
+            const opening = panel.hasAttribute("hidden");
+            if (opening) {
+              setRoomLogPanelOpen(false);
+              panel.removeAttribute("hidden");
+              refreshLoanSealPanelOnOpen(root);
+            } else {
+              panel.setAttribute("hidden", "hidden");
+            }
+          },
+          true
+        );
+      }
+      const logToggle = root.querySelector(`.${CONTROL_LOG_TOGGLE_CLASS}`);
+      if (logToggle) {
+        logToggle.addEventListener(
+          "click",
+          (event) => {
+            if (event) {
+              event.preventDefault();
+              if (typeof event.stopImmediatePropagation === "function") {
+                event.stopImmediatePropagation();
+              }
+              event.stopPropagation();
+            }
+            const loanPanel = root.querySelector(`.${CONTROL_LOAN_PANEL_CLASS}`);
+            if (loanPanel) {
+              loanPanel.setAttribute("hidden", "hidden");
+            }
+            setRoomLogPanelOpen(!isRoomLogPanelOpen());
+          },
+          true
+        );
+      }
+      const loanCalcButton = root.querySelector(`.${CONTROL_LOAN_CALC_CLASS}`);
+      if (loanCalcButton) {
+        loanCalcButton.addEventListener(
+          "click",
+          (event) => {
+            if (event) {
+              event.preventDefault();
+              if (typeof event.stopImmediatePropagation === "function") {
+                event.stopImmediatePropagation();
+              }
+              event.stopPropagation();
+            }
+            const state = getGameState();
+            const initClientData = getInitClientData();
+            const catalog = buildLoanSealEffectCatalog(state, initClientData);
+            const selectedItemHrids = getSelectedLoanSealItemHrids();
+            const loanOptions = buildLoanSimulationOptions(state, catalog, selectedItemHrids);
+            if (!loanOptions) {
+              return;
+            }
+            runManualUpdate({
+              loanPersonalActionTypeBuffsDict: loanOptions.loanPersonalActionTypeBuffsDict,
+              selectedSealItemHrids: loanOptions.selectedSealItemHrids
+            });
+          },
+          true
+        );
+      }
+      const trialsInput = root.querySelector(`.${CONTROL_CLASS}__settings-input`);
+      if (trialsInput) {
+        const initialTrials = loadCombatSimTrialsSetting();
+        trialsInput.value = String(initialTrials);
+        const syncTrials = (finalize = false) => {
+          const raw = String(trialsInput.value ?? "").trim();
+          if (!raw) {
+            if (finalize) {
+              const fallback = saveCombatSimTrialsSetting(DEFAULT_COMBAT_SIM_TRIALS);
+              trialsInput.value = String(fallback);
+            }
+            return;
+          }
+          const parsed = Number(raw);
+          if (!Number.isFinite(parsed)) {
+            if (finalize) {
+              const fallback = saveCombatSimTrialsSetting(DEFAULT_COMBAT_SIM_TRIALS);
+              trialsInput.value = String(fallback);
+            }
+            return;
+          }
+          const normalized = saveCombatSimTrialsSetting(parsed);
+          if (finalize || /^\d+$/.test(raw)) {
+            trialsInput.value = String(normalized);
+          }
+        };
+        trialsInput.addEventListener(
+          "input",
+          (event) => {
+            if (event && typeof event.stopImmediatePropagation === "function") {
+              event.stopImmediatePropagation();
+            }
+            syncTrials(false);
+          },
+          true
+        );
+        trialsInput.addEventListener(
+          "change",
+          (event) => {
+            if (event && typeof event.stopImmediatePropagation === "function") {
+              event.stopImmediatePropagation();
+            }
+            syncTrials(true);
+          },
+          true
+        );
+        trialsInput.addEventListener(
+          "blur",
+          (event) => {
+            if (event && typeof event.stopImmediatePropagation === "function") {
+              event.stopImmediatePropagation();
+            }
+            syncTrials(true);
+          },
+          true
+        );
+      }
+      root[CONTROL_BOUND_FLAG] = true;
+    }
+    function findLongestPathControlHost(gridParent) {
+      if (!gridParent) {
+        return null;
+      }
+      const searchRoot = gridParent.closest('div[class*="LabyrinthPanel_activeRun"]') || gridParent.parentElement || gridParent;
+      let marker = null;
+      const xpathQueries = [
+        ".//*[contains(normalize-space(text()), '最长路径')]",
+        ".//*[contains(translate(normalize-space(text()), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'longest path')]"
+      ];
+      for (const xpath of xpathQueries) {
+        const snapshot = document.evaluate(xpath, searchRoot, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+        for (let i = 0; i < snapshot.snapshotLength; i += 1) {
+          const node = snapshot.snapshotItem(i);
+          if (!node) {
+            continue;
+          }
+          const text = String(node.textContent || "").trim();
+          if (!text || text.length > 96) {
+            continue;
+          }
+          marker = node;
+          break;
+        }
+        if (marker) {
+          break;
+        }
+      }
+      if (!marker) {
+        const nodes = Array.from(searchRoot.querySelectorAll("div, span, p, strong"));
+        marker = nodes.find((node) => {
+          if (node.childElementCount > 0) {
+            return false;
+          }
+          const text = String(node.textContent || "").replace(/\s+/g, "").toLowerCase();
+          return text.includes("最长路径") || text.includes("longestpath");
+        });
+      }
+      if (!marker) {
+        return null;
+      }
+      let host = marker.parentElement;
+      for (let depth = 0; depth < 4 && host; depth += 1) {
+        const display = getComputedStyle(host).display;
+        if (display.includes("flex")) {
+          return host;
+        }
+        host = host.parentElement;
+      }
+      return marker.parentElement;
+    }
+    function ensureControlPanel(gridParent) {
+      if (!gridParent) {
+        return getControlPanel();
+      }
+      const root = createControlPanel();
+      const inlineHost = findLongestPathControlHost(gridParent);
+      if (inlineHost) {
+        root.classList.add(`${CONTROL_CLASS}--inline`);
+        root.classList.remove(`${CONTROL_CLASS}--block`);
+        if (root.parentElement !== inlineHost) {
+          inlineHost.appendChild(root);
+        }
+        if (isLoanSealPanelOpen(root)) {
+          positionLoanSealPanel(root);
+        }
+        return root;
+      }
+      const gridContainer = gridParent.parentElement || gridParent;
+      const host = gridContainer.parentElement || gridContainer;
+      const anchor = gridContainer;
+      if (!host) {
+        return getControlPanel();
+      }
+      root.classList.add(`${CONTROL_CLASS}--block`);
+      root.classList.remove(`${CONTROL_CLASS}--inline`);
+      if (root.parentElement !== host || root.nextElementSibling !== anchor) {
+        host.insertBefore(root, anchor);
+      }
+      if (isLoanSealPanelOpen(root)) {
+        positionLoanSealPanel(root);
+      }
+      return root;
+    }
+    function setControlStatus(status) {
+      const root = getControlPanel();
+      if (!root) {
+        return;
+      }
+      const button = root.querySelector(`.${CONTROL_CLASS}__button`);
+      const loanToggle = root.querySelector(`.${CONTROL_LOAN_TOGGLE_CLASS}`);
+      const logToggle = root.querySelector(`.${CONTROL_LOG_TOGGLE_CLASS}`);
+      const loanCalcButton = root.querySelector(`.${CONTROL_LOAN_CALC_CLASS}`);
+      const trialsInput = root.querySelector(`.${CONTROL_CLASS}__settings-input`);
+      const bar = root.querySelector(`.${CONTROL_CLASS}__bar`);
+      const text = root.querySelector(`.${CONTROL_CLASS}__text`);
+      if (button && Object.prototype.hasOwnProperty.call(status, "running")) {
+        const running = Boolean(status.running);
+        button.disabled = running;
+        button.textContent = running ? t("calculating") : t("calcMaze");
+        if (loanToggle) {
+          loanToggle.disabled = running;
+        }
+        if (logToggle) {
+          logToggle.disabled = running;
+        }
+        if (loanCalcButton) {
+          if (running) {
+            loanCalcButton.disabled = true;
+          } else {
+            updateLoanCalcButtonState(root);
+          }
+        }
+        if (trialsInput) {
+          trialsInput.disabled = running;
+        }
+      }
+      if (bar && Object.prototype.hasOwnProperty.call(status, "ratio")) {
+        const ratio = clamp01(finiteNumber(status.ratio, 0));
+        bar.style.width = `${(ratio * 100).toFixed(1)}%`;
+      }
+      if (text && typeof status.message === "string") {
+        text.textContent = status.message;
+      }
+    }
+    function nextFrame() {
+      return new Promise((resolve) => {
+        requestAnimationFrame(() => resolve());
+      });
+    }
+    function createProgressTracker(totalUnits) {
+      const safeTotal = Math.max(1, Math.floor(finiteNumber(totalUnits, 1)));
+      let completed = 0;
+      function update(message) {
+        const ratio = clamp01(completed / safeTotal);
+        const percent = Math.round(ratio * 100);
+        const msg = message || t("progressFmt", { percent });
+        setControlStatus({
+          running: true,
+          ratio,
+          message: msg
+        });
+      }
+      update(t("preparing"));
+      return {
+        add(units = 1, message) {
+          const value = Math.max(0, Math.floor(finiteNumber(units, 0)));
+          completed = Math.min(safeTotal, completed + value);
+          update(message);
+        },
+        finish(message) {
+          completed = safeTotal;
+          update(message || t("calcDone"));
+        }
+      };
+    }
+    async function fetchCombatWorkerChunkText(url) {
+      const response = await fetch(url, { cache: "force-cache", credentials: "omit" });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} for ${url}`);
+      }
+      return response.text();
+    }
+    function buildCombatSimulatorWorkerSource(vendorChunkSource, workerChunkSource) {
+      const runtimePrelude = `"use strict";
+var __webpack_modules__ = {};
+var __webpack_module_cache__ = {};
+function __webpack_require__(moduleId) {
+  var cached = __webpack_module_cache__[moduleId];
+  if (cached !== undefined) {
+    return cached.exports;
+  }
+  var module = (__webpack_module_cache__[moduleId] = { exports: {} });
+  var factory = __webpack_modules__[moduleId];
+  if (!factory) {
+    throw new Error("Missing webpack module: " + moduleId);
+  }
+  factory(module, module.exports, __webpack_require__);
+  return module.exports;
+}
+__webpack_require__.o = function (obj, prop) {
+  return Object.prototype.hasOwnProperty.call(obj, prop);
+};
+__webpack_require__.d = function (exports, definition) {
+  for (var key in definition) {
+    if (__webpack_require__.o(definition, key) && !__webpack_require__.o(exports, key)) {
+      Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
+    }
+  }
+};
+__webpack_require__.r = function (exports) {
+  if (typeof Symbol !== "undefined" && Symbol.toStringTag) {
+    Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
+  }
+  Object.defineProperty(exports, "__esModule", { value: true });
+};
+var __webpack_chunk_array__ = [];
+__webpack_chunk_array__.push = function (data) {
+  var moreModules = data[1] || {};
+  var runtime = data[2];
+  for (var moduleId in moreModules) {
+    if (__webpack_require__.o(moreModules, moduleId)) {
+      __webpack_modules__[moduleId] = moreModules[moduleId];
+    }
+  }
+  if (runtime) {
+    runtime(__webpack_require__);
+  }
+};
+self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
+      const runtimeSuffix = `
+(function () {
+  var Player = __webpack_require__("./src/combatsimulator/player.js").default;
+  var CombatSimulator = __webpack_require__("./src/combatsimulator/combatSimulator.js").default;
+  var Labyrinth = __webpack_require__("./src/combatsimulator/labyrinth.js").default;
+  var ONE_SECOND_NS = 1e9;
+  var ONE_HOUR_NS = 3600 * ONE_SECOND_NS;
+
+  function clone(value) {
+    if (value === null || value === undefined) {
+      return value;
+    }
+    if (typeof structuredClone === "function") {
+      return structuredClone(value);
+    }
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function finite(value, fallback) {
+    var n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  function normalizeCrates(raw) {
+    if (!Array.isArray(raw)) {
+      return [];
+    }
+    var seen = Object.create(null);
+    var result = [];
+    for (var i = 0; i < raw.length; i += 1) {
+      var hrid = String(raw[i] || "");
+      if (!hrid || seen[hrid]) {
+        continue;
+      }
+      seen[hrid] = true;
+      result.push(hrid);
+    }
+    return result;
+  }
+
+  function normalizeBuffs(raw) {
+    if (!Array.isArray(raw)) {
+      return [];
+    }
+    var result = [];
+    var seen = Object.create(null);
+    for (var i = 0; i < raw.length; i += 1) {
+      var buff = raw[i];
+      var typeHrid = String((buff && buff.typeHrid) || "");
+      if (!typeHrid) {
+        continue;
+      }
+      var normalized = {
+        uniqueHrid: String((buff && buff.uniqueHrid) || ""),
+        typeHrid: typeHrid,
+        ratioBoost: finite(buff && buff.ratioBoost, 0),
+        ratioBoostLevelBonus: finite(buff && buff.ratioBoostLevelBonus, 0),
+        flatBoost: finite(buff && buff.flatBoost, 0),
+        flatBoostLevelBonus: finite(buff && buff.flatBoostLevelBonus, 0),
+        startTime: String((buff && buff.startTime) || "0001-01-01T00:00:00Z"),
+        duration: Math.max(0, finite(buff && buff.duration, 0)),
+      };
+      var dedupeKey = [
+        normalized.typeHrid,
+        normalized.ratioBoost,
+        normalized.ratioBoostLevelBonus,
+        normalized.flatBoost,
+        normalized.flatBoostLevelBonus,
+        normalized.duration,
+      ].join("|");
+      if (seen[dedupeKey]) {
+        continue;
+      }
+      seen[dedupeKey] = true;
+      result.push(normalized);
+    }
+    return result;
+  }
+
+  function normalizePersonalBuffItemHrids(raw) {
+    if (!Array.isArray(raw)) {
+      return [];
+    }
+    var result = [];
+    var seen = Object.create(null);
+    for (var i = 0; i < raw.length; i += 1) {
+      var itemHrid = String(raw[i] || "");
+      if (!itemHrid || seen[itemHrid]) {
+        continue;
+      }
+      seen[itemHrid] = true;
+      result.push(itemHrid);
+    }
+    return result;
+  }
+
+  function buildPersonalBuffsFromItemHrids(raw) {
+    var itemHrids = normalizePersonalBuffItemHrids(raw);
+    var detailByItem = {
+      "/items/seal_of_combat_drop": { typeHrid: "/buff_types/combat_drop_quantity", flatBoost: 0.15, ratioBoost: 0 },
+      "/items/seal_of_attack_speed": { typeHrid: "/buff_types/attack_speed", flatBoost: 0, ratioBoost: 0.15 },
+      "/items/seal_of_cast_speed": { typeHrid: "/buff_types/cast_speed", flatBoost: 0.15, ratioBoost: 0 },
+      "/items/seal_of_damage": { typeHrid: "/buff_types/damage", flatBoost: 0, ratioBoost: 0.08 },
+      "/items/seal_of_critical_rate": { typeHrid: "/buff_types/critical_rate", flatBoost: 0.1, ratioBoost: 0 },
+      "/items/seal_of_wisdom": { typeHrid: "/buff_types/wisdom", flatBoost: 0.2, ratioBoost: 0 },
+      "/items/seal_of_rare_find": { typeHrid: "/buff_types/rare_find", flatBoost: 0.6, ratioBoost: 0 },
+    };
+    var buffs = [];
+    for (var i = 0; i < itemHrids.length; i += 1) {
+      var itemHrid = itemHrids[i];
+      var detail = detailByItem[itemHrid];
+      if (!detail || !detail.typeHrid) {
+        continue;
+      }
+      buffs.push({
+        uniqueHrid: "/buff_uniques/personal_" + itemHrid.split("/").pop(),
+        typeHrid: detail.typeHrid,
+        ratioBoost: finite(detail.ratioBoost, 0),
+        ratioBoostLevelBonus: 0,
+        flatBoost: finite(detail.flatBoost, 0),
+        flatBoostLevelBonus: 0,
+        startTime: "0001-01-01T00:00:00Z",
+        duration: 0,
+      });
+    }
+    return normalizeBuffs(buffs);
+  }
+
+  function ensureEncounterRecorderPatched() {
+    if (!CombatSimulator || !CombatSimulator.prototype) {
+      return;
+    }
+    if (CombatSimulator.prototype.__mwiLabEncounterRecorderPatched) {
+      return;
+    }
+    var originalStartNewEncounter = CombatSimulator.prototype.startNewEncounter;
+    var originalCheckEncounterEnd = CombatSimulator.prototype.checkEncounterEnd;
+    if (typeof originalStartNewEncounter !== "function" || typeof originalCheckEncounterEnd !== "function") {
+      return;
+    }
+
+    CombatSimulator.prototype.startNewEncounter = function () {
+      var result = originalStartNewEncounter.apply(this, arguments);
+      if (this && this.labyrinth) {
+        if (!this.__mwiLabEncounterStats || typeof this.__mwiLabEncounterStats !== "object") {
+          this.__mwiLabEncounterStats = { completed: [], currentStartNs: null };
+        }
+        if (!Array.isArray(this.__mwiLabEncounterStats.completed)) {
+          this.__mwiLabEncounterStats.completed = [];
+        }
+        this.__mwiLabEncounterStats.currentStartNs = Math.max(0, finite(this.simulationTime, 0));
+      }
+      return result;
+    };
+
+    CombatSimulator.prototype.checkEncounterEnd = function () {
+      var beforeEncounters = Math.max(0, Math.floor(finite(this && this.simResult ? this.simResult.encounters : 0, 0)));
+      var stats = this && this.__mwiLabEncounterStats && typeof this.__mwiLabEncounterStats === "object"
+        ? this.__mwiLabEncounterStats
+        : null;
+      var startNs = stats ? finite(stats.currentStartNs, NaN) : NaN;
+
+      var ended = originalCheckEncounterEnd.apply(this, arguments);
+      if (ended && this && this.labyrinth) {
+        if (!stats || typeof stats !== "object") {
+          stats = { completed: [], currentStartNs: null };
+          this.__mwiLabEncounterStats = stats;
+        }
+        if (!Array.isArray(stats.completed)) {
+          stats.completed = [];
+        }
+
+        var afterEncounters = Math.max(0, Math.floor(finite(this && this.simResult ? this.simResult.encounters : 0, 0)));
+        var reason = "timeout";
+        if (afterEncounters > beforeEncounters) {
+          reason = "success";
+        } else if (this.allPlayersDead === true) {
+          reason = "death";
+        }
+
+        var endNs = Math.max(0, finite(this.simulationTime, 0));
+        var beginNs = Number.isFinite(startNs) ? Math.max(0, startNs) : endNs;
+        var durationNs = Math.max(0, endNs - beginNs);
+        stats.completed.push({
+          reason: reason,
+          startNs: beginNs,
+          endNs: endNs,
+          durationNs: durationNs,
+        });
+        stats.currentStartNs = null;
+      }
+      return ended;
+    };
+
+    CombatSimulator.prototype.__mwiLabEncounterRecorderPatched = true;
+  }
+
+  function getDeathCount(simResult, playerHrid) {
+    if (!simResult || typeof simResult !== "object") {
+      return 0;
+    }
+    var deaths = simResult.deaths;
+    if (!deaths || typeof deaths !== "object") {
+      return 0;
+    }
+    var directCount = Math.floor(finite(deaths[playerHrid], 0));
+    if (directCount > 0) {
+      return directCount;
+    }
+    var total = 0;
+    for (var key in deaths) {
+      if (!Object.prototype.hasOwnProperty.call(deaths, key)) {
+        continue;
+      }
+      if (String(key || "").indexOf("player") !== 0) {
+        continue;
+      }
+      total += Math.max(0, Math.floor(finite(deaths[key], 0)));
+    }
+    return total;
+  }
+
+  async function simulateSingleRoomBatch(params) {
+    var roomDurationSeconds = Math.max(1, Number(params.roomDurationSeconds) || 120);
+    var trials = Math.max(1, Math.floor(Number(params.trials) || 1));
+    var roomLevel = Math.max(1, Math.floor(Number(params.mazeDifficulty) || 100));
+    var monsterHrid = String(params.monsterHrid || "");
+    var playerDto = clone(params.playerDto);
+    if (!playerDto || !monsterHrid) {
+      throw new Error("Missing playerDto or monsterHrid");
+    }
+
+    var player = Player.createFromDTO(playerDto);
+    // Lab clear-rate calculation always assumes no active food/coffee consumables.
+    player.food = [null, null, null];
+    player.drinks = [null, null, null];
+    player.extraBuffs = normalizeBuffs(
+      buildPersonalBuffsFromItemHrids(params.playerPersonalBuffItemHrids).concat(params.labyrinthCombatBuffs || [])
+    );
+
+    var mazeCrates = normalizeCrates(params.mazeCrateItemHrids);
+    var labyrinth = new Labyrinth(monsterHrid, roomLevel, mazeCrates);
+    player.zoneBuffs = labyrinth && Array.isArray(labyrinth.buffs) ? labyrinth.buffs : [];
+
+    ensureEncounterRecorderPatched();
+    var simulator = new CombatSimulator([player], null, labyrinth, { enableHpMpVisualization: false });
+    var simulationLimitNs = Math.max(1, Math.floor(roomDurationSeconds * trials * ONE_SECOND_NS));
+    simulator.__mwiLabEncounterStats = { completed: [], currentStartNs: null };
+    var simResult = await simulator.simulate(simulationLimitNs);
+    var encounters = Math.max(0, Math.floor(finite(simResult && simResult.encounters, 0)));
+    var deaths = clone((simResult && simResult.deaths) || {});
+    var completedEncounters =
+      simulator &&
+      simulator.__mwiLabEncounterStats &&
+      Array.isArray(simulator.__mwiLabEncounterStats.completed)
+        ? simulator.__mwiLabEncounterStats.completed.slice()
+        : [];
+    var completedTrialsRecorded = Math.max(0, completedEncounters.length);
+    var successes = encounters;
+    var playerHrid = String(player.hrid || "player1");
+    var failedByDeath = Math.max(0, getDeathCount(simResult, playerHrid));
+    var failedByTimeout = Math.max(0, completedTrialsRecorded - successes - failedByDeath);
+    var completedTrials = Math.max(0, successes + failedByDeath + failedByTimeout);
+
+    var simulatedNs = Math.max(0, finite(simResult && simResult.simulatedTime, simulationLimitNs));
+    var completedSpentNs = completedEncounters.reduce(function (sum, entry) {
+      return sum + Math.max(0, finite(entry && entry.durationNs, 0));
+    }, 0);
+    var lastEncounterFinishNs = Math.max(0, finite(simResult && simResult.lastEncounterFinishTime, 0));
+    var completedTimeNs = lastEncounterFinishNs > 0 ? lastEncounterFinishNs : completedSpentNs;
+    var totalSpentSeconds = Math.max(0, completedTimeNs / ONE_SECOND_NS);
+    var minElapsedSeconds = 0;
+    var maxElapsedSeconds = 0;
+    if (completedEncounters.length > 0) {
+      minElapsedSeconds = completedEncounters.reduce(function (minValue, entry) {
+        var seconds = Math.max(0, finite(entry && entry.durationNs, 0)) / ONE_SECOND_NS;
+        return Math.min(minValue, seconds);
+      }, Infinity);
+      maxElapsedSeconds = completedEncounters.reduce(function (maxValue, entry) {
+        var seconds = Math.max(0, finite(entry && entry.durationNs, 0)) / ONE_SECOND_NS;
+        return Math.max(maxValue, seconds);
+      }, 0);
+      if (!Number.isFinite(minElapsedSeconds)) {
+        minElapsedSeconds = 0;
+      }
+    }
+
+    var deathCount = failedByDeath;
+    var monsterKillCount = 0;
+    for (var deathKey in deaths) {
+      if (!Object.prototype.hasOwnProperty.call(deaths, deathKey)) {
+        continue;
+      }
+      if (String(deathKey || "").indexOf("player") === 0) {
+        continue;
+      }
+      monsterKillCount += Math.max(0, Math.floor(finite(deaths[deathKey], 0)));
+    }
+    var completedHours = completedTimeNs > 0 ? completedTimeNs / ONE_HOUR_NS : (simulatedNs > 0 ? simulatedNs / ONE_HOUR_NS : 0);
+    var uiHours = simulatedNs > 0 ? simulatedNs / ONE_HOUR_NS : completedHours;
+    var encountersPerHour = completedHours > 0 ? successes / completedHours : 0;
+    var monsterKillsPerHour = completedHours > 0 ? monsterKillCount / completedHours : 0;
+    var playerDeathsPerHour = completedHours > 0 ? failedByDeath / completedHours : 0;
+    var uiMonsterKillsPerHour = uiHours > 0 ? monsterKillCount / uiHours : 0;
+    var uiPlayerDeathsPerHour = uiHours > 0 ? failedByDeath / uiHours : 0;
+    var hadIncompleteFinalEncounter =
+      simulator &&
+      simulator.__mwiLabEncounterStats &&
+      Number.isFinite(finite(simulator.__mwiLabEncounterStats.currentStartNs, NaN));
+
+    return {
+      successes: successes,
+      trials: completedTrials,
+      totalSpentSeconds: totalSpentSeconds,
+      minElapsedSeconds: minElapsedSeconds,
+      maxElapsedSeconds: maxElapsedSeconds,
+      failedByTimeout: failedByTimeout,
+      failedByDeath: failedByDeath,
+      debug: {
+        requestedTrials: trials,
+        simulatedSecondsLimit: simulationLimitNs / ONE_SECOND_NS,
+        completedSeconds: completedTimeNs / ONE_SECOND_NS,
+        completedTrials: completedTrials,
+        completedTrialsRecorded: completedTrialsRecorded,
+        encounters: encounters,
+        monsterKillCount: monsterKillCount,
+        simulatedTime: simulatedNs,
+        lastEncounterFinishTime: lastEncounterFinishNs,
+        simulationLimitNs: simulationLimitNs,
+        encountersPerHour: encountersPerHour,
+        monsterKillsPerHour: monsterKillsPerHour,
+        playerDeathsPerHour: playerDeathsPerHour,
+        uiMonsterKillsPerHour: uiMonsterKillsPerHour,
+        uiPlayerDeathsPerHour: uiPlayerDeathsPerHour,
+        hadIncompleteFinalEncounter: hadIncompleteFinalEncounter,
+        deaths: deaths,
+        deathCount: deathCount,
+      },
+    };
+  }
+
+  self.onmessage = async function (event) {
+    var data = event && event.data ? event.data : {};
+    if (data.type !== "simulate_room") {
+      return;
+    }
+
+    var requestId = data.requestId;
+    try {
+      var trials = Math.max(1, Math.floor(Number(data.trials) || 1));
+      var run = await simulateSingleRoomBatch({
+        playerDto: data.playerDto,
+        playerPersonalBuffItemHrids: data.playerPersonalBuffItemHrids,
+        labyrinthCombatBuffs: data.labyrinthCombatBuffs,
+        monsterHrid: data.monsterHrid,
+        mazeDifficulty: data.mazeDifficulty,
+        roomDurationSeconds: data.roomDurationSeconds,
+        mazeCrateItemHrids: data.mazeCrateItemHrids,
+        trials: trials,
+      });
+
+      self.postMessage({
+        type: "room_progress",
+        requestId: requestId,
+        completed: trials,
+        trials: trials,
+      });
+
+      self.postMessage({
+        type: "room_result",
+        requestId: requestId,
+        successes: Math.max(0, Math.floor(finite(run && run.successes, 0))),
+        trials: Math.max(1, Math.floor(finite(run && run.trials, trials))),
+        totalSpentSeconds: Math.max(0, finite(run && run.totalSpentSeconds, 0)),
+        minElapsedSeconds: Math.max(0, finite(run && run.minElapsedSeconds, 0)),
+        maxElapsedSeconds: Math.max(0, finite(run && run.maxElapsedSeconds, 0)),
+        failedByTimeout: Math.max(0, Math.floor(finite(run && run.failedByTimeout, 0))),
+        failedByDeath: Math.max(0, Math.floor(finite(run && run.failedByDeath, 0))),
+        firstRunDebug: run && run.debug ? run.debug : null,
+      });
+    } catch (error) {
+      self.postMessage({
+        type: "room_error",
+        requestId: requestId,
+        error: error && error.message ? error.message : String(error),
+      });
+    }
+  };
+})();`;
+      return [runtimePrelude, vendorChunkSource, workerChunkSource, runtimeSuffix].join("\n\n");
+    }
+    function resetCombatSimulatorWorker(error) {
+      if (combatSimulatorWorker) {
+        try {
+          combatSimulatorWorker.terminate();
+        } catch (_e) {
+        }
+      }
+      combatSimulatorWorker = null;
+      if (combatSimulatorWorkerUrl) {
+        URL.revokeObjectURL(combatSimulatorWorkerUrl);
+        combatSimulatorWorkerUrl = "";
+      }
+      if (combatWorkerPendingRequests.size > 0) {
+        for (const pending of combatWorkerPendingRequests.values()) {
+          pending.reject(error || new Error("Combat worker reset"));
+        }
+        combatWorkerPendingRequests.clear();
+      }
+    }
+    async function ensureCombatSimulatorWorker() {
+      if (combatSimulatorWorker) {
+        return combatSimulatorWorker;
+      }
+      if (!combatWorkerScriptPromise) {
+        combatWorkerScriptPromise = Promise.all([
+          fetchCombatWorkerChunkText(COMBAT_SIM_VENDOR_CHUNK_URL),
+          fetchCombatWorkerChunkText(COMBAT_SIM_WORKER_CHUNK_URL)
+        ]).then(
+          ([vendorChunkSource, workerChunkSource]) => buildCombatSimulatorWorkerSource(vendorChunkSource, workerChunkSource)
+        );
+      }
+      const workerSource = await combatWorkerScriptPromise;
+      combatSimulatorWorkerUrl = URL.createObjectURL(new Blob([workerSource], { type: "text/javascript" }));
+      const worker = new Worker(combatSimulatorWorkerUrl);
+      worker.addEventListener("message", (event) => {
+        const message = event?.data || {};
+        const pending = combatWorkerPendingRequests.get(message.requestId);
+        if (!pending) {
+          return;
+        }
+        if (message.type === "room_progress") {
+          const completed = Math.max(0, Math.floor(finiteNumber(message.completed, 0)));
+          const targetCompleted = Math.min(pending.trials, completed);
+          const delta = Math.max(0, targetCompleted - pending.completed);
+          pending.completed = targetCompleted;
+          if (delta > 0 && pending.progressTracker) {
+            pending.progressTracker.add(delta);
+          }
+          return;
+        }
+        if (message.type === "room_result") {
+          combatWorkerPendingRequests.delete(message.requestId);
+          if (pending.progressTracker && pending.completed < pending.trials) {
+            pending.progressTracker.add(pending.trials - pending.completed);
+          }
+          pending.resolve(message);
+          return;
+        }
+        combatWorkerPendingRequests.delete(message.requestId);
+        pending.reject(new Error(String(message.error || "Unknown combat worker error")));
+      });
+      worker.addEventListener("error", (event) => {
+        const reason = new Error(event?.message || "Combat simulator worker crashed");
+        resetCombatSimulatorWorker(reason);
+        combatWorkerScriptPromise = null;
+      });
+      combatSimulatorWorker = worker;
+      return combatSimulatorWorker;
+    }
+    async function simulateCombatRoomWithWorker(params, progressTracker) {
+      const worker = await ensureCombatSimulatorWorker();
+      const requestId = ++combatWorkerRequestId;
+      const trials = Math.max(1, Math.floor(finiteNumber(params?.trials, 1)));
+      return new Promise((resolve, reject) => {
+        combatWorkerPendingRequests.set(requestId, {
+          resolve,
+          reject,
+          completed: 0,
+          trials,
+          progressTracker
+        });
+        try {
+          worker.postMessage({
+            type: "simulate_room",
+            requestId,
+            playerDto: deepCloneJson(params.playerDto),
+            playerPersonalBuffItemHrids: deepCloneJson(params.playerPersonalBuffItemHrids),
+            labyrinthCombatBuffs: deepCloneJson(params.labyrinthCombatBuffs),
+            monsterHrid: params.monsterHrid,
+            mazeDifficulty: params.mazeDifficulty,
+            roomDurationSeconds: params.roomDurationSeconds,
+            mazeCrateItemHrids: deepCloneJson(params.mazeCrateItemHrids),
+            trials
+          });
+        } catch (error) {
+          combatWorkerPendingRequests.delete(requestId);
+          reject(error);
+        }
+      });
+    }
+    function findRoomGridParent(totalCells) {
+      const allCells = Array.from(document.querySelectorAll('div[class*="LabyrinthPanel_roomCell"]'));
+      if (!allCells.length) {
+        return null;
+      }
+      const parentCount = /* @__PURE__ */ new Map();
+      for (const cell of allCells) {
+        const parent = cell.parentElement;
+        if (!parent) {
+          continue;
+        }
+        parentCount.set(parent, (parentCount.get(parent) || 0) + 1);
+      }
+      const candidates = [];
+      for (const [parent, count] of parentCount.entries()) {
+        if (count === totalCells) {
+          candidates.push(parent);
+        }
+      }
+      if (!candidates.length) {
+        return null;
+      }
+      return candidates.find((parent) => parent.querySelector('svg[aria-label="Exit"], use[href$="#flag"], use[xlink\\:href$="#flag"]')) || candidates[0];
+    }
+    function findRoomGridCells(totalCells) {
+      const preferredParent = findRoomGridParent(totalCells);
+      if (!preferredParent) {
+        return [];
+      }
+      return Array.from(preferredParent.children).filter((el) => String(el.className || "").includes("LabyrinthPanel_roomCell"));
+    }
+    function toRoomKey(x, y) {
+      return `${x},${y}`;
+    }
+    function parseRoomKey(roomKey) {
+      if (!roomKey) {
+        return null;
+      }
+      const [xRaw, yRaw] = String(roomKey).split(",");
+      const x = Number(xRaw);
+      const y = Number(yRaw);
+      if (!Number.isInteger(x) || !Number.isInteger(y)) {
+        return null;
+      }
+      return { x, y };
+    }
+    function getRoomKeyFromCell(cell) {
+      if (!cell) {
+        return "";
+      }
+      const x = Number(cell.getAttribute("data-room-x"));
+      const y = Number(cell.getAttribute("data-room-y"));
+      if (!Number.isInteger(x) || !Number.isInteger(y)) {
+        return "";
+      }
+      return toRoomKey(x, y);
+    }
+    function clearDisplayedRoomData() {
+      hidePreviewTooltip();
+      skillingPreviewByCell = /* @__PURE__ */ new WeakMap();
+      combatPreviewByCell = /* @__PURE__ */ new WeakMap();
+      latestRoomEstimateByRoomKey.clear();
+      const roomCells = Array.from(document.querySelectorAll('div[class*="LabyrinthPanel_roomCell"]'));
+      for (const cell of roomCells) {
+        removeBadge(cell);
+      }
+    }
+    function parseLabyrinthPathData(pathData) {
+      if (Array.isArray(pathData)) {
+        return pathData;
+      }
+      if (typeof pathData === "string" && pathData) {
+        try {
+          const parsed = JSON.parse(pathData);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch (_error) {
+          return [];
+        }
+      }
+      return [];
+    }
+    function getCurrentPathRoomKey(state) {
+      const labyrinth = state?.characterLabyrinth;
+      if (!labyrinth) {
+        return "";
+      }
+      const path = parseLabyrinthPathData(labyrinth.pathData);
+      const point = path[0];
+      if (!point) {
+        return "";
+      }
+      const x = Number(point.x);
+      const y = Number(point.y);
+      if (!Number.isInteger(x) || !Number.isInteger(y)) {
+        return "";
+      }
+      return `${x},${y}`;
+    }
+    function getLiveActionRateHost() {
+      const actionName = document.querySelector("div[class*='Header_actionName']");
+      if (!actionName) {
+        return null;
+      }
+      return actionName.querySelector("div[class*='Header_displayName']") || actionName;
+    }
+    function clearLiveActionRateDisplay() {
+      const existing = document.getElementById(LIVE_ACTION_RATE_ID);
+      if (existing) {
+        existing.remove();
+      }
+      lastLiveActionRateToken = "";
+    }
+    function upsertLiveActionRateDisplay(text, title) {
+      const host = getLiveActionRateHost();
+      if (!host) {
+        return false;
+      }
+      let node = document.getElementById(LIVE_ACTION_RATE_ID);
+      if (!node || node.parentElement !== host) {
+        if (node) {
+          node.remove();
+        }
+        node = document.createElement("span");
+        node.id = LIVE_ACTION_RATE_ID;
+        node.className = LIVE_ACTION_RATE_CLASS;
+        host.appendChild(node);
+      }
+      node.textContent = text;
+      node.style.color = LIVE_ACTION_RATE_MWITOOLS_COLOR;
+      node.style.fontSize = LIVE_ACTION_RATE_MWITOOLS_FONT_SIZE;
+      node.title = title || "";
+      return true;
+    }
+    function buildLabyrinthLiveProgressToken(roomProgress) {
+      if (!roomProgress || typeof roomProgress !== "object") {
+        return "";
+      }
+      const isEnhancing = roomProgress.targetLevel !== null && roomProgress.targetLevel !== void 0;
+      if (isEnhancing) {
+        return [
+          "enh",
+          Math.floor(finiteNumber(roomProgress.actionCounter, 0)),
+          Math.floor(finiteNumber(roomProgress.currentEnhLevel, 0)),
+          Math.floor(finiteNumber(roomProgress.targetLevel, 0)),
+          Math.round(normalizeChance(roomProgress.successRate) * 1e4),
+          Math.round(normalizeChance(roomProgress.doubleProgressChance) * 1e4)
+        ].join("|");
+      }
+      return [
+        "skill",
+        Math.floor(finiteNumber(roomProgress.actionCounter, 0)),
+        Math.round(clamp01(finiteNumber(roomProgress.currentProgress, 0)) * 1e4),
+        Math.round(finiteNumber(roomProgress.currentWorkValue, 0) * 1e3),
+        Math.round(finiteNumber(roomProgress.targetWorkValue, 0) * 1e3),
+        Math.round(finiteNumber(roomProgress.progressPerAction, 0) * 1e3),
+        Math.round(normalizeChance(roomProgress.successRate) * 1e4),
+        Math.round(normalizeChance(roomProgress.doubleProgressChance) * 1e4)
+      ].join("|");
+    }
+    function computeLabyrinthLiveSkillingEstimate(roomProgress) {
+      if (!roomProgress || typeof roomProgress !== "object") {
+        return null;
+      }
+      const isEnhancing = roomProgress.targetLevel !== null && roomProgress.targetLevel !== void 0;
+      const successChance = normalizeChance(roomProgress.successRate);
+      const doubleChance = normalizeChance(roomProgress.doubleProgressChance);
+      const fallbackActionMs = (isEnhancing ? BASE_ENHANCING_ACTION_SECONDS : BASE_ACTION_SECONDS) * 1e3;
+      const actionTimeMs = Math.max(1, finiteNumber(roomProgress.actionTimeMs, fallbackActionMs));
+      const totalAttempts = Math.max(0, Math.floor(ROOM_DURATION_SECONDS * 1e3 / actionTimeMs));
+      const actionCounter = Math.max(0, Math.floor(finiteNumber(roomProgress.actionCounter, 0)));
+      const attemptsLeft = Math.max(0, totalAttempts - actionCounter);
+      if (isEnhancing) {
+        const targetLevel = Math.max(0, Math.floor(finiteNumber(roomProgress.targetLevel, 0)));
+        if (targetLevel <= 0) {
+          return null;
+        }
+        const currentLevel = Math.max(0, Math.floor(finiteNumber(roomProgress.currentEnhLevel, 0)));
+        const clearStats2 = computeEnhancingClearStats({
+          attempts: attemptsLeft,
+          successChance,
+          doubleChance,
+          targetLevel,
+          startLevel: currentLevel
+        });
+        return {
+          isEnhancing: true,
+          successChance,
+          doubleChance,
+          actionCounter,
+          totalAttempts,
+          attemptsLeft,
+          targetLevel,
+          currentLevel,
+          clearChance: clamp01(finiteNumber(clearStats2?.clearChance, 0))
+        };
+      }
+      const workPower = Math.max(0, finiteNumber(roomProgress.progressPerAction, 0));
+      const progressPerSuccess = getEffectiveSkillingProgressPerSuccess(workPower);
+      const targetWorkValue = Math.max(0, finiteNumber(roomProgress.targetWorkValue, 0));
+      if (targetWorkValue <= 0) {
+        return null;
+      }
+      let currentWorkValue = Math.max(0, finiteNumber(roomProgress.currentWorkValue, 0));
+      if (targetWorkValue > 0 && currentWorkValue <= 0) {
+        const progressRatio = clamp01(finiteNumber(roomProgress.currentProgress, 0));
+        if (progressRatio > 0) {
+          currentWorkValue = targetWorkValue * progressRatio;
+        }
+      }
+      const remainingWorkValue = Math.max(0, targetWorkValue - currentWorkValue);
+      const clearStats = computeNonEnhancingClearStats({
+        attempts: attemptsLeft,
+        successChance,
+        doubleChance,
+        progressPerSuccess,
+        targetProgress: remainingWorkValue
+      });
+      return {
+        isEnhancing: false,
+        successChance,
+        doubleChance,
+        actionCounter,
+        totalAttempts,
+        attemptsLeft,
+        targetWorkValue,
+        currentWorkValue,
+        workPower,
+        progressPerSuccess,
+        clearChance: clamp01(finiteNumber(clearStats?.clearChance, 0))
+      };
+    }
+    function formatLabyrinthLiveEstimateText(estimate) {
+      const chanceText = (clamp01(estimate?.clearChance) * 100).toFixed(1);
+      if (estimate?.isEnhancing) {
+        return t("liveEnhFmt", {
+          chance: chanceText,
+          current: estimate.currentLevel,
+          target: estimate.targetLevel,
+          left: estimate.attemptsLeft
+        });
+      }
+      return t("liveBasicFmt", {
+        chance: chanceText,
+        left: estimate?.attemptsLeft || 0
+      });
+    }
+    function formatLabyrinthLiveEstimateTitle(estimate) {
+      if (!estimate) {
+        return "";
+      }
+      const parts = [
+        t("liveSuccessFmt", { chance: (clamp01(estimate.successChance) * 100).toFixed(1) }),
+        t("liveDoubleFmt", { chance: (clamp01(estimate.doubleChance) * 100).toFixed(1) }),
+        t("liveActionsFmt", { current: estimate.actionCounter, total: estimate.totalAttempts })
+      ];
+      if (estimate.isEnhancing) {
+        parts.push(t("liveEnhTitleFmt", { current: estimate.currentLevel, target: estimate.targetLevel }));
+      } else {
+        parts.push(t("liveProgressFmt", {
+          current: Math.round(finiteNumber(estimate.currentWorkValue, 0)),
+          target: Math.round(finiteNumber(estimate.targetWorkValue, 0))
+        }));
+      }
+      return parts.join(" | ");
+    }
+    function refreshLiveActionRateDisplay(state, roomProgressOverride = null) {
+      const roomProgress = roomProgressOverride || (state && typeof state === "object" ? state.labyrinthRoomProgress || null : null);
+      const progressToken = buildLabyrinthLiveProgressToken(roomProgress);
+      if (!progressToken) {
+        clearLiveActionRateDisplay();
+        return;
+      }
+      const existing = document.getElementById(LIVE_ACTION_RATE_ID);
+      if (progressToken === lastLiveActionRateToken && existing) {
+        return;
+      }
+      const estimate = computeLabyrinthLiveSkillingEstimate(roomProgress);
+      if (!estimate) {
+        clearLiveActionRateDisplay();
+        return;
+      }
+      const text = formatLabyrinthLiveEstimateText(estimate);
+      const title = formatLabyrinthLiveEstimateTitle(estimate);
+      const rendered = upsertLiveActionRateDisplay(text, title);
+      if (rendered) {
+        lastLiveActionRateToken = progressToken;
+      }
+    }
+    function handleLiveActionRateWsMessage(rawData) {
+      if (typeof rawData !== "string") {
+        return;
+      }
+      if (!rawData.includes('"labyrinth_room_progress"')) {
+        return;
+      }
+      try {
+        const msg = JSON.parse(rawData);
+        if (!msg || msg.type !== "labyrinth_room_progress") {
+          return;
+        }
+        refreshLiveActionRateDisplay(null, msg);
+        handleRoomLogProgressMessage(msg);
+      } catch (_error) {
+      }
+    }
+    function installLiveActionRateWsHook() {
+      liveActionRateWsHookInstalled = true;
+    }
+    function handleLiveActionRateWsObject(msg) {
+      if (!msg || msg.type !== "labyrinth_room_progress") {
+        return;
+      }
+      refreshLiveActionRateDisplay(null, msg);
+      handleRoomLogProgressMessage(msg);
+    }
+    function isRoomChallengeRunning(state) {
+      if (!state?.characterLabyrinth) {
+        return false;
+      }
+      if (state.labyrinthRoomProgress) {
+        return true;
+      }
+      return Array.isArray(state.labyrinthBattleMonsters) && state.labyrinthBattleMonsters.length > 0;
+    }
+    function clearSingleRoomDisplay(state, roomKey) {
+      if (!roomKey) {
+        return;
+      }
+      const labyrinth = state?.characterLabyrinth;
+      if (!labyrinth || !Array.isArray(labyrinth.roomData) || labyrinth.roomData.length === 0) {
+        return;
+      }
+      const [xRaw, yRaw] = String(roomKey).split(",");
+      const x = Number(xRaw);
+      const y = Number(yRaw);
+      if (!Number.isInteger(x) || !Number.isInteger(y)) {
+        return;
+      }
+      const rowCount = labyrinth.roomData.length;
+      const colCount = Array.isArray(labyrinth.roomData[0]) ? labyrinth.roomData[0].length : 0;
+      if (!colCount || x < 0 || y < 0 || x >= colCount || y >= rowCount) {
+        return;
+      }
+      const roomCells = findRoomGridCells(rowCount * colCount);
+      if (!roomCells.length) {
+        return;
+      }
+      const cell = roomCells[y * colCount + x];
+      if (!cell) {
+        return;
+      }
+      removeBadge(cell);
+      clearCellSkillingPreview(cell);
+      clearCellCombatPreview(cell);
+      clearRoomEstimate(roomKey);
+    }
+    function getRoomAtKey(state, roomKey) {
+      if (!state?.characterLabyrinth || !Array.isArray(state.characterLabyrinth.roomData)) {
+        return null;
+      }
+      const point = parseRoomKey(roomKey);
+      if (!point) {
+        return null;
+      }
+      const row = state.characterLabyrinth.roomData[point.y];
+      if (!Array.isArray(row)) {
+        return null;
+      }
+      return row[point.x] || null;
+    }
+    function isRoomKeyStillCalculable(state, roomKey) {
+      return isCalculableRoom(getRoomAtKey(state, roomKey));
+    }
+    function pruneInvalidRoomDisplays(state) {
+      if (!state?.characterLabyrinth) {
+        return;
+      }
+      if (!(latestRoomEstimateByRoomKey instanceof Map) || latestRoomEstimateByRoomKey.size === 0) {
+        return;
+      }
+      for (const roomKey of Array.from(latestRoomEstimateByRoomKey.keys())) {
+        if (isRoomKeyStillCalculable(state, roomKey)) {
+          continue;
+        }
+        clearSingleRoomDisplay(state, roomKey);
+      }
+    }
+    function syncCompletedRoomCleanup(state) {
+      if (!state?.characterLabyrinth) {
+        lastProgressRoomKey = "";
+        wasRoomChallengeRunning = false;
+        lastObservedPathRoomKey = "";
+        return;
+      }
+      const currentKey = getCurrentPathRoomKey(state);
+      const hasProgress = isRoomChallengeRunning(state);
+      if (hasProgress) {
+        if (!wasRoomChallengeRunning) {
+          lastProgressRoomKey = currentKey || lastObservedPathRoomKey || lastProgressRoomKey;
+        } else if (!lastProgressRoomKey && currentKey) {
+          lastProgressRoomKey = currentKey;
+        }
+        wasRoomChallengeRunning = true;
+        if (currentKey) {
+          lastObservedPathRoomKey = currentKey;
+        }
+        return;
+      }
+      if (wasRoomChallengeRunning && lastProgressRoomKey) {
+        if (!isRoomKeyStillCalculable(state, lastProgressRoomKey)) {
+          clearSingleRoomDisplay(state, lastProgressRoomKey);
+        }
+      } else if (!wasRoomChallengeRunning && lastObservedPathRoomKey && currentKey && currentKey !== lastObservedPathRoomKey) {
+        if (!isRoomKeyStillCalculable(state, lastObservedPathRoomKey)) {
+          clearSingleRoomDisplay(state, lastObservedPathRoomKey);
+        }
+      }
+      lastProgressRoomKey = "";
+      wasRoomChallengeRunning = false;
+      lastObservedPathRoomKey = currentKey || "";
+    }
+    function getLabyrinthDisplaySignature(state) {
+      const labyrinth = state?.characterLabyrinth;
+      if (!labyrinth) {
+        return "";
+      }
+      return hashString(
+        stableStringify({
+          startedAt: String(labyrinth.startedAt || ""),
+          currentFloor: Math.max(0, Math.floor(finiteNumber(labyrinth.currentFloor, 0)))
+        })
+      );
+    }
+    function getCalculableRoomSnapshot(state) {
+      const roomData = state?.characterLabyrinth?.roomData;
+      if (!Array.isArray(roomData) || roomData.length === 0) {
+        return {
+          count: 0,
+          signature: ""
+        };
+      }
+      const parts = [];
+      for (let y = 0; y < roomData.length; y += 1) {
+        const row = roomData[y];
+        if (!Array.isArray(row)) {
+          continue;
+        }
+        for (let x = 0; x < row.length; x += 1) {
+          const room = row[x];
+          const roomType = String(room?.roomType || "");
+          if (roomType !== LABYRINTH_COMBAT_ROOM_TYPE && roomType !== LABYRINTH_SKILLING_ROOM_TYPE) {
+            continue;
+          }
+          parts.push(
+            `${x},${y}|${roomType}|${String(room?.monsterHrid || "")}|${String(room?.skillHrid || "")}|${Math.max(
+              0,
+              Math.floor(finiteNumber(room?.recommendedLevel, 0))
+            )}`
+          );
+        }
+      }
+      parts.sort();
+      return {
+        count: parts.length,
+        signature: parts.length > 0 ? hashString(parts.join("||")) : "",
+        entries: parts
+      };
+    }
+    function resetAutoRecalcState() {
+      autoRecalcArmed = false;
+      autoRecalcLabyrinthSignature = "";
+      lastCalculatedCalculableRoomSignature = "";
+      lastCalculatedCalculableRoomCount = 0;
+      lastCalculatedCalculableRoomEntries = /* @__PURE__ */ new Set();
+      pendingAutoRecalcRoomKeys = /* @__PURE__ */ new Set();
+      if (autoRecalcTimerId) {
+        window.clearTimeout(autoRecalcTimerId);
+        autoRecalcTimerId = 0;
+      }
+    }
+    function updateAutoRecalcBaseline(state) {
+      const snapshot = getCalculableRoomSnapshot(state);
+      autoRecalcArmed = true;
+      autoRecalcLabyrinthSignature = getLabyrinthDisplaySignature(state);
+      lastCalculatedCalculableRoomSignature = snapshot.signature;
+      lastCalculatedCalculableRoomCount = snapshot.count;
+      lastCalculatedCalculableRoomEntries = new Set(snapshot.entries || []);
+    }
+    function getNewCalculableRoomKeys(state) {
+      if (!autoRecalcArmed || manualUpdateRunning) {
+        return [];
+      }
+      if (!state?.characterLabyrinth || !Array.isArray(state.characterLabyrinth.roomData)) {
+        return [];
+      }
+      const signature = getLabyrinthDisplaySignature(state);
+      if (!signature) {
+        return [];
+      }
+      if (autoRecalcLabyrinthSignature && signature !== autoRecalcLabyrinthSignature) {
+        resetAutoRecalcState();
+        return [];
+      }
+      const snapshot = getCalculableRoomSnapshot(state);
+      if (!Array.isArray(snapshot.entries) || snapshot.entries.length === 0) {
+        return [];
+      }
+      const addedRoomKeys = [];
+      const seenRoomKeys = /* @__PURE__ */ new Set();
+      for (const entry of snapshot.entries) {
+        if (lastCalculatedCalculableRoomEntries.has(entry)) {
+          continue;
+        }
+        const roomKey = String(entry).split("|")[0] || "";
+        if (!roomKey || seenRoomKeys.has(roomKey)) {
+          continue;
+        }
+        seenRoomKeys.add(roomKey);
+        addedRoomKeys.push(roomKey);
+      }
+      return addedRoomKeys;
+    }
+    function scheduleAutoRecalcIfNeeded(state) {
+      const roomKeys = getNewCalculableRoomKeys(state);
+      if (!roomKeys.length) {
+        return;
+      }
+      for (const roomKey of roomKeys) {
+        pendingAutoRecalcRoomKeys.add(roomKey);
+      }
+      if (autoRecalcTimerId) {
+        return;
+      }
+      autoRecalcTimerId = window.setTimeout(() => {
+        autoRecalcTimerId = 0;
+        const latestState = getGameState();
+        const latestRoomKeys = getNewCalculableRoomKeys(latestState);
+        for (const roomKey of latestRoomKeys) {
+          pendingAutoRecalcRoomKeys.add(roomKey);
+        }
+        const keysToRecalc = Array.from(pendingAutoRecalcRoomKeys);
+        pendingAutoRecalcRoomKeys.clear();
+        if (!keysToRecalc.length) {
+          return;
+        }
+        runManualUpdate({ trigger: "auto-new-tiles", roomKeys: keysToRecalc });
+      }, AUTO_RECALC_DEBOUNCE_MS);
+    }
+    function markLabyrinthTransition(nextSignature = "") {
+      const normalizedSignature = String(nextSignature || "");
+      clearDisplayedRoomData();
+      lastProgressRoomKey = "";
+      wasRoomChallengeRunning = false;
+      lastObservedPathRoomKey = "";
+      lastLabyrinthDisplaySignature = normalizedSignature;
+      activeLoanSimulationOptions = null;
+      resetAutoRecalcState();
+    }
+    function markLabyrinthTransitionPreserveTooltip(nextSignature = "") {
+      const normalizedSignature = String(nextSignature || "");
+      skillingPreviewByCell = /* @__PURE__ */ new WeakMap();
+      combatPreviewByCell = /* @__PURE__ */ new WeakMap();
+      latestRoomEstimateByRoomKey.clear();
+      const roomCells = Array.from(document.querySelectorAll('div[class*="LabyrinthPanel_roomCell"]'));
+      for (const cell of roomCells) {
+        removeBadge(cell);
+      }
+      lastProgressRoomKey = "";
+      wasRoomChallengeRunning = false;
+      lastObservedPathRoomKey = "";
+      lastLabyrinthDisplaySignature = normalizedSignature;
+      activeLoanSimulationOptions = null;
+      resetAutoRecalcState();
+    }
+    function removeBadge(cell) {
+      const badge = cell.querySelector(`.${BADGE_CLASS}`);
+      if (badge) {
+        badge.remove();
+      }
+    }
+    function formatEtaText(expectedSeconds, shownPercent) {
+      if (shownPercent === 0 || expectedSeconds === Infinity) {
+        return ETA_INFINITE_TEXT;
+      }
+      if (!Number.isFinite(expectedSeconds)) {
+        return "--";
+      }
+      const roundedSeconds = Math.max(0, Math.ceil(expectedSeconds));
+      if (roundedSeconds > 999) {
+        return "999+";
+      }
+      return `${roundedSeconds}s`;
+    }
+    function upsertBadge(cell, probability, expectedSeconds, details) {
+      let badge = cell.querySelector(`.${BADGE_CLASS}`);
+      if (!badge) {
+        badge = document.createElement("div");
+        badge.className = BADGE_CLASS;
+        cell.style.position = "relative";
+        cell.appendChild(badge);
+      }
+      let chanceNode = badge.querySelector(`.${BADGE_CLASS}__chance`);
+      if (!chanceNode) {
+        chanceNode = document.createElement("div");
+        chanceNode.className = `${BADGE_CLASS}__chance`;
+        badge.appendChild(chanceNode);
+      }
+      let etaNode = badge.querySelector(`.${BADGE_CLASS}__eta`);
+      if (!etaNode) {
+        etaNode = document.createElement("div");
+        etaNode.className = `${BADGE_CLASS}__eta`;
+        badge.appendChild(etaNode);
+      }
+      const shownPercent = Math.round(probability * 100);
+      chanceNode.textContent = `${shownPercent}%`;
+      etaNode.textContent = formatEtaText(expectedSeconds, shownPercent);
+      badge.style.backgroundColor = getBadgeColor(probability);
+      badge.title = details;
+    }
+    function clearRoomEstimate(roomKey) {
+      if (!roomKey) {
+        return;
+      }
+      latestRoomEstimateByRoomKey.delete(roomKey);
+    }
+    function updateRoomEstimate(roomKey, result) {
+      if (!roomKey || !result) {
+        return;
+      }
+      const clearChance = clamp01(finiteNumber(result.clearChance, 0));
+      const expectedSeconds = finiteNumber(result.expectedSecondsPerClear, Infinity);
+      const shownPercent = Math.round(clearChance * 100);
+      const etaText = formatEtaText(expectedSeconds, shownPercent);
+      latestRoomEstimateByRoomKey.set(roomKey, {
+        clearChance,
+        expectedSeconds,
+        shownPercent,
+        etaText,
+        isImpassable: etaText === ETA_INFINITE_TEXT
+      });
+    }
+    function computeRoomClearChance(state, initClientData, room, maxEnhancementByItem, options = {}) {
+      if (!room || room.roomType !== LABYRINTH_SKILLING_ROOM_TYPE || !room.skillHrid) {
+        return null;
+      }
+      const skillId = skillHridToSkillId(room.skillHrid);
+      if (!skillId) {
+        return null;
+      }
+      const actionTypeHrid = skillIdToActionTypeHrid(skillId);
+      const isEnhancingRoom = skillId === "enhancing";
+      const crateSelection = getLabyrinthCrateSelection(state);
+      const labyrinthUpgradeLevels = resolveLabyrinthUpgradeLevels(options);
+      const teaCrateItemHrid = String(crateSelection?.teaCrateItemHrid || "");
+      const crateBuffs = getCrateBuffs(initClientData, teaCrateItemHrid);
+      const labyrinthUpgradeMetrics = buildLabyrinthUpgradeSkillingMetrics(labyrinthUpgradeLevels);
+      const labyrinthExperienceBonus = getLabyrinthUpgradeExperienceBonus(labyrinthUpgradeLevels);
+      const includePersonalBuffs = false;
+      const { equipmentMetrics, globalMetrics } = getSkillingGlobalMetrics(state, skillId, actionTypeHrid, {
+        includePersonalBuffs
+      });
+      const fallbackMetrics = createEmptySkillingMetrics();
+      addSkillingMetrics(fallbackMetrics, equipmentMetrics);
+      const roomLoadout = getSkillingRoomLoadoutMetrics(
+        state,
+        initClientData,
+        room,
+        skillId,
+        actionTypeHrid,
+        maxEnhancementByItem,
+        fallbackMetrics
+      );
+      const crateMetrics = getSkillingBuffMetrics(skillId, crateBuffs);
+      const loanMetrics = createEmptySkillingMetrics();
+      const combinedMetrics = createEmptySkillingMetrics();
+      addSkillingMetrics(combinedMetrics, globalMetrics);
+      addSkillingMetrics(combinedMetrics, roomLoadout.metrics);
+      addSkillingMetrics(combinedMetrics, crateMetrics);
+      addSkillingMetrics(combinedMetrics, labyrinthUpgradeMetrics);
+      addSkillingMetrics(combinedMetrics, loanMetrics);
+      const baseSkillLevel = getSkillLevel(state.characterSkillMap, room.skillHrid);
+      const skillLevelBonus = combinedMetrics.skillLevelBonus;
+      const efficiencyBonus = combinedMetrics.efficiencyBonus;
+      const actionSpeedBonus = combinedMetrics.actionSpeedBonus;
+      const successBonus = combinedMetrics.successBonus;
+      const experienceBonusDetail = computeSkillingExperienceBonusForRoom(
+        state,
+        skillId,
+        actionTypeHrid,
+        roomLoadout.metrics,
+        crateMetrics,
+        loanMetrics,
+        includePersonalBuffs,
+        labyrinthExperienceBonus
+      );
+      const experienceBonus = finiteNumber(experienceBonusDetail?.totalBonus, 0);
+      const crateDoubleProgressBonus = combinedMetrics.crateDoubleProgressBonus;
+      const gatheringBonus = combinedMetrics.gatheringBonus;
+      const effectiveSkillLevel = baseSkillLevel + skillLevelBonus;
+      const roomLevel = Number(room.recommendedLevel || 0);
+      const levelDelta = effectiveSkillLevel - roomLevel;
+      const levelBonus = levelDelta >= 0 ? levelDelta * 5e-3 : levelDelta * 0.01;
+      const successChance = clamp01(0.8 * (1 + levelBonus + successBonus));
+      const doubleChance = clamp01(crateDoubleProgressBonus + gatheringBonus);
+      const rewardPreview = createRoomRewardPreview(state, room);
+      const baseActionSeconds = isEnhancingRoom ? BASE_ENHANCING_ACTION_SECONDS : BASE_ACTION_SECONDS;
+      const actionSeconds = baseActionSeconds / Math.max(0.05, 1 + actionSpeedBonus);
+      const attempts = Math.max(1, Math.floor(ROOM_DURATION_SECONDS / actionSeconds));
+      const baseExperiencePerRoom = Math.max(0, roomLevel * 50);
+      const experienceMultiplier = Math.max(0, finiteNumber(experienceBonusDetail?.multiplier, 1));
+      const experiencePerRoom = Math.max(0, baseExperiencePerRoom * experienceMultiplier);
+      const experiencePerAction = attempts > 0 ? Math.max(0, experiencePerRoom / attempts) : experiencePerRoom;
+      const speedDeltaForOneMoreAttempt = computeActionSpeedDeltaForOneMoreAttempt(baseActionSeconds, actionSpeedBonus, attempts);
+      let progressPerSuccess = null;
+      let workPower = null;
+      let targetProgress = null;
+      let targetEnhLevel = null;
+      let clearStats = null;
+      let preview = null;
+      if (isEnhancingRoom) {
+        targetEnhLevel = getEnhancingTargetLevelByRoomLevel(roomLevel);
+        clearStats = computeEnhancingClearStats({
+          attempts,
+          successChance,
+          doubleChance,
+          targetLevel: targetEnhLevel,
+          startLevel: 0
+        });
+        const nextLevelDelta = effectiveSkillLevel + 1 - roomLevel;
+        const nextLevelBonus = nextLevelDelta >= 0 ? nextLevelDelta * 5e-3 : nextLevelDelta * 0.01;
+        const nextLevelClearStats = computeEnhancingClearStats({
+          attempts,
+          successChance: clamp01(0.8 * (1 + nextLevelBonus + successBonus)),
+          doubleChance,
+          targetLevel: targetEnhLevel,
+          startLevel: 0
+        });
+        const speedTierClearStats = Number.isFinite(speedDeltaForOneMoreAttempt) ? computeEnhancingClearStats({
+          attempts: attempts + 1,
+          successChance,
+          doubleChance,
+          targetLevel: targetEnhLevel,
+          startLevel: 0
+        }) : null;
+        const skillingSuccessUpgradeLevel = getLabyrinthUpgradeLevel(
+          labyrinthUpgradeLevels,
+          LABYRINTH_UPGRADE_KEY_SKILLING_SUCCESS
+        );
+        const nextSkillingSuccessClearStats = skillingSuccessUpgradeLevel < LABYRINTH_SKILLING_UPGRADE_MAX_LEVEL ? computeEnhancingClearStats({
+          attempts,
+          successChance: clamp01(
+            0.8 * (1 + levelBonus + successBonus + LABYRINTH_UPGRADE_SKILLING_SUCCESS_STEP_RATIO)
+          ),
+          doubleChance,
+          targetLevel: targetEnhLevel,
+          startLevel: 0
+        }) : null;
+        const skillingDoubleProgressUpgradeLevel = getLabyrinthUpgradeLevel(
+          labyrinthUpgradeLevels,
+          LABYRINTH_UPGRADE_KEY_SKILLING_DOUBLE_PROGRESS
+        );
+        const nextSkillingDoubleProgressClearStats = skillingDoubleProgressUpgradeLevel < LABYRINTH_SKILLING_UPGRADE_MAX_LEVEL ? computeEnhancingClearStats({
+          attempts,
+          successChance,
+          doubleChance: clamp01(doubleChance + LABYRINTH_UPGRADE_STEP_RATIO),
+          targetLevel: targetEnhLevel,
+          startLevel: 0
+        }) : null;
+        preview = {
+          type: "enhancing",
+          targetLevel: targetEnhLevel,
+          successChance,
+          doubleChance,
+          attempts,
+          actionSeconds,
+          speedDeltaForOneMoreAttempt,
+          speedTierClearChance: speedTierClearStats === null ? null : clamp01(finiteNumber(speedTierClearStats.clearChance, 0)),
+          nextLevelClearChance: clamp01(finiteNumber(nextLevelClearStats.clearChance, 0)),
+          nextSkillingSuccessClearChance: nextSkillingSuccessClearStats === null ? null : clamp01(finiteNumber(nextSkillingSuccessClearStats.clearChance, 0)),
+          nextSkillingDoubleProgressClearChance: nextSkillingDoubleProgressClearStats === null ? null : clamp01(finiteNumber(nextSkillingDoubleProgressClearStats.clearChance, 0)),
+          experiencePerAction,
+          experiencePerRoom,
+          experiencePerHour: 0,
+          rewardPreview
+        };
+      } else {
+        workPower = Math.max(0, effectiveSkillLevel * (1 + efficiencyBonus));
+        progressPerSuccess = getEffectiveSkillingProgressPerSuccess(workPower);
+        targetProgress = roomLevel * 10;
+        const neededUnits = progressPerSuccess > 0 ? Math.ceil(targetProgress / progressPerSuccess - 1e-9) : 0;
+        const efficiencyDeltaForOneLessProgressUnit = computeEfficiencyDeltaForOneLessProgressUnit(
+          targetProgress,
+          effectiveSkillLevel,
+          efficiencyBonus,
+          neededUnits
+        );
+        clearStats = computeNonEnhancingClearStats({
+          attempts,
+          successChance,
+          doubleChance,
+          progressPerSuccess,
+          targetProgress
+        });
+        const nextLevelEffectiveSkillLevel = effectiveSkillLevel + 1;
+        const nextLevelDelta = nextLevelEffectiveSkillLevel - roomLevel;
+        const nextLevelBonus = nextLevelDelta >= 0 ? nextLevelDelta * 5e-3 : nextLevelDelta * 0.01;
+        const nextLevelSuccessChance = clamp01(0.8 * (1 + nextLevelBonus + successBonus));
+        const nextLevelClearStats = computeNonEnhancingClearStats({
+          attempts,
+          successChance: nextLevelSuccessChance,
+          doubleChance,
+          progressPerSuccess: getEffectiveSkillingProgressPerSuccess(
+            nextLevelEffectiveSkillLevel * (1 + efficiencyBonus)
+          ),
+          targetProgress
+        });
+        const efficiencyTierClearStats = efficiencyDeltaForOneLessProgressUnit === null ? null : computeNonEnhancingClearStats({
+          attempts,
+          successChance,
+          doubleChance,
+          progressPerSuccess: getEffectiveSkillingProgressPerSuccess(
+            effectiveSkillLevel * (1 + efficiencyBonus + efficiencyDeltaForOneLessProgressUnit)
+          ),
+          targetProgress
+        });
+        const speedTierClearStats = Number.isFinite(speedDeltaForOneMoreAttempt) ? computeNonEnhancingClearStats({
+          attempts: attempts + 1,
+          successChance,
+          doubleChance,
+          progressPerSuccess,
+          targetProgress
+        }) : null;
+        const skillingSuccessUpgradeLevel = getLabyrinthUpgradeLevel(
+          labyrinthUpgradeLevels,
+          LABYRINTH_UPGRADE_KEY_SKILLING_SUCCESS
+        );
+        const nextSkillingSuccessClearStats = skillingSuccessUpgradeLevel < LABYRINTH_SKILLING_UPGRADE_MAX_LEVEL ? computeNonEnhancingClearStats({
+          attempts,
+          successChance: clamp01(
+            0.8 * (1 + levelBonus + successBonus + LABYRINTH_UPGRADE_SKILLING_SUCCESS_STEP_RATIO)
+          ),
+          doubleChance,
+          progressPerSuccess,
+          targetProgress
+        }) : null;
+        const skillingDoubleProgressUpgradeLevel = getLabyrinthUpgradeLevel(
+          labyrinthUpgradeLevels,
+          LABYRINTH_UPGRADE_KEY_SKILLING_DOUBLE_PROGRESS
+        );
+        const nextSkillingDoubleProgressClearStats = skillingDoubleProgressUpgradeLevel < LABYRINTH_SKILLING_UPGRADE_MAX_LEVEL ? computeNonEnhancingClearStats({
+          attempts,
+          successChance,
+          doubleChance: clamp01(doubleChance + LABYRINTH_UPGRADE_STEP_RATIO),
+          progressPerSuccess,
+          targetProgress
+        }) : null;
+        preview = {
+          type: "skilling",
+          workPower,
+          effectiveProgressPerSuccess: progressPerSuccess,
+          successChance,
+          doubleChance,
+          attempts,
+          actionSeconds,
+          efficiencyDeltaForOneLessProgressUnit,
+          speedDeltaForOneMoreAttempt,
+          nextLevelClearChance: clamp01(finiteNumber(nextLevelClearStats.clearChance, 0)),
+          efficiencyTierClearChance: efficiencyTierClearStats === null ? null : clamp01(finiteNumber(efficiencyTierClearStats.clearChance, 0)),
+          speedTierClearChance: speedTierClearStats === null ? null : clamp01(finiteNumber(speedTierClearStats.clearChance, 0)),
+          nextSkillingSuccessClearChance: nextSkillingSuccessClearStats === null ? null : clamp01(finiteNumber(nextSkillingSuccessClearStats.clearChance, 0)),
+          nextSkillingDoubleProgressClearChance: nextSkillingDoubleProgressClearStats === null ? null : clamp01(finiteNumber(nextSkillingDoubleProgressClearStats.clearChance, 0)),
+          experiencePerAction,
+          experiencePerRoom,
+          experiencePerHour: 0,
+          rewardPreview
+        };
+      }
+      const clearChance = clearStats.clearChance;
+      const expectedSecondsOnSuccessfulRun = Number.isFinite(clearStats.expectedAttemptsOnClear) ? clearStats.expectedAttemptsOnClear * actionSeconds : null;
+      const expectedSecondsPerClear = clearChance > 0 && Number.isFinite(expectedSecondsOnSuccessfulRun) ? (clearChance * expectedSecondsOnSuccessfulRun + (1 - clearChance) * ROOM_DURATION_SECONDS) / clearChance : Infinity;
+      const expectedSecondsPerClearForExpPerHour = clearChance > 0 && Number.isFinite(expectedSecondsOnSuccessfulRun) ? (clearChance * (expectedSecondsOnSuccessfulRun + ROOM_ENTRY_SECONDS) + (1 - clearChance) * (ROOM_DURATION_SECONDS + ROOM_ENTRY_SECONDS)) / clearChance : Infinity;
+      const experiencePerHour = Number.isFinite(expectedSecondsPerClearForExpPerHour) && expectedSecondsPerClearForExpPerHour > 0 ? Math.max(0, experiencePerRoom * (3600 / expectedSecondsPerClearForExpPerHour)) : 0;
+      if (preview && typeof preview === "object") {
+        preview.experiencePerHour = experiencePerHour;
+      }
+      return {
+        clearChance,
+        expectedSecondsPerClear,
+        skillingPreview: preview,
+        debug: [
+          `skill=${skillId}`,
+          `loadout=${roomLoadout.loadoutInfo.loadout?.name || roomLoadout.loadoutInfo.loadoutId || "current"}`,
+          `mode=${roomLoadout.mode}`,
+          `base=${baseSkillLevel.toFixed(2)}`,
+          `skill+${skillLevelBonus.toFixed(2)}`,
+          `globalSkill+${globalMetrics.skillLevelBonus.toFixed(2)}`,
+          `lvlBonus=${(levelBonus * 100).toFixed(1)}%`,
+          `eff+${(efficiencyBonus * 100).toFixed(1)}%`,
+          `globalEff+${(globalMetrics.efficiencyBonus * 100).toFixed(1)}%`,
+          labyrinthUpgradeMetrics.actionSpeedBonus > 0 ? `labAct+${(labyrinthUpgradeMetrics.actionSpeedBonus * 100).toFixed(1)}%` : "",
+          labyrinthUpgradeMetrics.efficiencyBonus > 0 ? `labEff+${(labyrinthUpgradeMetrics.efficiencyBonus * 100).toFixed(1)}%` : "",
+          labyrinthUpgradeMetrics.successBonus > 0 ? `labSuccess+${(labyrinthUpgradeMetrics.successBonus * 100).toFixed(1)}%` : "",
+          labyrinthUpgradeMetrics.crateDoubleProgressBonus > 0 ? `labDouble+${(labyrinthUpgradeMetrics.crateDoubleProgressBonus * 100).toFixed(1)}%` : "",
+          `exp+${(experienceBonus * 100).toFixed(1)}%`,
+          `exp(wisdom)=${(finiteNumber(experienceBonusDetail?.genericBonus, 0) * 100).toFixed(1)}%`,
+          `exp(skilling)=${(finiteNumber(experienceBonusDetail?.skillingBonus, 0) * 100).toFixed(1)}%`,
+          `exp(skill)=${(finiteNumber(experienceBonusDetail?.skillBonus, 0) * 100).toFixed(1)}%`,
+          labyrinthExperienceBonus > 0 ? `labExp+${(labyrinthExperienceBonus * 100).toFixed(1)}%` : "",
+          `success=${(successChance * 100).toFixed(1)}%`,
+          `globalSuccess+${(globalMetrics.successBonus * 100).toFixed(1)}%`,
+          `double=${(doubleChance * 100).toFixed(1)}%`,
+          hasMeaningfulSkillingMetrics(loanMetrics) ? "loan=1" : "",
+          isEnhancingRoom ? `target=+${targetEnhLevel}` : `target=${Math.round(targetProgress)}`,
+          isEnhancingRoom ? "" : `work=${workPower.toFixed(2)}${Math.abs(workPower - progressPerSuccess) > 1e-9 ? `->${progressPerSuccess}` : ""}`,
+          `attempts=${attempts}`,
+          `eta=${formatEtaText(expectedSecondsPerClear, Math.round(clearChance * 100))}`
+        ].filter(Boolean).join(" | ")
+      };
+    }
+    function toPascalCase(text) {
+      return String(text || "").split("_").filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join("");
+    }
+    function getLabyrinthRoomLoadoutSettingKey(room) {
+      if (!room) {
+        return "";
+      }
+      if (room.roomType === LABYRINTH_SKILLING_ROOM_TYPE && room.skillHrid) {
+        const suffix = toPascalCase(skillHridToSkillId(room.skillHrid));
+        return suffix ? `labyrinthLoadout${suffix}` : "";
+      }
+      if (room.roomType === LABYRINTH_COMBAT_ROOM_TYPE && room.monsterHrid) {
+        const monsterTail = String(room.monsterHrid).split("/").pop() || "";
+        const suffix = toPascalCase(monsterTail);
+        return suffix ? `labyrinthLoadout${suffix}` : "";
+      }
+      return "";
+    }
+    function getLoadoutById(loadoutDict, loadoutId) {
+      if (!loadoutDict || !Number.isFinite(Number(loadoutId))) {
+        return null;
+      }
+      const numericId = Number(loadoutId);
+      if (loadoutDict[numericId]) {
+        return loadoutDict[numericId];
+      }
+      if (loadoutDict[String(numericId)]) {
+        return loadoutDict[String(numericId)];
+      }
+      for (const value of Object.values(loadoutDict)) {
+        if (Number(value?.id) === numericId) {
+          return value;
+        }
+      }
+      return null;
+    }
+    function getLabyrinthRoomLoadout(state, room) {
+      const settingKey = getLabyrinthRoomLoadoutSettingKey(room);
+      const loadoutId = Number(state?.characterSetting?.[settingKey] || 0);
+      const loadout = getLoadoutById(state?.characterLoadoutDict, loadoutId);
+      return {
+        settingKey,
+        loadoutId,
+        loadout
+      };
+    }
+    function isCombatLoadout(loadout) {
+      return Boolean(loadout && loadout.actionTypeHrid === "/action_types/combat");
+    }
+    function listCombatLoadouts(state) {
+      const loadouts = [];
+      for (const value of Object.values(state?.characterLoadoutDict || {})) {
+        if (isCombatLoadout(value)) {
+          loadouts.push(value);
+        }
+      }
+      loadouts.sort((a, b) => Number(a?.id || 0) - Number(b?.id || 0));
+      return loadouts;
+    }
+    function getMostUsedCombatLoadoutIdOnCurrentLabyrinth(state) {
+      const roomData = state?.characterLabyrinth?.roomData;
+      if (!Array.isArray(roomData) || roomData.length === 0) {
+        return 0;
+      }
+      const countByLoadoutId = /* @__PURE__ */ new Map();
+      for (const row of roomData) {
+        if (!Array.isArray(row)) {
+          continue;
+        }
+        for (const room of row) {
+          if (!room || room.roomType !== LABYRINTH_COMBAT_ROOM_TYPE) {
+            continue;
+          }
+          const key = getLabyrinthRoomLoadoutSettingKey(room);
+          const id = Number(state?.characterSetting?.[key] || 0);
+          if (!Number.isFinite(id) || id <= 0) {
+            continue;
+          }
+          const loadout = getLoadoutById(state?.characterLoadoutDict, id);
+          if (!isCombatLoadout(loadout)) {
+            continue;
+          }
+          countByLoadoutId.set(id, (countByLoadoutId.get(id) || 0) + 1);
+        }
+      }
+      let bestId = 0;
+      let bestCount = 0;
+      for (const [id, count] of countByLoadoutId.entries()) {
+        if (count > bestCount || count === bestCount && id < bestId) {
+          bestId = id;
+          bestCount = count;
+        }
+      }
+      return bestId;
+    }
+    function resolveCombatRoomLoadout(state, room) {
+      const direct = getLabyrinthRoomLoadout(state, room);
+      const selectedLoadoutId = Number(direct.loadoutId || 0);
+      if (isCombatLoadout(direct.loadout) && selectedLoadoutId > 0) {
+        return {
+          ...direct,
+          source: "room",
+          selectedLoadoutId
+        };
+      }
+      const fallbackIdOnFloor = getMostUsedCombatLoadoutIdOnCurrentLabyrinth(state);
+      if (fallbackIdOnFloor > 0) {
+        const fallbackLoadout = getLoadoutById(state?.characterLoadoutDict, fallbackIdOnFloor);
+        if (isCombatLoadout(fallbackLoadout)) {
+          return {
+            ...direct,
+            loadoutId: fallbackIdOnFloor,
+            loadout: fallbackLoadout,
+            source: "fallback-floor",
+            selectedLoadoutId
+          };
+        }
+      }
+      const combatLoadouts = listCombatLoadouts(state);
+      if (combatLoadouts.length > 0) {
+        const fallbackLoadout = combatLoadouts[0];
+        return {
+          ...direct,
+          loadoutId: Number(fallbackLoadout.id || 0),
+          loadout: fallbackLoadout,
+          source: "fallback-any",
+          selectedLoadoutId
+        };
+      }
+      return {
+        ...direct,
+        loadout: null,
+        source: "missing",
+        selectedLoadoutId
+      };
+    }
+    function getItemDetailByHrid(state, initClientData, itemHrid) {
+      if (!itemHrid) {
+        return null;
+      }
+      const fromState = state?.itemDetailDict?.[itemHrid];
+      if (fromState) {
+        return fromState;
+      }
+      return initClientData?.itemDetailMap?.[itemHrid] || null;
+    }
+    function getAbilityDetailByHrid(state, initClientData, abilityHrid) {
+      if (!abilityHrid) {
+        return null;
+      }
+      const fromState = getContainerValue(state?.abilityDetailDict, abilityHrid);
+      if (fromState) {
+        return fromState;
+      }
+      return getContainerValue(initClientData?.abilityDetailMap, abilityHrid) || null;
+    }
+    function getAbilityLevelFromState(state, abilityHrid) {
+      if (!abilityHrid) {
+        return 1;
+      }
+      const ability = getContainerValue(state?.characterAbilityMap, abilityHrid);
+      return positiveNumber(ability?.level, 1);
+    }
+    function getCombatTriggerList(triggerMap, triggerKey) {
+      const value = getContainerValue(triggerMap, triggerKey);
+      if (!Array.isArray(value)) {
+        return null;
+      }
+      return normalizeTriggerList(value);
+    }
+    function hasContainerKey(container, key) {
+      const normalizedKey = String(key || "");
+      if (!normalizedKey) {
+        return false;
+      }
+      if (container instanceof Map) {
+        return container.has(normalizedKey);
+      }
+      if (container && typeof container === "object") {
+        return Object.prototype.hasOwnProperty.call(container, normalizedKey);
+      }
+      return false;
+    }
+    function hasAnyContainerEntries(container) {
+      if (container instanceof Map) {
+        return container.size > 0;
+      }
+      if (container && typeof container === "object") {
+        return Object.keys(container).length > 0;
+      }
+      return false;
+    }
+    function getDefaultAbilityTriggers(state, initClientData, abilityHrid) {
+      const detail = getAbilityDetailByHrid(state, initClientData, abilityHrid);
+      return normalizeTriggerList(detail?.defaultCombatTriggers);
+    }
+    function buildHouseRoomLevelMap(state) {
+      const result = {};
+      for (const [roomHrid, room] of getContainerEntries(state?.characterHouseRoomDict)) {
+        if (!roomHrid) {
+          continue;
+        }
+        result[roomHrid] = Math.max(0, Math.floor(finiteNumber(room?.level, 0)));
+      }
+      return result;
+    }
+    function buildAchievementCompletionMap(state) {
+      const result = {};
+      for (const [achievementHrid, info] of getContainerEntries(state?.characterAchievementMap)) {
+        if (!achievementHrid) {
+          continue;
+        }
+        const completed = info === true || info?.isCompleted === true;
+        if (completed) {
+          result[achievementHrid] = true;
+        }
+      }
+      return result;
+    }
+    function isTaskBadgeItemHrid(itemHrid) {
+      const tail = String(itemHrid || "").split("/").pop() || "";
+      return tail.includes("task_badge");
+    }
+    function isSupportedCombatEquipmentType(equipmentType) {
+      const typeHrid = String(equipmentType || "");
+      return typeHrid ? SIMULATOR_SUPPORTED_EQUIPMENT_TYPES.has(typeHrid) : false;
+    }
+    function shouldIncludeCombatEquipment(itemHrid, equipmentType) {
+      if (!isSupportedCombatEquipmentType(equipmentType)) {
+        return false;
+      }
+      if (isTaskBadgeItemHrid(itemHrid)) {
+        return false;
+      }
+      return true;
+    }
+    function buildCombatLoadoutEquipmentDto(state, initClientData, loadout, maxEnhancementByItem) {
+      const equipment = {};
+      for (const rawRef of Object.values(loadout?.wearableMap || {})) {
+        const entry = parseWearableReference(rawRef);
+        if (!entry?.itemHrid) {
+          continue;
+        }
+        const itemDetail = getItemDetailByHrid(state, initClientData, entry.itemHrid);
+        const equipmentType = itemDetail?.equipmentDetail?.type;
+        if (!shouldIncludeCombatEquipment(entry.itemHrid, equipmentType)) {
+          continue;
+        }
+        const enhancementLevel = Math.max(0, Math.floor(resolveWearableEnhancement(entry, loadout, maxEnhancementByItem)));
+        equipment[equipmentType] = {
+          hrid: entry.itemHrid,
+          enhancementLevel
+        };
+      }
+      return equipment;
+    }
+    function buildCombatLoadoutAbilityDtos(state, initClientData, loadout, intelligenceLevel) {
+      const abilityDtos = [];
+      const requirementList = Array.isArray(state?.abilitySlotsLevelRequirementList) ? state.abilitySlotsLevelRequirementList : [0, 1, 1, 20, 50, 90];
+      const loadoutAbilityMap = loadout?.abilityMap || {};
+      const loadoutTriggerMap = loadout?.abilityCombatTriggersMap;
+      const globalTriggerMap = state?.abilityCombatTriggersDict;
+      const loadoutHasTriggerConfig = hasAnyContainerEntries(loadoutTriggerMap);
+      for (let slot = 1; slot <= COMBAT_SLOT_COUNT; slot += 1) {
+        const abilityHrid = String(loadoutAbilityMap[slot] || loadoutAbilityMap[String(slot)] || "");
+        if (!abilityHrid) {
+          abilityDtos.push(null);
+          continue;
+        }
+        const minIntelligence = Math.max(0, Math.floor(finiteNumber(requirementList[slot], 0)));
+        if (intelligenceLevel < minIntelligence) {
+          abilityDtos.push(null);
+          continue;
+        }
+        let abilityTriggers = null;
+        if (loadoutHasTriggerConfig) {
+          if (hasContainerKey(loadoutTriggerMap, abilityHrid)) {
+            const explicitLoadoutTriggers = getCombatTriggerList(loadoutTriggerMap, abilityHrid);
+            abilityTriggers = Array.isArray(explicitLoadoutTriggers) ? explicitLoadoutTriggers : [];
+          } else {
+            abilityTriggers = [];
+          }
+        } else {
+          abilityTriggers = getCombatTriggerList(globalTriggerMap, abilityHrid) || getDefaultAbilityTriggers(state, initClientData, abilityHrid);
+        }
+        abilityDtos.push({
+          hrid: abilityHrid,
+          level: getAbilityLevelFromState(state, abilityHrid),
+          triggers: abilityTriggers
+        });
+      }
+      return abilityDtos;
+    }
+    function buildCombatPlayerDtoForRoom(state, initClientData, room, maxEnhancementByItem) {
+      const loadoutInfo = resolveCombatRoomLoadout(state, room);
+      const loadout = loadoutInfo.loadout;
+      if (!isCombatLoadout(loadout)) {
+        return {
+          playerDto: null,
+          loadoutInfo
+        };
+      }
+      const levels = getCombatSkillLevelsFromState(state);
+      const intelligenceLevel = positiveNumber(levels.intelligence, 1);
+      const equipment = buildCombatLoadoutEquipmentDto(state, initClientData, loadout, maxEnhancementByItem);
+      const abilities = buildCombatLoadoutAbilityDtos(state, initClientData, loadout, intelligenceLevel);
+      const houseRooms = buildHouseRoomLevelMap(state);
+      const achievements = buildAchievementCompletionMap(state);
+      const playerDto = {
+        hrid: "player1",
+        staminaLevel: positiveNumber(levels.stamina, 1),
+        intelligenceLevel,
+        attackLevel: positiveNumber(levels.attack, 1),
+        meleeLevel: positiveNumber(levels.melee, 1),
+        defenseLevel: positiveNumber(levels.defense, 1),
+        rangedLevel: positiveNumber(levels.ranged, 1),
+        magicLevel: positiveNumber(levels.magic, 1),
+        equipment,
+        food: [],
+        drinks: [],
+        abilities,
+        houseRooms,
+        achievements,
+        debuffOnLevelGap: 0
+      };
+      return {
+        playerDto,
+        loadoutInfo
+      };
+    }
+    function buildCombatInputSnapshot(playerData, room) {
+      const playerDto = playerData?.playerDto;
+      const loadoutInfo = playerData?.loadoutInfo || {};
+      const loadout = loadoutInfo.loadout || null;
+      if (!playerDto) {
+        return null;
+      }
+      const equipment = [];
+      for (const [slot, detail] of Object.entries(playerDto.equipment || {})) {
+        if (!detail?.hrid) {
+          continue;
+        }
+        equipment.push({
+          slot: String(slot),
+          hrid: String(detail.hrid),
+          enhancementLevel: Math.max(0, Math.floor(finiteNumber(detail.enhancementLevel, 0)))
+        });
+      }
+      equipment.sort((a, b) => a.slot.localeCompare(b.slot));
+      const abilitySlots = [];
+      const abilityList = Array.isArray(playerDto.abilities) ? playerDto.abilities : [];
+      for (let i = 0; i < abilityList.length; i += 1) {
+        const ability = abilityList[i];
+        if (!ability?.hrid) {
+          continue;
+        }
+        abilitySlots.push({
+          slot: i + 1,
+          hrid: String(ability.hrid),
+          level: Math.max(1, Math.floor(finiteNumber(ability.level, 1)))
+        });
+      }
+      return {
+        roomKey: "",
+        roomMonsterHrid: String(room?.monsterHrid || ""),
+        roomRecommendedLevel: Math.max(0, Math.floor(finiteNumber(room?.recommendedLevel, 0))),
+        loadoutId: Number(loadoutInfo.loadoutId || 0),
+        loadoutName: String(loadout?.name || ""),
+        loadoutMode: loadout?.useExactEnhancement ? "exact" : "highest",
+        loadoutSource: String(loadoutInfo.source || "room"),
+        selectedLoadoutId: Number(loadoutInfo.selectedLoadoutId || loadoutInfo.loadoutId || 0),
+        loadoutSettingKey: String(loadoutInfo.settingKey || ""),
+        levels: {
+          stamina: positiveNumber(playerDto.staminaLevel, 1),
+          intelligence: positiveNumber(playerDto.intelligenceLevel, 1),
+          attack: positiveNumber(playerDto.attackLevel, 1),
+          melee: positiveNumber(playerDto.meleeLevel, 1),
+          defense: positiveNumber(playerDto.defenseLevel, 1),
+          ranged: positiveNumber(playerDto.rangedLevel, 1),
+          magic: positiveNumber(playerDto.magicLevel, 1)
+        },
+        equipment,
+        abilitySlots,
+        houseRoomCount: Object.keys(playerDto.houseRooms || {}).length,
+        achievementCount: Object.keys(playerDto.achievements || {}).length
+      };
+    }
+    function equipmentTypeToItemLocationHrid(equipmentTypeHrid) {
+      const raw = String(equipmentTypeHrid || "");
+      if (!raw.startsWith("/equipment_types/")) {
+        return "";
+      }
+      return raw.replace("/equipment_types/", "/item_locations/");
+    }
+    function normalizeSimulatorImportConsumableSlots(entries, slotCount = 3) {
+      const result = [];
+      const source = Array.isArray(entries) ? entries : [];
+      for (const entry of source) {
+        const itemHrid = String(entry?.hrid || entry?.itemHrid || "");
+        result.push({ itemHrid });
+        if (result.length >= slotCount) {
+          break;
+        }
+      }
+      while (result.length < slotCount) {
+        result.push({ itemHrid: "" });
+      }
+      return result;
+    }
+    function normalizeSimulatorImportAbilitySlots(entries, slotCount = 5) {
+      const result = [];
+      const source = Array.isArray(entries) ? entries : [];
+      for (let i = 0; i < slotCount; i += 1) {
+        const ability = source[i];
+        const abilityHrid = String(ability?.hrid || ability?.abilityHrid || "");
+        const level = Math.max(1, Math.floor(finiteNumber(ability?.level, 1)));
+        result.push({
+          abilityHrid,
+          level: String(level)
+        });
+      }
+      return result;
+    }
+    function buildSimulatorImportTriggerMap(playerDto, options = {}) {
+      const includeConsumables = options?.includeConsumables !== false;
+      const triggerMap = {};
+      function include(entry) {
+        const hrid = String(entry?.hrid || "");
+        if (!hrid) {
+          return;
+        }
+        const triggers = normalizeTriggerList(entry?.triggers || []);
+        if (!triggers.length && options?.keepEmptyAbilityTriggers !== true) {
+          return;
+        }
+        triggerMap[hrid] = deepCloneJson(triggers);
+      }
+      const foods = Array.isArray(playerDto?.food) ? playerDto.food : [];
+      const drinks = Array.isArray(playerDto?.drinks) ? playerDto.drinks : [];
+      const abilities = Array.isArray(playerDto?.abilities) ? playerDto.abilities : [];
+      if (includeConsumables) {
+        for (const entry of foods) {
+          include(entry);
+        }
+        for (const entry of drinks) {
+          include(entry);
+        }
+      }
+      for (const entry of abilities) {
+        include(entry);
+      }
+      return triggerMap;
+    }
+    function buildCombatZoneCandidatesByMonster(initClientData, monsterHrid) {
+      const targetMonsterHrid = String(monsterHrid || "");
+      if (!targetMonsterHrid) {
+        return [];
+      }
+      const actionDetailMap = initClientData?.actionDetailMap;
+      if (!actionDetailMap) {
+        return [];
+      }
+      const candidateMap = /* @__PURE__ */ new Map();
+      function pushCandidate(actionHrid, actionDetail, difficultyTier, sourceTag, waveHint = 0) {
+        const normalizedActionHrid = String(actionHrid || "");
+        if (!normalizedActionHrid) {
+          return;
+        }
+        const normalizedDifficultyTier = Math.max(0, Math.floor(finiteNumber(difficultyTier, 0)));
+        const normalizedWaveHint = Math.max(0, Math.floor(finiteNumber(waveHint, 0)));
+        const key = `${normalizedActionHrid}|${normalizedDifficultyTier}`;
+        const current = candidateMap.get(key);
+        if (!current) {
+          candidateMap.set(key, {
+            actionHrid: normalizedActionHrid,
+            difficultyTier: normalizedDifficultyTier,
+            source: sourceTag,
+            sortIndex: finiteNumber(actionDetail?.sortIndex, Number.MAX_SAFE_INTEGER),
+            isDungeon: actionDetail?.combatZoneInfo?.isDungeon === true,
+            startWave: normalizedWaveHint > 0 && (sourceTag === "dungeon-fixed" || sourceTag === "dungeon-random") ? normalizedWaveHint : 0
+          });
+          return;
+        }
+        if (!current.startWave && normalizedWaveHint > 0) {
+          current.startWave = normalizedWaveHint;
+        } else if (current.startWave > 0 && normalizedWaveHint > 0) {
+          current.startWave = Math.min(current.startWave, normalizedWaveHint);
+        }
+      }
+      function collectFromSpawnList(actionHrid, actionDetail, spawnList, sourceTag, waveHint = 0) {
+        for (const spawn of Array.isArray(spawnList) ? spawnList : []) {
+          if (!spawn || String(spawn.combatMonsterHrid || "") !== targetMonsterHrid) {
+            continue;
+          }
+          pushCandidate(actionHrid, actionDetail, spawn.difficultyTier, sourceTag, waveHint);
+        }
+      }
+      for (const [actionHrid, actionDetail] of getContainerEntries(actionDetailMap)) {
+        if (!actionDetail || actionDetail.type !== "/action_types/combat") {
+          continue;
+        }
+        const zoneInfo = actionDetail.combatZoneInfo;
+        if (!zoneInfo) {
+          continue;
+        }
+        const fightInfo = zoneInfo.fightInfo || {};
+        collectFromSpawnList(actionHrid, actionDetail, fightInfo.bossSpawns, "boss");
+        collectFromSpawnList(actionHrid, actionDetail, fightInfo?.randomSpawnInfo?.spawns, "random");
+        const dungeonInfo = zoneInfo.dungeonInfo || {};
+        for (const [waveKey, fixedSpawns] of Object.entries(dungeonInfo.fixedSpawnsMap || {})) {
+          collectFromSpawnList(actionHrid, actionDetail, fixedSpawns, "dungeon-fixed", Number(waveKey));
+        }
+        for (const [waveKey, randomInfo] of Object.entries(dungeonInfo.randomSpawnInfoMap || {})) {
+          collectFromSpawnList(
+            actionHrid,
+            actionDetail,
+            randomInfo?.spawns,
+            "dungeon-random",
+            Number(waveKey)
+          );
+        }
+      }
+      const candidates = Array.from(candidateMap.values());
+      if (!candidates.length) {
+        return [];
+      }
+      candidates.sort((a, b) => {
+        if (a.isDungeon !== b.isDungeon) {
+          return a.isDungeon ? -1 : 1;
+        }
+        if (a.sortIndex !== b.sortIndex) {
+          return a.sortIndex - b.sortIndex;
+        }
+        if (a.difficultyTier !== b.difficultyTier) {
+          return a.difficultyTier - b.difficultyTier;
+        }
+        return a.actionHrid.localeCompare(b.actionHrid);
+      });
+      return candidates;
+    }
+    function findSuggestedCombatZoneByMonster(initClientData, monsterHrid) {
+      const candidates = buildCombatZoneCandidatesByMonster(initClientData, monsterHrid);
+      return candidates.length ? candidates[0] : null;
+    }
+    function buildSimulatorImportSetFromPlayerDto(state, playerDto, defaultZoneHrid, simulationTime = "24") {
+      const levels = {
+        attackLevel: positiveNumber(playerDto?.attackLevel, 1),
+        magicLevel: positiveNumber(playerDto?.magicLevel, 1),
+        meleeLevel: positiveNumber(playerDto?.meleeLevel, 1),
+        rangedLevel: positiveNumber(playerDto?.rangedLevel, 1),
+        defenseLevel: positiveNumber(playerDto?.defenseLevel, 1),
+        staminaLevel: positiveNumber(playerDto?.staminaLevel, 1),
+        intelligenceLevel: positiveNumber(playerDto?.intelligenceLevel, 1)
+      };
+      const equipment = [];
+      for (const [equipmentTypeHrid, entry] of Object.entries(playerDto?.equipment || {})) {
+        const itemHrid = String(entry?.hrid || "");
+        if (!itemHrid) {
+          continue;
+        }
+        const itemLocationHrid = equipmentTypeToItemLocationHrid(equipmentTypeHrid);
+        if (!itemLocationHrid) {
+          continue;
+        }
+        equipment.push({
+          itemLocationHrid,
+          itemHrid,
+          enhancementLevel: Math.max(0, Math.floor(finiteNumber(entry?.enhancementLevel, 0)))
+        });
+      }
+      equipment.sort((a, b) => a.itemLocationHrid.localeCompare(b.itemLocationHrid));
+      const food = normalizeSimulatorImportConsumableSlots(playerDto?.food, 3);
+      const drinks = normalizeSimulatorImportConsumableSlots(playerDto?.drinks, 3);
+      const abilities = normalizeSimulatorImportAbilitySlots(playerDto?.abilities, 5);
+      const triggerMap = buildSimulatorImportTriggerMap(playerDto, {
+        includeConsumables: false,
+        keepEmptyAbilityTriggers: true
+      });
+      return {
+        player: {
+          ...levels,
+          equipment
+        },
+        food: {
+          "/action_types/combat": food
+        },
+        drinks: {
+          "/action_types/combat": drinks
+        },
+        abilities,
+        triggerMap,
+        zone: String(defaultZoneHrid || "/actions/combat/fly"),
+        simulationTime: String(simulationTime || "24"),
+        houseRooms: buildHouseRoomLevelMap(state),
+        achievements: buildAchievementCompletionMap(state)
+      };
+    }
+    function buildEmptySimulatorImportConsumableSlots(slotCount = 3) {
+      const result = [];
+      for (let i = 0; i < slotCount; i += 1) {
+        result.push({ itemHrid: "" });
+      }
+      return result;
+    }
+    function stripConsumablesFromSimulatorImportSet(importSet) {
+      if (!importSet || typeof importSet !== "object") {
+        return importSet;
+      }
+      const sanitizedTriggerMap = {};
+      for (const [key, value] of Object.entries(importSet.triggerMap || {})) {
+        const hrid = String(key || "");
+        if (!hrid.startsWith("/abilities/")) {
+          continue;
+        }
+        sanitizedTriggerMap[hrid] = deepCloneJson(value);
+      }
+      return {
+        ...importSet,
+        food: {
+          "/action_types/combat": buildEmptySimulatorImportConsumableSlots(3)
+        },
+        drinks: {
+          "/action_types/combat": buildEmptySimulatorImportConsumableSlots(3)
+        },
+        triggerMap: sanitizedTriggerMap
+      };
+    }
+    function buildFallbackSimulatorImportSetFromState(state, defaultZoneHrid, simulationTime = "24") {
+      const levels = getCombatSkillLevelsFromState(state);
+      const fallbackDto = {
+        attackLevel: positiveNumber(levels.attack, 1),
+        magicLevel: positiveNumber(levels.magic, 1),
+        meleeLevel: positiveNumber(levels.melee, 1),
+        rangedLevel: positiveNumber(levels.ranged, 1),
+        defenseLevel: positiveNumber(levels.defense, 1),
+        staminaLevel: positiveNumber(levels.stamina, 1),
+        intelligenceLevel: positiveNumber(levels.intelligence, 1),
+        equipment: {},
+        food: [],
+        drinks: [],
+        abilities: []
+      };
+      return buildSimulatorImportSetFromPlayerDto(state, fallbackDto, defaultZoneHrid, simulationTime);
+    }
+    function buildCombatRoomSimulatorBridgePayload(state, initClientData, room, maxEnhancementByItem) {
+      if (!room || room.roomType !== LABYRINTH_COMBAT_ROOM_TYPE || !room.monsterHrid) {
+        return null;
+      }
+      const roomLevel = Math.max(1, Math.floor(positiveNumber(room?.recommendedLevel, 1)));
+      const zoneCandidates = buildCombatZoneCandidatesByMonster(initClientData, room.monsterHrid);
+      const zoneSuggestion = zoneCandidates.length ? zoneCandidates[0] : null;
+      const suggestedZoneHrid = String(zoneSuggestion?.actionHrid || "/actions/combat/fly");
+      const suggestedDifficultyTier = Math.max(0, Math.floor(finiteNumber(zoneSuggestion?.difficultyTier, 0)));
+      const suggestedStartWave = Math.max(0, Math.floor(finiteNumber(zoneSuggestion?.startWave, 0)));
+      const loadoutInfo = resolveCombatRoomLoadout(state, room);
+      const combatCrate = getCombatCrateBuffs(state, initClientData);
+      const combatCrateItemHrids = Array.isArray(combatCrate?.combatCrateItemHrids) ? combatCrate.combatCrateItemHrids : [];
+      const coffeeCrateItemHrid = String(
+        combatCrate?.coffeeCrateItemHrid || combatCrateItemHrids.find((itemHrid) => String(itemHrid || "").includes("coffee_crate")) || ""
+      );
+      const foodCrateItemHrid = String(
+        combatCrate?.foodCrateItemHrid || combatCrateItemHrids.find((itemHrid) => String(itemHrid || "").includes("food_crate")) || ""
+      );
+      const teaCrateItemHrid = String(combatCrate?.teaCrateItemHrid || "");
+      const playerData = buildCombatPlayerDtoForRoom(state, initClientData, room, maxEnhancementByItem);
+      const importSetRaw = playerData?.playerDto ? buildSimulatorImportSetFromPlayerDto(state, playerData.playerDto, suggestedZoneHrid, "24") : buildFallbackSimulatorImportSetFromState(state, suggestedZoneHrid, "24");
+      const importSet = stripConsumablesFromSimulatorImportSet(importSetRaw);
+      const simulatorPersonalBuffItemHrids = getSimulatorPersonalBuffItemHrids(state);
+      return {
+        source: SIMULATOR_BRIDGE_SOURCE,
+        version: SIMULATOR_BRIDGE_VERSION,
+        generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        uiLanguage: getUiLanguage(),
+        monsterHrid: String(room.monsterHrid),
+        roomLevel,
+        mazeDifficulty: roomLevel,
+        suggestedZoneHrid,
+        suggestedDifficultyTier,
+        suggestedIsDungeon: zoneSuggestion?.isDungeon === true,
+        suggestedStartWave,
+        zoneCandidates: zoneCandidates.slice(0, 32).map((candidate) => ({
+          zoneHrid: String(candidate?.actionHrid || ""),
+          difficultyTier: Math.max(0, Math.floor(finiteNumber(candidate?.difficultyTier, 0))),
+          isDungeon: candidate?.isDungeon === true,
+          startWave: Math.max(0, Math.floor(finiteNumber(candidate?.startWave, 0)))
+        })),
+        loadoutSource: String(loadoutInfo?.source || "unknown"),
+        loadoutId: Number(loadoutInfo?.loadoutId || 0),
+        selectedLoadoutId: Number(loadoutInfo?.selectedLoadoutId || loadoutInfo?.loadoutId || 0),
+        teaCrateItemHrid,
+        coffeeCrateItemHrid,
+        foodCrateItemHrid,
+        importSet,
+        simulatorPersonalBuffItemHrids
+      };
+    }
+    function getRoomFromCell(state, cell) {
+      const roomKey = getRoomKeyFromCell(cell);
+      const point = parseRoomKey(roomKey);
+      const roomRows = state?.characterLabyrinth?.roomData;
+      if (!point || !Array.isArray(roomRows) || !Array.isArray(roomRows[point.y])) {
+        return null;
+      }
+      return roomRows[point.y][point.x] || null;
+    }
+    function openCombatRoomSimulatorFromCell(cell) {
+      const state = getGameState();
+      const initClientData = getInitClientData();
+      if (!state || !initClientData) {
+        window.alert(t("readGameDataFailed"));
+        return;
+      }
+      const room = getRoomFromCell(state, cell);
+      if (!room || room.roomType !== LABYRINTH_COMBAT_ROOM_TYPE || !room.monsterHrid) {
+        window.alert(t("exportableCombatRoomNotFound"));
+        return;
+      }
+      const maxEnhancementByItem = buildMaxEnhancementByItem(state);
+      const payload = buildCombatRoomSimulatorBridgePayload(state, initClientData, room, maxEnhancementByItem);
+      if (!payload?.importSet) {
+        window.alert(t("simulatorExportNoLoadout"));
+        return;
+      }
+      const launchUrl = buildSimulatorBridgeLaunchUrl(payload);
+      window.open(launchUrl, "_blank", "noopener,noreferrer");
+    }
+    function getAutomationCombatRoomFromCell(cell, state, initClientData) {
+      if (!cell || !state || !initClientData) {
+        return null;
+      }
+      const roomTypeKey = String(cell.getAttribute("data-mwi-auto-room-key") || "");
+      if (!roomTypeKey) {
+        return null;
+      }
+      const panelInstance = getLabyrinthPanelInstance();
+      const entry = getAutomationRoomTypeEntryByKey(roomTypeKey, panelInstance);
+      if (!entry || !entry.isCombat || !entry.monsterHrid) {
+        return null;
+      }
+      let roomLevel = NaN;
+      const recommend = getAutomationRecommendFromCell(cell);
+      if (recommend?.status === "ready" && recommend?.isCombat) {
+        roomLevel = Math.floor(finiteNumber(recommend.roomLevel, NaN));
+      }
+      const estimate = getAutomationEstimateFromCell(cell);
+      if (!Number.isFinite(roomLevel) && estimate?.status === "ready" && estimate?.isCombat) {
+        roomLevel = Math.floor(finiteNumber(estimate.roomLevel, NaN));
+      }
+      if (!Number.isFinite(roomLevel)) {
+        const entries = getAutomationRoomTypeEntries(panelInstance);
+        const skipThresholdOverrides = buildAutomationSkipThresholdOverrideMap(entries);
+        const skipThreshold = resolveAutomationSkipThreshold(panelInstance, entry.key, state, skipThresholdOverrides);
+        const effectiveLevel = resolveAutomationEffectiveLevel(panelInstance, entry, state, initClientData, {
+          includePersonalBuffs: false
+        });
+        roomLevel = computeAutomationTargetRoomLevel(effectiveLevel, skipThreshold);
+      }
+      if (!Number.isFinite(roomLevel) || roomLevel < 1) {
+        return {
+          skipped: true
+        };
+      }
+      return {
+        room: createAutomationRoomFromEntry(entry, roomLevel)
+      };
+    }
+    function openCombatRoomSimulatorFromAutomationCell(cell) {
+      const state = getGameState();
+      const initClientData = getInitClientData();
+      if (!state || !initClientData) {
+        window.alert(t("readGameDataFailed"));
+        return;
+      }
+      const resolved = getAutomationCombatRoomFromCell(cell, state, initClientData);
+      if (!resolved) {
+        window.alert(t("exportableCombatRoomNotFound"));
+        return;
+      }
+      if (resolved.skipped) {
+        window.alert(t("skippedCannotExport"));
+        return;
+      }
+      const room = resolved.room;
+      if (!room || room.roomType !== LABYRINTH_COMBAT_ROOM_TYPE || !room.monsterHrid) {
+        window.alert(t("exportableCombatRoomNotFound"));
+        return;
+      }
+      const maxEnhancementByItem = buildMaxEnhancementByItem(state);
+      const payload = buildCombatRoomSimulatorBridgePayload(state, initClientData, room, maxEnhancementByItem);
+      if (!payload?.importSet) {
+        window.alert(t("simulatorExportNoLoadout"));
+        return;
+      }
+      const launchUrl = buildSimulatorBridgeLaunchUrl(payload);
+      window.open(launchUrl, "_blank", "noopener,noreferrer");
+    }
+    function parseWearableReference(rawValue) {
+      if (!rawValue) {
+        return null;
+      }
+      const parts = String(rawValue).split("::");
+      if (parts.length < 4) {
+        return null;
+      }
+      return {
+        itemHrid: parts[2] || "",
+        enhancementLevel: finiteNumber(Number(parts[3]), 0)
+      };
+    }
+    function buildMaxEnhancementByItem(state) {
+      const maxByItem = /* @__PURE__ */ new Map();
+      const itemMap = state?.characterItemMap;
+      function consume(item) {
+        if (!item || !item.itemHrid) {
+          return;
+        }
+        if (!Number.isFinite(Number(item.count)) || Number(item.count) <= 0) {
+          return;
+        }
+        const itemHrid = item.itemHrid;
+        const enhancement = Math.max(0, finiteNumber(item.enhancementLevel, 0));
+        const existing = maxByItem.get(itemHrid);
+        if (!Number.isFinite(existing) || enhancement > existing) {
+          maxByItem.set(itemHrid, enhancement);
+        }
+      }
+      if (itemMap instanceof Map) {
+        for (const item of itemMap.values()) {
+          consume(item);
+        }
+      } else if (itemMap && typeof itemMap === "object") {
+        for (const item of Object.values(itemMap)) {
+          consume(item);
+        }
+      }
+      return maxByItem;
+    }
+    function resolveWearableEnhancement(entry, loadout, maxEnhancementByItem) {
+      if (!entry) {
+        return 0;
+      }
+      if (entry.fromCurrentEquipment) {
+        return Math.max(0, finiteNumber(entry.enhancementLevel, 0));
+      }
+      if (loadout?.useExactEnhancement) {
+        return Math.max(0, finiteNumber(entry.enhancementLevel, 0));
+      }
+      const highest = maxEnhancementByItem.get(entry.itemHrid);
+      if (Number.isFinite(highest)) {
+        return Math.max(0, highest);
+      }
+      return Math.max(0, finiteNumber(entry.enhancementLevel, 0));
+    }
+    function getCurrentEquippedItemForLocation(state, itemLocationHrid) {
+      const location2 = String(itemLocationHrid || "");
+      if (!location2) {
+        return null;
+      }
+      const locationMap = state?.characterItemByLocationMap;
+      let item = null;
+      if (locationMap instanceof Map) {
+        item = locationMap.get(location2) || null;
+      } else if (locationMap && typeof locationMap === "object") {
+        item = locationMap[location2] || null;
+      }
+      if (!item || !item.itemHrid) {
+        return null;
+      }
+      if (Number.isFinite(Number(item.count)) && Number(item.count) <= 0) {
+        return null;
+      }
+      return {
+        itemHrid: String(item.itemHrid || ""),
+        enhancementLevel: Math.max(0, finiteNumber(item.enhancementLevel, 0)),
+        fromCurrentEquipment: true
+      };
+    }
+    function getEnhancementBonusMultiplier(initClientData, enhancementLevel) {
+      const level = Math.max(0, Math.floor(finiteNumber(enhancementLevel, 0)));
+      const table = initClientData?.enhancementLevelTotalBonusMultiplierTable;
+      const fromTable = table && Object.prototype.hasOwnProperty.call(table, level) ? Number(table[level]) : Number.NaN;
+      if (Number.isFinite(fromTable)) {
+        return fromTable;
+      }
+      return level;
+    }
+    function addFlatBuff(buffs, typeHrid, amount) {
+      const value = finiteNumber(amount, 0);
+      if (!typeHrid || !Number.isFinite(value) || value === 0) {
+        return;
+      }
+      buffs.push({
+        typeHrid,
+        flatBoost: value,
+        flatBoostLevelBonus: 0,
+        ratioBoost: 0,
+        ratioBoostLevelBonus: 0
+      });
+    }
+    function addRatioBuff(buffs, typeHrid, amount) {
+      const value = finiteNumber(amount, 0);
+      if (!typeHrid || !Number.isFinite(value) || value === 0) {
+        return;
+      }
+      buffs.push({
+        typeHrid,
+        flatBoost: 0,
+        flatBoostLevelBonus: 0,
+        ratioBoost: value,
+        ratioBoostLevelBonus: 0
+      });
+    }
+    function getToolSlotForActionType(actionTypeHrid) {
+      if (!actionTypeHrid || typeof actionTypeHrid !== "string") {
+        return "";
+      }
+      if (!actionTypeHrid.startsWith("/action_types/")) {
+        return "";
+      }
+      const skillId = actionTypeHrid.split("/").pop() || "";
+      if (!skillId || skillId === "combat" || skillId === "special" || skillId === "labyrinth") {
+        return "";
+      }
+      return `/item_locations/${skillId}_tool`;
+    }
+    function shouldUseWearableSlotForSkillingAction(slotKey, actionTypeHrid) {
+      if (!slotKey) {
+        return false;
+      }
+      if (!slotKey.endsWith("_tool")) {
+        return true;
+      }
+      const requiredToolSlot = getToolSlotForActionType(actionTypeHrid);
+      return requiredToolSlot ? slotKey === requiredToolSlot : false;
+    }
+    function addNoncombatStatsForWearableEntry(totals, state, initClientData, loadout, maxEnhancementByItem, entry) {
+      if (!totals || !entry || !entry.itemHrid) {
+        return;
+      }
+      const itemDetail = getItemDetailByHrid(state, initClientData, entry.itemHrid);
+      const equipmentDetail = itemDetail?.equipmentDetail;
+      if (!equipmentDetail) {
+        return;
+      }
+      const enhancementLevel = resolveWearableEnhancement(entry, loadout, maxEnhancementByItem);
+      const enhancementMultiplier = getEnhancementBonusMultiplier(initClientData, enhancementLevel);
+      const baseStats = equipmentDetail.noncombatStats || {};
+      const enhancementStats = equipmentDetail.noncombatEnhancementBonuses || {};
+      for (const [key, value] of Object.entries(baseStats)) {
+        if (!Number.isFinite(Number(value))) {
+          continue;
+        }
+        totals[key] = finiteNumber(totals[key], 0) + Number(value);
+      }
+      for (const [key, value] of Object.entries(enhancementStats)) {
+        if (!Number.isFinite(Number(value))) {
+          continue;
+        }
+        totals[key] = finiteNumber(totals[key], 0) + Number(value) * enhancementMultiplier;
+      }
+    }
+    function buildLoadoutNoncombatStatTotals(state, initClientData, loadout, maxEnhancementByItem, actionTypeHrid) {
+      const totals = {};
+      if (!loadout) {
+        return totals;
+      }
+      const requiredToolSlot = getToolSlotForActionType(actionTypeHrid);
+      let sawRequiredToolSlot = false;
+      for (const [slotKey, rawRef] of Object.entries(loadout.wearableMap || {})) {
+        if (!shouldUseWearableSlotForSkillingAction(slotKey, actionTypeHrid)) {
+          continue;
+        }
+        if (requiredToolSlot && slotKey === requiredToolSlot) {
+          sawRequiredToolSlot = true;
+        }
+        let entry = parseWearableReference(rawRef);
+        if (!entry && requiredToolSlot && slotKey === requiredToolSlot) {
+          entry = getCurrentEquippedItemForLocation(state, requiredToolSlot);
+        }
+        addNoncombatStatsForWearableEntry(totals, state, initClientData, loadout, maxEnhancementByItem, entry);
+      }
+      if (requiredToolSlot && !sawRequiredToolSlot) {
+        addNoncombatStatsForWearableEntry(
+          totals,
+          state,
+          initClientData,
+          loadout,
+          maxEnhancementByItem,
+          getCurrentEquippedItemForLocation(state, requiredToolSlot)
+        );
+      }
+      return totals;
+    }
+    function buildSkillingEquipmentBuffsFromTotals(skillId, totals) {
+      const buffs = [];
+      if (!skillId || !totals) {
+        return buffs;
+      }
+      const actionSpeed = finiteNumber(totals[`${skillId}Speed`], 0) + finiteNumber(totals.skillingSpeed, 0);
+      const efficiency = finiteNumber(totals[`${skillId}Efficiency`], 0) + finiteNumber(totals.skillingEfficiency, 0);
+      const gathering = finiteNumber(totals.gatheringQuantity, 0);
+      const success = finiteNumber(totals[`${skillId}Success`], 0);
+      const skillingExperience = finiteNumber(totals.skillingExperience, 0);
+      const skillExperience = finiteNumber(totals[`${skillId}Experience`], 0);
+      const wisdom = finiteNumber(totals.wisdom, 0);
+      const genericExperience = wisdom + skillingExperience + skillExperience;
+      addFlatBuff(buffs, "/buff_types/action_speed", actionSpeed);
+      addFlatBuff(buffs, "/buff_types/efficiency", efficiency);
+      addFlatBuff(buffs, "/buff_types/gathering", gathering);
+      addRatioBuff(buffs, `/buff_types/${skillId}_success`, success);
+      addRatioBuff(buffs, "/buff_types/wisdom", genericExperience);
+      return buffs;
+    }
+    function getSkillingRoomLoadoutMetrics(state, initClientData, room, skillId, actionTypeHrid, maxEnhancementByItem, fallbackMetrics) {
+      const loadoutInfo = getLabyrinthRoomLoadout(state, room);
+      const fallback = cloneSkillingMetrics(fallbackMetrics);
+      const loadout = loadoutInfo.loadout;
+      if (!loadout) {
+        return {
+          metrics: fallback,
+          loadoutInfo,
+          mode: "current"
+        };
+      }
+      const noncombatTotals = buildLoadoutNoncombatStatTotals(state, initClientData, loadout, maxEnhancementByItem, actionTypeHrid);
+      const equipmentBuffs = buildSkillingEquipmentBuffsFromTotals(skillId, noncombatTotals);
+      const metrics = createEmptySkillingMetrics();
+      addSkillingMetrics(metrics, getSkillingBuffMetrics(skillId, equipmentBuffs));
+      const mode = loadout.actionTypeHrid === actionTypeHrid ? loadout.useExactEnhancement ? "exact" : "highest" : "configured";
+      return {
+        metrics,
+        loadoutInfo,
+        mode
+      };
+    }
+    function computeSkillingExperienceBonusForRoom(state, skillId, actionTypeHrid, roomLoadoutMetrics, crateMetrics, loanMetrics, includePersonalBuffs, labyrinthExperienceBonus = 0) {
+      const { globalMetrics: globalWithoutPersonal } = getSkillingGlobalMetrics(state, skillId, actionTypeHrid, {
+        includePersonalBuffs: false
+      });
+      let genericBonus = 0;
+      let skillingBonus = 0;
+      let skillBonus = 0;
+      const appendExperienceBuckets = (metrics) => {
+        genericBonus += finiteNumber(metrics?.genericExperienceBonus, 0);
+        skillingBonus += finiteNumber(metrics?.skillingExperienceBonus, 0);
+        skillBonus += finiteNumber(metrics?.skillExperienceBonus, 0);
+      };
+      appendExperienceBuckets(globalWithoutPersonal);
+      appendExperienceBuckets(roomLoadoutMetrics);
+      appendExperienceBuckets(crateMetrics);
+      appendExperienceBuckets(loanMetrics);
+      genericBonus += finiteNumber(labyrinthExperienceBonus, 0);
+      if (includePersonalBuffs) {
+        const personalMetrics = getSkillingActionMetricsFromState(
+          state,
+          skillId,
+          actionTypeHrid,
+          "personalActionTypeBuffsDict"
+        );
+        appendExperienceBuckets(personalMetrics);
+      }
+      const genericMultiplier = Math.max(0, 1 + genericBonus);
+      const skillingMultiplier = Math.max(0, 1 + skillingBonus);
+      const skillMultiplier = Math.max(0, 1 + skillBonus);
+      const multiplier = genericMultiplier * skillingMultiplier * skillMultiplier;
+      return {
+        genericBonus,
+        skillingBonus,
+        skillBonus,
+        multiplier,
+        totalBonus: multiplier - 1
+      };
+    }
+    function getCombatSkillLevelsFromState(state) {
+      const levels = {};
+      for (const [key, hrid] of Object.entries(COMBAT_SKILL_HRID_BY_KEY)) {
+        levels[key] = positiveNumber(getSkillLevel(state?.characterSkillMap, hrid), 1);
+      }
+      if (!state?.characterSkillMap && state?.combatUnit?.combatDetails) {
+        levels.attack = positiveNumber(state.combatUnit.combatDetails.attackLevel, levels.attack);
+        levels.melee = positiveNumber(state.combatUnit.combatDetails.meleeLevel, levels.melee);
+        levels.defense = positiveNumber(state.combatUnit.combatDetails.defenseLevel, levels.defense);
+        levels.ranged = positiveNumber(state.combatUnit.combatDetails.rangedLevel, levels.ranged);
+        levels.magic = positiveNumber(state.combatUnit.combatDetails.magicLevel, levels.magic);
+        levels.stamina = positiveNumber(state.combatUnit.combatDetails.staminaLevel, levels.stamina);
+        levels.intelligence = positiveNumber(state.combatUnit.combatDetails.intelligenceLevel, levels.intelligence);
+      }
+      return levels;
+    }
+    function createEmptyCombatStats() {
+      return {
+        combatStyleHrid: "/combat_styles/smash",
+        damageType: "/damage_types/physical",
+        attackInterval: 3e9,
+        autoAttackDamage: 0,
+        castSpeed: 0,
+        criticalRate: 0,
+        criticalDamage: 0,
+        stabAccuracy: 0,
+        slashAccuracy: 0,
+        smashAccuracy: 0,
+        rangedAccuracy: 0,
+        magicAccuracy: 0,
+        stabDamage: 0,
+        slashDamage: 0,
+        smashDamage: 0,
+        rangedDamage: 0,
+        magicDamage: 0,
+        defensiveDamage: 0,
+        taskDamage: 0,
+        armorPenetration: 0,
+        waterPenetration: 0,
+        naturePenetration: 0,
+        firePenetration: 0,
+        maxHitpoints: 0,
+        maxManapoints: 0,
+        stabEvasion: 0,
+        slashEvasion: 0,
+        smashEvasion: 0,
+        rangedEvasion: 0,
+        magicEvasion: 0,
+        armor: 0,
+        waterResistance: 0,
+        natureResistance: 0,
+        fireResistance: 0,
+        tenacity: 0,
+        hpRegenPer10: 0,
+        mpRegenPer10: 0,
+        drinkConcentration: 0,
+        combatRareFind: 0,
+        combatDropRate: 0,
+        combatDropQuantity: 0,
+        combatExperience: 0,
+        foodSlots: 1,
+        drinkSlots: 1,
+        physicalAmplify: 0,
+        waterAmplify: 0,
+        natureAmplify: 0,
+        fireAmplify: 0,
+        healingAmplify: 0,
+        physicalThorns: 0,
+        elementalThorns: 0,
+        lifeSteal: 0,
+        abilityHaste: 0,
+        manaLeech: 0,
+        threat: 100,
+        parry: 0,
+        mayhem: 0,
+        pierce: 0,
+        curse: 0,
+        fury: 0,
+        weaken: 0,
+        ripple: 0,
+        bloom: 0,
+        blaze: 0,
+        attackSpeed: 0,
+        foodHaste: 0,
+        damageTaken: 0,
+        retaliation: 0,
+        primaryTraining: "/skills/melee",
+        focusTraining: ""
+      };
+    }
+    function addNumericStat(stats, key, value) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) {
+        return;
+      }
+      stats[key] = finiteNumber(stats[key], 0) + n;
+    }
+    function getPositiveMultiplier(value) {
+      return Math.max(0.05, 1 + finiteNumber(value, 0));
+    }
+    function buildPlayerDetailsFromCombatProfile(profile) {
+      const levels = profile.levels;
+      const combatStats = profile.combatStats;
+      const attack = positiveNumber(levels.attack, 1);
+      const melee = positiveNumber(levels.melee, 1);
+      const defense = positiveNumber(levels.defense, 1);
+      const ranged = positiveNumber(levels.ranged, 1);
+      const magic = positiveNumber(levels.magic, 1);
+      const stamina = positiveNumber(levels.stamina, 1);
+      const intelligence = positiveNumber(levels.intelligence, 1);
+      const details = {
+        attackLevel: attack,
+        meleeLevel: melee,
+        defenseLevel: defense,
+        rangedLevel: ranged,
+        magicLevel: magic,
+        staminaLevel: stamina,
+        intelligenceLevel: intelligence,
+        maxHitpoints: Math.floor(10 * (10 + stamina) + finiteNumber(combatStats.maxHitpoints, 0)),
+        maxManapoints: Math.floor(10 * (10 + intelligence) + finiteNumber(combatStats.maxManapoints, 0)),
+        stabAccuracyRating: (10 + attack) * getPositiveMultiplier(combatStats.stabAccuracy),
+        slashAccuracyRating: (10 + attack) * getPositiveMultiplier(combatStats.slashAccuracy),
+        smashAccuracyRating: (10 + attack) * getPositiveMultiplier(combatStats.smashAccuracy),
+        rangedAccuracyRating: (10 + attack) * getPositiveMultiplier(combatStats.rangedAccuracy),
+        magicAccuracyRating: (10 + attack) * getPositiveMultiplier(combatStats.magicAccuracy),
+        stabMaxDamage: (10 + melee) * getPositiveMultiplier(combatStats.stabDamage),
+        slashMaxDamage: (10 + melee) * getPositiveMultiplier(combatStats.slashDamage),
+        smashMaxDamage: (10 + melee) * getPositiveMultiplier(combatStats.smashDamage),
+        rangedMaxDamage: (10 + ranged) * getPositiveMultiplier(combatStats.rangedDamage),
+        magicMaxDamage: (10 + magic) * getPositiveMultiplier(combatStats.magicDamage),
+        defensiveMaxDamage: (10 + defense) * getPositiveMultiplier(combatStats.defensiveDamage),
+        stabEvasionRating: (10 + defense) * getPositiveMultiplier(combatStats.stabEvasion),
+        slashEvasionRating: (10 + defense) * getPositiveMultiplier(combatStats.slashEvasion),
+        smashEvasionRating: (10 + defense) * getPositiveMultiplier(combatStats.smashEvasion),
+        rangedEvasionRating: (10 + defense) * getPositiveMultiplier(combatStats.rangedEvasion),
+        magicEvasionRating: (10 + defense) * getPositiveMultiplier(combatStats.magicEvasion),
+        totalArmor: 0.2 * defense + finiteNumber(combatStats.armor, 0),
+        totalWaterResistance: 0.2 * defense + finiteNumber(combatStats.waterResistance, 0),
+        totalNatureResistance: 0.2 * defense + finiteNumber(combatStats.natureResistance, 0),
+        totalFireResistance: 0.2 * defense + finiteNumber(combatStats.fireResistance, 0)
+      };
+      details.currentHitpoints = details.maxHitpoints;
+      details.currentManapoints = details.maxManapoints;
+      const baseInterval = positiveNumber(combatStats.attackInterval, COMBAT_ONE_SECOND_NS);
+      let attackInterval = baseInterval / (1 + attack / 2e3);
+      attackInterval /= Math.max(0.05, 1 + finiteNumber(combatStats.attackSpeed, 0));
+      attackInterval /= Math.max(0.05, 1 + finiteNumber(profile.extraAttackSpeedRatio, 0));
+      combatStats.attackInterval = attackInterval;
+      combatStats.hpRegenPer10 = 0.01 + finiteNumber(combatStats.hpRegenPer10, 0);
+      combatStats.mpRegenPer10 = 0.01 + finiteNumber(combatStats.mpRegenPer10, 0);
+      combatStats.castSpeed = finiteNumber(combatStats.castSpeed, 0) + attack / 2e3;
+      details.combatStats = combatStats;
+      return details;
+    }
+    function cloneCombatStatsForSimulation(rawCombatStats, rawAttackIntervalNs) {
+      const source = rawCombatStats || {};
+      const combatStats = createEmptyCombatStats();
+      for (const [key, value] of Object.entries(source)) {
+        const numericValue = Number(value);
+        if (Number.isFinite(numericValue)) {
+          combatStats[key] = numericValue;
+        }
+      }
+      combatStats.combatStyleHrid = getCombatStyleHrid(source);
+      combatStats.damageType = getDamageTypeHrid(source);
+      combatStats.attackInterval = positiveNumber(rawAttackIntervalNs || source.attackInterval, COMBAT_ONE_SECOND_NS);
+      return combatStats;
+    }
+    function buildMazeMonsterDetailsForRoom(monsterDetails, roomLevel) {
+      if (!monsterDetails || !monsterDetails.combatStats) {
+        return null;
+      }
+      const resolvedRoomLevel = positiveNumber(roomLevel, positiveNumber(monsterDetails.combatLevel, 100));
+      const mazeScale = resolvedRoomLevel / 100;
+      const levels = {
+        attack: positiveNumber(monsterDetails.attackLevel, 1) * mazeScale,
+        melee: positiveNumber(monsterDetails.meleeLevel, 1) * mazeScale,
+        defense: positiveNumber(monsterDetails.defenseLevel, 1) * mazeScale,
+        ranged: positiveNumber(monsterDetails.rangedLevel, 1) * mazeScale,
+        magic: positiveNumber(monsterDetails.magicLevel, 1) * mazeScale,
+        stamina: positiveNumber(monsterDetails.staminaLevel, 1) * mazeScale,
+        intelligence: positiveNumber(monsterDetails.intelligenceLevel, 1) * mazeScale
+      };
+      const combatStats = cloneCombatStatsForSimulation(monsterDetails.combatStats, monsterDetails.attackInterval);
+      const details = buildPlayerDetailsFromCombatProfile({
+        levels,
+        combatStats,
+        extraAttackSpeedRatio: 0
+      });
+      if (!details) {
+        return null;
+      }
+      const scaledTemplateMaxHp = finiteNumber(monsterDetails.maxHitpoints, NaN) * mazeScale;
+      const scaledTemplateMaxMp = finiteNumber(monsterDetails.maxManapoints, NaN) * mazeScale;
+      if (Number.isFinite(scaledTemplateMaxHp) && scaledTemplateMaxHp > 0) {
+        details.maxHitpoints = Math.max(1, Math.floor(scaledTemplateMaxHp));
+      }
+      if (Number.isFinite(scaledTemplateMaxMp) && scaledTemplateMaxMp > 0) {
+        details.maxManapoints = Math.max(1, Math.floor(scaledTemplateMaxMp));
+      }
+      details.totalArmor = finiteNumber(monsterDetails.totalArmor, details.totalArmor) * mazeScale;
+      details.totalWaterResistance = finiteNumber(monsterDetails.totalWaterResistance, details.totalWaterResistance) * mazeScale;
+      details.totalNatureResistance = finiteNumber(monsterDetails.totalNatureResistance, details.totalNatureResistance) * mazeScale;
+      details.totalFireResistance = finiteNumber(monsterDetails.totalFireResistance, details.totalFireResistance) * mazeScale;
+      details.currentHitpoints = details.maxHitpoints;
+      details.currentManapoints = details.maxManapoints;
+      return details;
+    }
+    function buildCombatProfileFromLoadout(state, initClientData, loadout, maxEnhancementByItem) {
+      if (!loadout || loadout.actionTypeHrid !== "/action_types/combat") {
+        return null;
+      }
+      const levels = getCombatSkillLevelsFromState(state);
+      const combatStats = createEmptyCombatStats();
+      let weaponStyle = combatStats.combatStyleHrid;
+      let weaponDamageType = combatStats.damageType;
+      let weaponAttackInterval = combatStats.attackInterval;
+      let weaponPrimaryTraining = combatStats.primaryTraining;
+      let focusTraining = combatStats.focusTraining;
+      for (const [slotKey, rawRef] of Object.entries(loadout.wearableMap || {})) {
+        const entry = parseWearableReference(rawRef);
+        if (!entry || !entry.itemHrid) {
+          continue;
+        }
+        const itemDetail = getItemDetailByHrid(state, initClientData, entry.itemHrid);
+        const equipmentDetail = itemDetail?.equipmentDetail;
+        if (!equipmentDetail) {
+          continue;
+        }
+        if (!shouldIncludeCombatEquipment(entry.itemHrid, equipmentDetail.type)) {
+          continue;
+        }
+        const enhancementLevel = resolveWearableEnhancement(entry, loadout, maxEnhancementByItem);
+        const enhancementMultiplier = getEnhancementBonusMultiplier(initClientData, enhancementLevel);
+        const baseStats = equipmentDetail.combatStats || {};
+        const enhancementStats = equipmentDetail.combatEnhancementBonuses || {};
+        for (const [key, value] of Object.entries(baseStats)) {
+          addNumericStat(combatStats, key, value);
+        }
+        for (const [key, value] of Object.entries(enhancementStats)) {
+          addNumericStat(combatStats, key, finiteNumber(value, 0) * enhancementMultiplier);
+        }
+        if (slotKey === "/item_locations/main_hand" || slotKey === "/item_locations/two_hand") {
+          if (Array.isArray(baseStats.combatStyleHrids) && baseStats.combatStyleHrids.length > 0) {
+            weaponStyle = baseStats.combatStyleHrids[0] || weaponStyle;
+          } else if (typeof baseStats.combatStyleHrid === "string" && baseStats.combatStyleHrid) {
+            weaponStyle = baseStats.combatStyleHrid;
+          }
+          if (typeof baseStats.damageType === "string" && baseStats.damageType) {
+            weaponDamageType = baseStats.damageType;
+          }
+          if (Number.isFinite(Number(baseStats.attackInterval))) {
+            weaponAttackInterval = Number(baseStats.attackInterval);
+          }
+          if (typeof baseStats.primaryTraining === "string" && baseStats.primaryTraining) {
+            weaponPrimaryTraining = baseStats.primaryTraining;
+          }
+        }
+        if (slotKey === "/item_locations/charm" && typeof baseStats.focusTraining === "string" && baseStats.focusTraining) {
+          focusTraining = baseStats.focusTraining;
+        }
+      }
+      combatStats.combatStyleHrid = weaponStyle;
+      combatStats.damageType = weaponDamageType;
+      combatStats.attackInterval = weaponAttackInterval;
+      combatStats.primaryTraining = weaponPrimaryTraining;
+      combatStats.focusTraining = focusTraining;
+      const profile = {
+        levels,
+        combatStats,
+        extraAttackSpeedRatio: 0
+      };
+      return profile;
+    }
+    function createPlayerCombatTemplateForRoom(state, initClientData, room, maxEnhancementByItem) {
+      const loadoutInfo = resolveCombatRoomLoadout(state, room);
+      if (!isCombatLoadout(loadoutInfo.loadout)) {
+        return {
+          template: createPlayerCombatTemplate(state),
+          loadoutInfo
+        };
+      }
+      const profile = buildCombatProfileFromLoadout(state, initClientData, loadoutInfo.loadout, maxEnhancementByItem);
+      if (!profile) {
+        return {
+          template: createPlayerCombatTemplate(state),
+          loadoutInfo
+        };
+      }
+      const details = buildPlayerDetailsFromCombatProfile(profile);
+      if (!details) {
+        return {
+          template: createPlayerCombatTemplate(state),
+          loadoutInfo
+        };
+      }
+      const template = {
+        isPlayer: true,
+        combatDetails: details
+      };
+      applyMazePlayerBonuses(template);
+      return {
+        template,
+        loadoutInfo
+      };
+    }
+    function getCombatStyleHrid(combatStats) {
+      if (!combatStats) {
+        return "/combat_styles/smash";
+      }
+      if (Array.isArray(combatStats.combatStyleHrids) && combatStats.combatStyleHrids.length > 0) {
+        return combatStats.combatStyleHrids[0] || "/combat_styles/smash";
+      }
+      return combatStats.combatStyleHrid || "/combat_styles/smash";
+    }
+    function getDamageTypeHrid(combatStats) {
+      if (!combatStats) {
+        return "/damage_types/physical";
+      }
+      return combatStats.damageType || "/damage_types/physical";
+    }
+    function getAccuracyRating(details, combatStyle) {
+      switch (combatStyle) {
+        case "/combat_styles/stab":
+          return positiveNumber(details.stabAccuracyRating, 1);
+        case "/combat_styles/slash":
+          return positiveNumber(details.slashAccuracyRating, 1);
+        case "/combat_styles/smash":
+          return positiveNumber(details.smashAccuracyRating, 1);
+        case "/combat_styles/ranged":
+          return positiveNumber(details.rangedAccuracyRating, 1);
+        case "/combat_styles/magic":
+          return positiveNumber(details.magicAccuracyRating, 1);
+        default:
+          return positiveNumber(details.smashAccuracyRating, 1);
+      }
+    }
+    function getMaxDamage(details, combatStyle) {
+      switch (combatStyle) {
+        case "/combat_styles/stab":
+          return positiveNumber(details.stabMaxDamage, 1);
+        case "/combat_styles/slash":
+          return positiveNumber(details.slashMaxDamage, 1);
+        case "/combat_styles/smash":
+          return positiveNumber(details.smashMaxDamage, 1);
+        case "/combat_styles/ranged":
+          return positiveNumber(details.rangedMaxDamage, 1);
+        case "/combat_styles/magic":
+          return positiveNumber(details.magicMaxDamage, 1);
+        default:
+          return positiveNumber(details.smashMaxDamage, 1);
+      }
+    }
+    function getEvasionRating(details, combatStyle) {
+      switch (combatStyle) {
+        case "/combat_styles/stab":
+          return positiveNumber(details.stabEvasionRating, 1);
+        case "/combat_styles/slash":
+          return positiveNumber(details.slashEvasionRating, 1);
+        case "/combat_styles/smash":
+          return positiveNumber(details.smashEvasionRating, 1);
+        case "/combat_styles/ranged":
+          return positiveNumber(details.rangedEvasionRating, 1);
+        case "/combat_styles/magic":
+          return positiveNumber(details.magicEvasionRating, 1);
+        default:
+          return positiveNumber(details.smashEvasionRating, 1);
+      }
+    }
+    function getDamageAmplify(combatStats, damageType) {
+      switch (damageType) {
+        case "/damage_types/water":
+          return finiteNumber(combatStats.waterAmplify, 0);
+        case "/damage_types/nature":
+          return finiteNumber(combatStats.natureAmplify, 0);
+        case "/damage_types/fire":
+          return finiteNumber(combatStats.fireAmplify, 0);
+        case "/damage_types/physical":
+        default:
+          return finiteNumber(combatStats.physicalAmplify, 0);
+      }
+    }
+    function getResistance(details, damageType) {
+      switch (damageType) {
+        case "/damage_types/water":
+          return finiteNumber(details.totalWaterResistance, 0);
+        case "/damage_types/nature":
+          return finiteNumber(details.totalNatureResistance, 0);
+        case "/damage_types/fire":
+          return finiteNumber(details.totalFireResistance, 0);
+        case "/damage_types/physical":
+        default:
+          return finiteNumber(details.totalArmor, 0);
+      }
+    }
+    function getPenetration(combatStats, damageType) {
+      switch (damageType) {
+        case "/damage_types/water":
+          return finiteNumber(combatStats.waterPenetration, 0);
+        case "/damage_types/nature":
+          return finiteNumber(combatStats.naturePenetration, 0);
+        case "/damage_types/fire":
+          return finiteNumber(combatStats.firePenetration, 0);
+        case "/damage_types/physical":
+        default:
+          return finiteNumber(combatStats.armorPenetration, 0);
+      }
+    }
+    function getThorns(combatStats, damageType) {
+      if (damageType === "/damage_types/physical") {
+        return finiteNumber(combatStats.physicalThorns, 0);
+      }
+      return finiteNumber(combatStats.elementalThorns, 0);
+    }
+    function randomBetween(min, max) {
+      const lo = finiteNumber(min, 0);
+      const hi = finiteNumber(max, lo);
+      if (hi <= lo) {
+        return lo;
+      }
+      return lo + Math.random() * (hi - lo);
+    }
+    function addHitpoints(unit, amount) {
+      if (!unit || amount <= 0) {
+        return 0;
+      }
+      const details = unit.combatDetails;
+      const oldHp = details.currentHitpoints;
+      details.currentHitpoints = Math.min(details.maxHitpoints, details.currentHitpoints + amount);
+      return details.currentHitpoints - oldHp;
+    }
+    function addManapoints(unit, amount) {
+      if (!unit || amount <= 0) {
+        return 0;
+      }
+      const details = unit.combatDetails;
+      const oldMp = details.currentManapoints;
+      details.currentManapoints = Math.min(details.maxManapoints, details.currentManapoints + amount);
+      return details.currentManapoints - oldMp;
+    }
+    function cloneCombatant(template) {
+      return {
+        isPlayer: template.isPlayer,
+        combatDetails: {
+          ...template.combatDetails,
+          combatStats: { ...template.combatDetails.combatStats },
+          currentHitpoints: template.combatDetails.maxHitpoints,
+          currentManapoints: template.combatDetails.maxManapoints
+        }
+      };
+    }
+    function createCombatTemplateFromDetails(rawDetails, isPlayer) {
+      if (!rawDetails || !rawDetails.combatStats) {
+        return null;
+      }
+      const stats = rawDetails.combatStats;
+      const style = getCombatStyleHrid(stats);
+      const damageType = getDamageTypeHrid(stats);
+      return {
+        isPlayer,
+        combatDetails: {
+          maxHitpoints: positiveNumber(rawDetails.maxHitpoints, 1),
+          currentHitpoints: positiveNumber(rawDetails.maxHitpoints, 1),
+          maxManapoints: positiveNumber(rawDetails.maxManapoints, 1),
+          currentManapoints: positiveNumber(rawDetails.maxManapoints, 1),
+          attackLevel: positiveNumber(rawDetails.attackLevel, 1),
+          meleeLevel: positiveNumber(rawDetails.meleeLevel, 1),
+          defenseLevel: positiveNumber(rawDetails.defenseLevel, 1),
+          rangedLevel: positiveNumber(rawDetails.rangedLevel, 1),
+          magicLevel: positiveNumber(rawDetails.magicLevel, 1),
+          staminaLevel: positiveNumber(rawDetails.staminaLevel, 1),
+          intelligenceLevel: positiveNumber(rawDetails.intelligenceLevel, 1),
+          stabAccuracyRating: positiveNumber(rawDetails.stabAccuracyRating, 1),
+          slashAccuracyRating: positiveNumber(rawDetails.slashAccuracyRating, 1),
+          smashAccuracyRating: positiveNumber(rawDetails.smashAccuracyRating, 1),
+          rangedAccuracyRating: positiveNumber(rawDetails.rangedAccuracyRating, 1),
+          magicAccuracyRating: positiveNumber(rawDetails.magicAccuracyRating, 1),
+          stabMaxDamage: positiveNumber(rawDetails.stabMaxDamage, 1),
+          slashMaxDamage: positiveNumber(rawDetails.slashMaxDamage, 1),
+          smashMaxDamage: positiveNumber(rawDetails.smashMaxDamage, 1),
+          rangedMaxDamage: positiveNumber(rawDetails.rangedMaxDamage, 1),
+          magicMaxDamage: positiveNumber(rawDetails.magicMaxDamage, 1),
+          stabEvasionRating: positiveNumber(rawDetails.stabEvasionRating, 1),
+          slashEvasionRating: positiveNumber(rawDetails.slashEvasionRating, 1),
+          smashEvasionRating: positiveNumber(rawDetails.smashEvasionRating, 1),
+          rangedEvasionRating: positiveNumber(rawDetails.rangedEvasionRating, 1),
+          magicEvasionRating: positiveNumber(rawDetails.magicEvasionRating, 1),
+          defensiveMaxDamage: positiveNumber(rawDetails.defensiveMaxDamage, 1),
+          totalArmor: finiteNumber(rawDetails.totalArmor, 0),
+          totalWaterResistance: finiteNumber(rawDetails.totalWaterResistance, 0),
+          totalNatureResistance: finiteNumber(rawDetails.totalNatureResistance, 0),
+          totalFireResistance: finiteNumber(rawDetails.totalFireResistance, 0),
+          combatStats: {
+            combatStyleHrid: style,
+            damageType,
+            attackInterval: positiveNumber(rawDetails.attackInterval || stats.attackInterval, COMBAT_ONE_SECOND_NS),
+            autoAttackDamage: finiteNumber(stats.autoAttackDamage, 0),
+            criticalRate: finiteNumber(stats.criticalRate, 0),
+            criticalDamage: finiteNumber(stats.criticalDamage, 0),
+            taskDamage: finiteNumber(stats.taskDamage, 0),
+            damageTaken: finiteNumber(stats.damageTaken, 0),
+            attackSpeed: finiteNumber(stats.attackSpeed, 0),
+            armorPenetration: finiteNumber(stats.armorPenetration, 0),
+            waterPenetration: finiteNumber(stats.waterPenetration, 0),
+            naturePenetration: finiteNumber(stats.naturePenetration, 0),
+            firePenetration: finiteNumber(stats.firePenetration, 0),
+            physicalAmplify: finiteNumber(stats.physicalAmplify, 0),
+            waterAmplify: finiteNumber(stats.waterAmplify, 0),
+            natureAmplify: finiteNumber(stats.natureAmplify, 0),
+            fireAmplify: finiteNumber(stats.fireAmplify, 0),
+            physicalThorns: finiteNumber(stats.physicalThorns, 0),
+            elementalThorns: finiteNumber(stats.elementalThorns, 0),
+            retaliation: finiteNumber(stats.retaliation, 0),
+            lifeSteal: finiteNumber(stats.lifeSteal, 0),
+            manaLeech: finiteNumber(stats.manaLeech, 0)
+          }
+        }
+      };
+    }
+    function applyMazePlayerBonuses(playerTemplate) {
+      if (!playerTemplate) {
+        return;
+      }
+      const details = playerTemplate.combatDetails;
+      const stats = details.combatStats;
+      const oldAttackLevel = positiveNumber(details.attackLevel, 1);
+      const oldMeleeLevel = positiveNumber(details.meleeLevel, 1);
+      const oldDefenseLevel = positiveNumber(details.defenseLevel, 1);
+      const oldRangedLevel = positiveNumber(details.rangedLevel, 1);
+      const oldMagicLevel = positiveNumber(details.magicLevel, 1);
+      details.attackLevel += COMBAT_MAZE_PLAYER_LEVEL_BONUS;
+      details.meleeLevel += COMBAT_MAZE_PLAYER_LEVEL_BONUS;
+      details.defenseLevel += COMBAT_MAZE_PLAYER_LEVEL_BONUS;
+      details.rangedLevel += COMBAT_MAZE_PLAYER_LEVEL_BONUS;
+      details.magicLevel += COMBAT_MAZE_PLAYER_LEVEL_BONUS;
+      details.staminaLevel += COMBAT_MAZE_PLAYER_LEVEL_BONUS;
+      details.intelligenceLevel += COMBAT_MAZE_PLAYER_LEVEL_BONUS;
+      const attackRatio = (10 + details.attackLevel) / (10 + oldAttackLevel);
+      const meleeRatio = (10 + details.meleeLevel) / (10 + oldMeleeLevel);
+      const defenseRatio = (10 + details.defenseLevel) / (10 + oldDefenseLevel);
+      const rangedRatio = (10 + details.rangedLevel) / (10 + oldRangedLevel);
+      const magicRatio = (10 + details.magicLevel) / (10 + oldMagicLevel);
+      details.stabAccuracyRating *= attackRatio;
+      details.slashAccuracyRating *= attackRatio;
+      details.smashAccuracyRating *= attackRatio;
+      details.rangedAccuracyRating *= attackRatio;
+      details.magicAccuracyRating *= attackRatio;
+      details.stabMaxDamage *= meleeRatio;
+      details.slashMaxDamage *= meleeRatio;
+      details.smashMaxDamage *= meleeRatio;
+      details.rangedMaxDamage *= rangedRatio;
+      details.magicMaxDamage *= magicRatio;
+      details.defensiveMaxDamage *= defenseRatio;
+      details.stabEvasionRating *= defenseRatio;
+      details.slashEvasionRating *= defenseRatio;
+      details.smashEvasionRating *= defenseRatio;
+      details.rangedEvasionRating *= defenseRatio;
+      details.magicEvasionRating *= defenseRatio;
+      details.totalArmor += COMBAT_MAZE_PLAYER_LEVEL_BONUS * 0.2;
+      details.totalWaterResistance += COMBAT_MAZE_PLAYER_LEVEL_BONUS * 0.2;
+      details.totalNatureResistance += COMBAT_MAZE_PLAYER_LEVEL_BONUS * 0.2;
+      details.totalFireResistance += COMBAT_MAZE_PLAYER_LEVEL_BONUS * 0.2;
+      details.maxHitpoints += COMBAT_MAZE_PLAYER_LEVEL_BONUS * 10;
+      details.maxManapoints += COMBAT_MAZE_PLAYER_LEVEL_BONUS * 10;
+      details.currentHitpoints = details.maxHitpoints;
+      details.currentManapoints = details.maxManapoints;
+      const attackInterval = positiveNumber(stats.attackInterval, COMBAT_ONE_SECOND_NS);
+      const levelAdjusted = attackInterval * ((1 + oldAttackLevel / 2e3) / (1 + details.attackLevel / 2e3));
+      stats.attackInterval = levelAdjusted / (1 + COMBAT_MAZE_PLAYER_ATTACK_SPEED_BONUS);
+      stats.hpRegenPer10 = Math.max(0, finiteNumber(stats.hpRegenPer10, 0) + COMBAT_MAZE_PLAYER_REGEN_BONUS);
+      stats.mpRegenPer10 = Math.max(0, finiteNumber(stats.mpRegenPer10, 0) + COMBAT_MAZE_PLAYER_REGEN_BONUS);
+      stats.criticalRate += COMBAT_MAZE_PLAYER_CRIT_RATE_BONUS;
+      stats.criticalDamage += COMBAT_MAZE_PLAYER_CRIT_DAMAGE_BONUS;
+    }
+    function createPlayerCombatTemplate(state) {
+      const rawDetails = state?.combatUnit?.combatDetails;
+      const template = createCombatTemplateFromDetails(rawDetails, true);
+      if (!template) {
+        return null;
+      }
+      applyMazePlayerBonuses(template);
+      return template;
+    }
+    function createMonsterCombatTemplate(initClientData, room) {
+      const monsterDetails = initClientData?.combatMonsterDetailMap?.[room?.monsterHrid]?.combatDetails;
+      if (!monsterDetails) {
+        return null;
+      }
+      const details = buildMazeMonsterDetailsForRoom(monsterDetails, room?.recommendedLevel);
+      if (!details) {
+        const fallback = createCombatTemplateFromDetails(monsterDetails, false);
+        return fallback || null;
+      }
+      return {
+        isPlayer: false,
+        combatDetails: details
+      };
+    }
+    function simulateAutoAttack(source, target, options = {}) {
+      if (!source || !target) {
+        return;
+      }
+      const sourceStats = source.combatDetails.combatStats;
+      const targetStats = target.combatDetails.combatStats;
+      const combatStyle = sourceStats.combatStyleHrid || "/combat_styles/smash";
+      const damageType = sourceStats.damageType || "/damage_types/physical";
+      const sourceAccuracyRating = getAccuracyRating(source.combatDetails, combatStyle);
+      const sourceMaxDamage = getMaxDamage(source.combatDetails, combatStyle);
+      const targetEvasionRating = getEvasionRating(target.combatDetails, combatStyle);
+      const sourceDamageMultiplier = 1 + getDamageAmplify(sourceStats, damageType);
+      const sourceResistance = getResistance(source.combatDetails, damageType);
+      const sourcePenetration = getPenetration(sourceStats, damageType);
+      const targetResistance = getResistance(target.combatDetails, damageType);
+      const targetThorns = getThorns(targetStats, damageType);
+      const targetPenetration = getPenetration(targetStats, damageType);
+      const hitChance = clamp01(
+        Math.pow(Math.max(1, sourceAccuracyRating), 1.4) / (Math.pow(Math.max(1, sourceAccuracyRating), 1.4) + Math.pow(Math.max(1, targetEvasionRating), 1.4))
+      );
+      let critChance = combatStyle === "/combat_styles/ranged" ? 0.3 * hitChance : 0;
+      critChance = clamp01(critChance + finiteNumber(sourceStats.criticalRate, 0));
+      let minDamage = sourceDamageMultiplier;
+      let maxDamage = sourceDamageMultiplier * sourceMaxDamage;
+      if (Math.random() < critChance) {
+        maxDamage *= 1 + finiteNumber(sourceStats.criticalDamage, 0);
+        minDamage = maxDamage;
+      }
+      let damageRoll = randomBetween(minDamage, maxDamage);
+      damageRoll *= 1 + finiteNumber(sourceStats.taskDamage, 0);
+      damageRoll *= 1 + finiteNumber(targetStats.damageTaken, 0);
+      damageRoll += damageRoll * finiteNumber(sourceStats.autoAttackDamage, 0);
+      damageRoll = Math.max(0, damageRoll);
+      let damageDone = 0;
+      let didHit = false;
+      const forceKill = Boolean(options.mazeInstantKill && !source.isPlayer && target.isPlayer);
+      if (forceKill) {
+        didHit = true;
+        damageDone = target.combatDetails.currentHitpoints;
+        target.combatDetails.currentHitpoints = 0;
+      } else if (Math.random() < hitChance) {
+        didHit = true;
+        let penetratedTargetResistance = targetResistance;
+        if (sourcePenetration > 0 && targetResistance > 0) {
+          penetratedTargetResistance = targetResistance / (1 + sourcePenetration);
+        }
+        let targetDamageTakenRatio = 100 / (100 + penetratedTargetResistance);
+        if (penetratedTargetResistance < 0) {
+          targetDamageTakenRatio = (100 - penetratedTargetResistance) / 100;
+        }
+        const mitigatedDamage = Math.ceil(targetDamageTakenRatio * damageRoll);
+        damageDone = Math.min(mitigatedDamage, target.combatDetails.currentHitpoints);
+        target.combatDetails.currentHitpoints -= damageDone;
+      }
+      if (targetThorns > 0 && targetResistance > -99) {
+        let penetratedSourceResistance = sourceResistance;
+        if (sourceResistance > 0) {
+          penetratedSourceResistance = sourceResistance / (1 + targetPenetration);
+        }
+        let sourceDamageTakenRatio = 100 / (100 + penetratedSourceResistance);
+        if (penetratedSourceResistance < 0) {
+          sourceDamageTakenRatio = (100 - penetratedSourceResistance) / 100;
+        }
+        const targetDamageMultiplier = (1 + finiteNumber(targetStats.taskDamage, 0)) * (1 + finiteNumber(sourceStats.damageTaken, 0));
+        const thornsMax = targetDamageMultiplier * target.combatDetails.defensiveMaxDamage * (1 + targetResistance / 100) * targetThorns;
+        const thornsRoll = randomBetween(1, Math.max(1, thornsMax));
+        const mitigatedThornsDamage = Math.ceil(sourceDamageTakenRatio * thornsRoll);
+        const thornDamageDone = Math.min(mitigatedThornsDamage, source.combatDetails.currentHitpoints);
+        source.combatDetails.currentHitpoints -= thornDamageDone;
+      }
+      if (finiteNumber(targetStats.retaliation, 0) > 0) {
+        const retaliationHitChance = clamp01(
+          Math.pow(Math.max(1, target.combatDetails.smashAccuracyRating), 1.4) / (Math.pow(Math.max(1, target.combatDetails.smashAccuracyRating), 1.4) + Math.pow(Math.max(1, source.combatDetails.smashEvasionRating), 1.4))
+        );
+        if (Math.random() < retaliationHitChance) {
+          let sourceArmor = source.combatDetails.totalArmor;
+          if (sourceArmor > 0) {
+            sourceArmor = sourceArmor / (1 + finiteNumber(targetStats.armorPenetration, 0));
+          }
+          let sourceDamageTakenRatio = 100 / (100 + sourceArmor);
+          if (sourceArmor < 0) {
+            sourceDamageTakenRatio = (100 - sourceArmor) / 100;
+          }
+          const retaliationMultiplier = (1 + finiteNumber(targetStats.taskDamage, 0)) * (1 + finiteNumber(sourceStats.damageTaken, 0));
+          const premitigatedDamage = Math.min(damageRoll, target.combatDetails.defensiveMaxDamage * 5);
+          const retaliationMinDamage = retaliationMultiplier * targetStats.retaliation * premitigatedDamage;
+          const retaliationMaxDamage = retaliationMultiplier * targetStats.retaliation * (target.combatDetails.defensiveMaxDamage + premitigatedDamage);
+          const retaliationRoll = randomBetween(retaliationMinDamage, retaliationMaxDamage);
+          const mitigatedRetaliationDamage = Math.ceil(sourceDamageTakenRatio * retaliationRoll);
+          const retaliationDone = Math.min(mitigatedRetaliationDamage, source.combatDetails.currentHitpoints);
+          source.combatDetails.currentHitpoints -= retaliationDone;
+        }
+      }
+      if (didHit && finiteNumber(sourceStats.lifeSteal, 0) > 0) {
+        addHitpoints(source, Math.floor(sourceStats.lifeSteal * damageDone));
+      }
+      if (didHit && finiteNumber(sourceStats.manaLeech, 0) > 0) {
+        addManapoints(source, Math.floor(sourceStats.manaLeech * damageDone));
+      }
+    }
+    function runCombatSimulation(playerTemplate, monsterTemplate) {
+      const player = cloneCombatant(playerTemplate);
+      const monster = cloneCombatant(monsterTemplate);
+      const timeLimitNs = ROOM_DURATION_SECONDS * COMBAT_ONE_SECOND_NS;
+      let simulationTimeNs = 0;
+      const playerAttackInterval = positiveNumber(player.combatDetails.combatStats.attackInterval, COMBAT_ONE_SECOND_NS);
+      const monsterAttackInterval = positiveNumber(monster.combatDetails.combatStats.attackInterval, COMBAT_ONE_SECOND_NS);
+      let nextPlayerAttackTime = playerAttackInterval;
+      let nextMonsterAttackTime = monsterAttackInterval;
+      while (player.combatDetails.currentHitpoints > 0 && monster.combatDetails.currentHitpoints > 0) {
+        if (nextPlayerAttackTime <= nextMonsterAttackTime) {
+          simulationTimeNs = nextPlayerAttackTime;
+          if (simulationTimeNs > timeLimitNs) {
+            break;
+          }
+          nextPlayerAttackTime += playerAttackInterval;
+          simulateAutoAttack(player, monster, { mazeInstantKill: false });
+        } else {
+          simulationTimeNs = nextMonsterAttackTime;
+          if (simulationTimeNs > timeLimitNs) {
+            break;
+          }
+          nextMonsterAttackTime += monsterAttackInterval;
+          simulateAutoAttack(monster, player, { mazeInstantKill: simulationTimeNs >= timeLimitNs });
+        }
+      }
+      if (monster.combatDetails.currentHitpoints <= 0 && player.combatDetails.currentHitpoints > 0 && simulationTimeNs <= timeLimitNs) {
+        return {
+          cleared: true,
+          elapsedSeconds: Math.max(0, simulationTimeNs / COMBAT_ONE_SECOND_NS)
+        };
+      }
+      if (simulationTimeNs >= timeLimitNs) {
+        return { cleared: false, elapsedSeconds: ROOM_DURATION_SECONDS };
+      }
+      const failSeconds = Math.max(0, simulationTimeNs / COMBAT_ONE_SECOND_NS);
+      return { cleared: false, elapsedSeconds: failSeconds > 0 ? Math.min(ROOM_DURATION_SECONDS, failSeconds) : ROOM_DURATION_SECONDS };
+    }
+    function getCombatPlayerSignature(state) {
+      const details = state?.combatUnit?.combatDetails;
+      if (!details || !details.combatStats) {
+        return "";
+      }
+      const stats = details.combatStats;
+      const signatureParts = [
+        getCombatStyleHrid(stats),
+        getDamageTypeHrid(stats),
+        roundForSignature(details.maxHitpoints),
+        roundForSignature(details.maxManapoints),
+        roundForSignature(details.attackLevel),
+        roundForSignature(details.meleeLevel),
+        roundForSignature(details.defenseLevel),
+        roundForSignature(details.rangedLevel),
+        roundForSignature(details.magicLevel),
+        roundForSignature(details.stabAccuracyRating),
+        roundForSignature(details.slashAccuracyRating),
+        roundForSignature(details.smashAccuracyRating),
+        roundForSignature(details.rangedAccuracyRating),
+        roundForSignature(details.magicAccuracyRating),
+        roundForSignature(details.stabMaxDamage),
+        roundForSignature(details.slashMaxDamage),
+        roundForSignature(details.smashMaxDamage),
+        roundForSignature(details.rangedMaxDamage),
+        roundForSignature(details.magicMaxDamage),
+        roundForSignature(details.stabEvasionRating),
+        roundForSignature(details.slashEvasionRating),
+        roundForSignature(details.smashEvasionRating),
+        roundForSignature(details.rangedEvasionRating),
+        roundForSignature(details.magicEvasionRating),
+        roundForSignature(details.defensiveMaxDamage),
+        roundForSignature(details.totalArmor),
+        roundForSignature(details.totalWaterResistance),
+        roundForSignature(details.totalNatureResistance),
+        roundForSignature(details.totalFireResistance),
+        roundForSignature(stats.attackInterval || details.attackInterval),
+        roundForSignature(stats.autoAttackDamage),
+        roundForSignature(stats.criticalRate),
+        roundForSignature(stats.criticalDamage),
+        roundForSignature(stats.taskDamage),
+        roundForSignature(stats.damageTaken),
+        roundForSignature(stats.armorPenetration),
+        roundForSignature(stats.waterPenetration),
+        roundForSignature(stats.naturePenetration),
+        roundForSignature(stats.firePenetration),
+        roundForSignature(stats.physicalAmplify),
+        roundForSignature(stats.waterAmplify),
+        roundForSignature(stats.natureAmplify),
+        roundForSignature(stats.fireAmplify),
+        roundForSignature(stats.physicalThorns),
+        roundForSignature(stats.elementalThorns),
+        roundForSignature(stats.retaliation),
+        roundForSignature(stats.lifeSteal),
+        roundForSignature(stats.manaLeech)
+      ];
+      return signatureParts.join("|");
+    }
+    function getCombatRoomSignature(state, initClientData, room, maxEnhancementByItem, options = {}) {
+      const includePersonalBuffs = !(options && options.includePersonalBuffs === false);
+      const baseSignature = getCombatPlayerSignature(state);
+      const combatCrate = getCombatCrateBuffs(state, initClientData);
+      const labyrinthUpgradeLevels = resolveLabyrinthUpgradeLevels(options);
+      const labyrinthCombatBuffs = buildLabyrinthCombatBuffs(labyrinthUpgradeLevels);
+      const personalSealItemHrids = getCombatSimulatorPersonalSealItemHrids(state, {
+        includePersonalBuffs,
+        selectedSealItemHrids: Array.isArray(options?.selectedSealItemHrids) ? options.selectedSealItemHrids : []
+      });
+      const combatCrateSignature = String(combatCrate.combatCrateSignature || combatCrate.teaCrateItemHrid || "");
+      const crateBuffHash = hashString(stableStringify(combatCrate.combatBuffs || []));
+      const labyrinthBuffHash = hashString(stableStringify(labyrinthCombatBuffs || []));
+      const personalBuffHash = hashString(stableStringify(personalSealItemHrids || []));
+      const monsterDetailHash = hashString(stableStringify(initClientData?.combatMonsterDetailMap?.[room?.monsterHrid] || null));
+      const loadoutInfo = resolveCombatRoomLoadout(state, room);
+      const loadout = loadoutInfo.loadout;
+      if (!isCombatLoadout(loadout)) {
+        return [
+          "fallback",
+          `model=${COMBAT_MODEL_SIGNATURE}`,
+          `monster=${room?.monsterHrid || ""}`,
+          `monsterData=${monsterDetailHash}`,
+          `crate=${combatCrateSignature}`,
+          `crateBuff=${crateBuffHash}`,
+          `labBuff=${labyrinthBuffHash}`,
+          `pMode=${includePersonalBuffs ? 1 : 0}`,
+          `pBuff=${personalBuffHash}`,
+          baseSignature
+        ].join("|");
+      }
+      const levelParts = [];
+      const levels = getCombatSkillLevelsFromState(state);
+      for (const [key, value] of Object.entries(levels)) {
+        levelParts.push(`${key}:${roundForSignature(value)}`);
+      }
+      levelParts.sort();
+      const wearableParts = [];
+      for (const [slotKey, rawRef] of Object.entries(loadout.wearableMap || {})) {
+        const entry = parseWearableReference(rawRef);
+        if (!entry || !entry.itemHrid) {
+          continue;
+        }
+        const itemDetail = getItemDetailByHrid(state, initClientData, entry.itemHrid);
+        const equipmentType = itemDetail?.equipmentDetail?.type;
+        if (!shouldIncludeCombatEquipment(entry.itemHrid, equipmentType)) {
+          continue;
+        }
+        const enh = resolveWearableEnhancement(entry, loadout, maxEnhancementByItem);
+        wearableParts.push(`${slotKey}:${entry.itemHrid}:${enh}`);
+      }
+      wearableParts.sort();
+      const abilityParts = [];
+      const abilityMap = loadout.abilityMap || {};
+      for (let slot = 1; slot <= COMBAT_SLOT_COUNT; slot += 1) {
+        const abilityHrid = String(abilityMap[slot] || abilityMap[String(slot)] || "");
+        if (!abilityHrid) {
+          continue;
+        }
+        const level = getAbilityLevelFromState(state, abilityHrid);
+        abilityParts.push(`${slot}:${abilityHrid}:${level}`);
+      }
+      abilityParts.sort();
+      const abilityTriggerHash = hashString(stableStringify(loadout.abilityCombatTriggersMap || {}));
+      const houseHash = hashString(stableStringify(buildHouseRoomLevelMap(state)));
+      const achievementHash = hashString(stableStringify(buildAchievementCompletionMap(state)));
+      return [
+        `model=${COMBAT_MODEL_SIGNATURE}`,
+        `monster=${room?.monsterHrid || ""}`,
+        `monsterData=${monsterDetailHash}`,
+        `loadout=${loadoutInfo.loadoutId}`,
+        `source=${loadoutInfo.source || "room"}`,
+        `selected=${loadoutInfo.selectedLoadoutId || loadoutInfo.loadoutId || 0}`,
+        `exact=${loadout.useExactEnhancement ? 1 : 0}`,
+        `setting=${loadoutInfo.settingKey}`,
+        `crate=${combatCrateSignature}`,
+        `crateBuff=${crateBuffHash}`,
+        `labBuff=${labyrinthBuffHash}`,
+        `pMode=${includePersonalBuffs ? 1 : 0}`,
+        `pBuff=${personalBuffHash}`,
+        `levels=${levelParts.join(",")}`,
+        `ability=${abilityParts.join(",")}`,
+        `aTrig=${abilityTriggerHash}`,
+        `house=${houseHash}`,
+        `ach=${achievementHash}`,
+        `wear=${wearableParts.join(",")}`,
+        `fallback=${baseSignature}`
+      ].join("|");
+    }
+    async function computeCombatRoomClearChanceFullFlow(state, initClientData, room, maxEnhancementByItem, progressTracker, combatTrials, roomKey = "", options = {}) {
+      const roomLevel = positiveNumber(room?.recommendedLevel, 1);
+      const trials = normalizeCombatSimTrials(combatTrials);
+      const combatCrate = getCombatCrateBuffs(state, initClientData);
+      const labyrinthUpgradeLevels = resolveLabyrinthUpgradeLevels(options);
+      const labyrinthCombatBuffs = buildLabyrinthCombatBuffs(labyrinthUpgradeLevels);
+      const includePersonalBuffs = !(options && options.includePersonalBuffs === false);
+      const playerPersonalBuffItemHrids = getCombatSimulatorPersonalSealItemHrids(state, {
+        includePersonalBuffs,
+        selectedSealItemHrids: Array.isArray(options?.selectedSealItemHrids) ? options.selectedSealItemHrids : []
+      });
+      const combatCrateSignature = String(combatCrate.combatCrateSignature || combatCrate.teaCrateItemHrid || "");
+      const playerData = buildCombatPlayerDtoForRoom(state, initClientData, room, maxEnhancementByItem);
+      if (!playerData.playerDto) {
+        return null;
+      }
+      const inputSnapshot = buildCombatInputSnapshot(playerData, room);
+      if (inputSnapshot) {
+        inputSnapshot.roomKey = String(roomKey || "");
+      }
+      const workerResult = await simulateCombatRoomWithWorker(
+        {
+          playerDto: playerData.playerDto,
+          playerPersonalBuffItemHrids,
+          labyrinthCombatBuffs,
+          monsterHrid: room.monsterHrid,
+          mazeDifficulty: roomLevel,
+          roomDurationSeconds: ROOM_DURATION_SECONDS,
+          mazeCrateItemHrids: Array.isArray(combatCrate.combatCrateItemHrids) ? combatCrate.combatCrateItemHrids.slice() : [],
+          trials
+        },
+        progressTracker
+      );
+      const executedTrials = Math.max(0, Math.floor(finiteNumber(workerResult?.trials, trials)));
+      const successes = Math.max(0, Math.floor(finiteNumber(workerResult?.successes, 0)));
+      const totalSpentSeconds = Math.max(0, finiteNumber(workerResult?.totalSpentSeconds, 0));
+      const minElapsedSeconds = Math.max(0, finiteNumber(workerResult?.minElapsedSeconds, 0));
+      const maxElapsedSeconds = Math.max(minElapsedSeconds, finiteNumber(workerResult?.maxElapsedSeconds, minElapsedSeconds));
+      const failedByTimeoutRaw = Math.max(0, Math.floor(finiteNumber(workerResult?.failedByTimeout, 0)));
+      const failedByDeathRaw = Math.max(0, Math.floor(finiteNumber(workerResult?.failedByDeath, 0)));
+      const firstRunDebug = workerResult?.firstRunDebug || null;
+      const clearChance = executedTrials > 0 ? clamp01(successes / executedTrials) : 0;
+      const expectedSecondsPerClear = successes > 0 ? totalSpentSeconds / successes : Infinity;
+      const totalFailures = Math.max(0, executedTrials - successes);
+      const knownFailures = Math.max(0, failedByTimeoutRaw + failedByDeathRaw);
+      const failedByTimeout = knownFailures >= totalFailures ? failedByTimeoutRaw : failedByTimeoutRaw + (totalFailures - knownFailures);
+      const failedByDeath = knownFailures >= totalFailures ? failedByDeathRaw : failedByDeathRaw;
+      const failureReason = clearChance < 1 ? deriveCombatFailureReasonFromCounts(totalFailures, failedByTimeout, failedByDeath) : "";
+      return {
+        clearChance,
+        expectedSecondsPerClear,
+        combatMeta: {
+          source: "full",
+          roomKey: String(roomKey || ""),
+          monsterHrid: String(room?.monsterHrid || ""),
+          roomLevel,
+          trials: executedTrials,
+          successes,
+          failures: totalFailures,
+          failedByTimeout,
+          failedByDeath,
+          failureReason,
+          totalSpentSeconds,
+          minElapsedSeconds,
+          maxElapsedSeconds,
+          expectedSecondsPerClearRaw: expectedSecondsPerClear,
+          loadoutId: playerData.loadoutInfo.loadoutId || 0,
+          loadoutName: playerData.loadoutInfo.loadout?.name || "",
+          loadoutMode: playerData.loadoutInfo.loadout?.useExactEnhancement ? "exact" : "highest",
+          loadoutSource: playerData.loadoutInfo.source || "room",
+          selectedLoadoutId: playerData.loadoutInfo.selectedLoadoutId || playerData.loadoutInfo.loadoutId || 0,
+          mazeCrateItemHrid: combatCrateSignature,
+          mazeCrateItemHrids: Array.isArray(combatCrate.combatCrateItemHrids) ? combatCrate.combatCrateItemHrids.slice() : [],
+          mazeCrateBuffCount: Array.isArray(combatCrate.combatBuffs) ? combatCrate.combatBuffs.length : 0,
+          labyrinthBuffCount: Array.isArray(labyrinthCombatBuffs) ? labyrinthCombatBuffs.length : 0,
+          personalBuffCount: Array.isArray(playerPersonalBuffItemHrids) ? playerPersonalBuffItemHrids.length : 0,
+          combatInputSnapshot: inputSnapshot,
+          firstRunDebug: firstRunDebug || null
+        },
+        debug: [
+          "combat-full",
+          `monster=${room.monsterHrid.split("/").pop() || room.monsterHrid}`,
+          `loadout=${playerData.loadoutInfo.loadout?.name || playerData.loadoutInfo.loadoutId || "current"}`,
+          `source=${playerData.loadoutInfo.source || "room"}`,
+          playerData.loadoutInfo.selectedLoadoutId && playerData.loadoutInfo.selectedLoadoutId !== playerData.loadoutInfo.loadoutId ? `selected=${playerData.loadoutInfo.selectedLoadoutId}` : "",
+          `mode=${playerData.loadoutInfo.loadout?.useExactEnhancement ? "exact" : "highest"}`,
+          `crate=${combatCrateSignature || "none"}`,
+          getLabyrinthUpgradeLevel(labyrinthUpgradeLevels, LABYRINTH_UPGRADE_KEY_COMBAT_DAMAGE) > 0 ? `labDmg+${(getLabyrinthUpgradeLevel(labyrinthUpgradeLevels, LABYRINTH_UPGRADE_KEY_COMBAT_DAMAGE) * LABYRINTH_UPGRADE_STEP_RATIO * 100).toFixed(1)}%` : "",
+          getLabyrinthUpgradeLevel(labyrinthUpgradeLevels, LABYRINTH_UPGRADE_KEY_ATTACK_SPEED) > 0 ? `labAtkSpd+${(getLabyrinthUpgradeLevel(labyrinthUpgradeLevels, LABYRINTH_UPGRADE_KEY_ATTACK_SPEED) * LABYRINTH_UPGRADE_STEP_RATIO * 100).toFixed(1)}%` : "",
+          getLabyrinthUpgradeLevel(labyrinthUpgradeLevels, LABYRINTH_UPGRADE_KEY_CAST_SPEED) > 0 ? `labCastSpd+${(getLabyrinthUpgradeLevel(labyrinthUpgradeLevels, LABYRINTH_UPGRADE_KEY_CAST_SPEED) * LABYRINTH_UPGRADE_STEP_RATIO * 100).toFixed(1)}%` : "",
+          getLabyrinthUpgradeLevel(labyrinthUpgradeLevels, LABYRINTH_UPGRADE_KEY_CRITICAL_RATE) > 0 ? `labCrit+${(getLabyrinthUpgradeLevel(labyrinthUpgradeLevels, LABYRINTH_UPGRADE_KEY_CRITICAL_RATE) * LABYRINTH_UPGRADE_STEP_RATIO * 100).toFixed(1)}%` : "",
+          Array.isArray(playerPersonalBuffItemHrids) && playerPersonalBuffItemHrids.length > 0 ? `pBuff=${playerPersonalBuffItemHrids.length}` : "",
+          `roomLv=${roomLevel}`,
+          `trials=${executedTrials}`,
+          `wins=${successes}`,
+          `t=${minElapsedSeconds.toFixed(2)}-${maxElapsedSeconds.toFixed(2)}s`,
+          firstRunDebug && Number.isFinite(Number(firstRunDebug.encounters)) ? `enc=${Math.max(0, Math.floor(finiteNumber(firstRunDebug.encounters, 0)))}` : "",
+          firstRunDebug && Number.isFinite(Number(firstRunDebug.simulatedTime)) ? `simT=${(finiteNumber(firstRunDebug.simulatedTime, 0) / COMBAT_ONE_SECOND_NS).toFixed(2)}s` : "",
+          firstRunDebug && firstRunDebug.deaths && typeof firstRunDebug.deaths === "object" ? `deaths=${Object.values(firstRunDebug.deaths).reduce(
+            (sum, value) => sum + Math.max(0, Math.floor(finiteNumber(value, 0))),
+            0
+          )}` : "",
+          totalFailures > 0 ? `failT=${failedByTimeout}` : "",
+          totalFailures > 0 ? `failD=${failedByDeath}` : "",
+          failureReason ? `why=${failureReason}` : "",
+          `eta=${formatEtaText(expectedSecondsPerClear, Math.round(clearChance * 100))}`
+        ].join(" | ")
+      };
+    }
+    async function computeCombatRoomClearChance(state, initClientData, room, maxEnhancementByItem, progressTracker, combatTrials, roomKey = "", options = {}) {
+      if (!room || room.roomType !== LABYRINTH_COMBAT_ROOM_TYPE || !room.monsterHrid) {
+        return null;
+      }
+      const includePersonalBuffs = !(options && options.includePersonalBuffs === false);
+      const labyrinthUpgradeLevels = resolveLabyrinthUpgradeLevels(options);
+      const playerSignature = getCombatRoomSignature(state, initClientData, room, maxEnhancementByItem, {
+        includePersonalBuffs,
+        selectedSealItemHrids: Array.isArray(options?.selectedSealItemHrids) ? options.selectedSealItemHrids : [],
+        labyrinthUpgradeLevels
+      });
+      if (!playerSignature) {
+        return null;
+      }
+      const roomLevel = positiveNumber(room.recommendedLevel, 1);
+      const trials = normalizeCombatSimTrials(combatTrials);
+      const disableCache = Boolean(options && options.disableCache);
+      const cacheKey = `${room.monsterHrid}|${roomLevel}|trials=${trials}|${playerSignature}`;
+      if (!disableCache) {
+        const cached = combatEstimateCache.get(cacheKey);
+        if (cached) {
+          if (progressTracker) {
+            progressTracker.add(trials);
+          }
+          return {
+            ...cached,
+            combatMeta: {
+              ...cached.combatMeta || {},
+              source: "cache",
+              roomKey: String(roomKey || cached.combatMeta?.roomKey || ""),
+              cacheKey
+            }
+          };
+        }
+      }
+      let result = null;
+      try {
+        result = await computeCombatRoomClearChanceFullFlow(
+          state,
+          initClientData,
+          room,
+          maxEnhancementByItem,
+          progressTracker,
+          trials,
+          roomKey,
+          {
+            includePersonalBuffs,
+            selectedSealItemHrids: Array.isArray(options?.selectedSealItemHrids) ? options.selectedSealItemHrids : [],
+            labyrinthUpgradeLevels
+          }
+        );
+      } catch (error) {
+        const fatalError = error instanceof Error ? error : new Error(String(error));
+        console.error("[Lab Clear Rate] full combat simulation failed:", fatalError);
+        resetCombatSimulatorWorker(error instanceof Error ? error : new Error(String(error)));
+        combatWorkerScriptPromise = null;
+        const alertMessage = t("combatFlowFailedFmt", { message: fatalError.message || String(fatalError) });
+        if (typeof window !== "undefined" && typeof window.alert === "function") {
+          window.alert(alertMessage);
+        }
+        throw fatalError;
+      }
+      if (!result) {
+        return null;
+      }
+      const cacheableResult = {
+        ...result,
+        combatMeta: {
+          ...result.combatMeta || {},
+          source: "full",
+          roomKey: String(roomKey || result.combatMeta?.roomKey || ""),
+          cacheKey
+        }
+      };
+      if (!disableCache) {
+        combatEstimateCache.set(cacheKey, cacheableResult);
+        if (combatEstimateCache.size > COMBAT_SIM_CACHE_LIMIT) {
+          const oldestKey = combatEstimateCache.keys().next().value;
+          if (oldestKey) {
+            combatEstimateCache.delete(oldestKey);
+          }
+        }
+      }
+      return cacheableResult;
+    }
+    function isCalculableRoom(room) {
+      return room?.roomType === LABYRINTH_COMBAT_ROOM_TYPE || room?.roomType === LABYRINTH_SKILLING_ROOM_TYPE;
+    }
+    function getTotalProgressUnits(rooms, combatTrials) {
+      const trials = normalizeCombatSimTrials(combatTrials);
+      let total = 0;
+      for (const room of rooms) {
+        if (room?.roomType === LABYRINTH_COMBAT_ROOM_TYPE) {
+          total += trials;
+        } else if (room?.roomType === LABYRINTH_SKILLING_ROOM_TYPE) {
+          total += 1;
+        }
+      }
+      return total;
+    }
+    function getTotalProgressUnitsForIndexes(rooms, indexes, combatTrials) {
+      const trials = normalizeCombatSimTrials(combatTrials);
+      let total = 0;
+      for (const index of indexes) {
+        const room = rooms[index];
+        if (room?.roomType === LABYRINTH_COMBAT_ROOM_TYPE) {
+          total += trials;
+        } else if (room?.roomType === LABYRINTH_SKILLING_ROOM_TYPE) {
+          total += 1;
+        }
+      }
+      return total;
+    }
+    function parseRoomKeyToIndex(roomKey, colCount, totalCount) {
+      if (!roomKey || !Number.isInteger(colCount) || colCount <= 0) {
+        return -1;
+      }
+      const [xRaw, yRaw] = String(roomKey).split(",");
+      const x = Number(xRaw);
+      const y = Number(yRaw);
+      if (!Number.isInteger(x) || !Number.isInteger(y)) {
+        return -1;
+      }
+      if (x < 0 || y < 0 || x >= colCount) {
+        return -1;
+      }
+      const index = y * colCount + x;
+      if (!Number.isInteger(index) || index < 0 || index >= totalCount) {
+        return -1;
+      }
+      return index;
+    }
+    function getTargetRoomIndexes(flatRooms, colCount, roomKeys) {
+      const totalCount = Array.isArray(flatRooms) ? flatRooms.length : 0;
+      if (!totalCount) {
+        return [];
+      }
+      if (!Array.isArray(roomKeys) || roomKeys.length === 0) {
+        return Array.from({ length: totalCount }, (_unused, index) => index);
+      }
+      const indexes = /* @__PURE__ */ new Set();
+      for (const roomKey of roomKeys) {
+        const index = parseRoomKeyToIndex(roomKey, colCount, totalCount);
+        if (index < 0) {
+          continue;
+        }
+        if (!isCalculableRoom(flatRooms[index])) {
+          continue;
+        }
+        indexes.add(index);
+      }
+      return Array.from(indexes).sort((a, b) => a - b);
+    }
+    function refreshControlPanelPlacement() {
+      syncVisibleLabyrinthUpgradeLevelsCache();
+      const state = getGameState();
+      refreshLiveActionRateDisplay(state);
+      syncRoomLogSessionState(state);
+      if (!state || !state.characterLabyrinth) {
+        markLabyrinthTransition("");
+        hidePreviewTooltip();
+        clearAutomationWideLayout();
+        automationEstimateByRoomTypeKey.clear();
+        automationEstimateSignatureByRoomTypeKey.clear();
+        automationRecommendByRoomTypeKey.clear();
+        automationRecommendSignatureByRoomTypeKey.clear();
+        automationEstimateStatusText = t("pending");
+        automationEstimateRunning = false;
+        automationEstimateRunningMode = "";
+        automationEstimateColumnEnabled = false;
+        automationRecommendColumnEnabled = false;
+        removeAutomationEstimateColumn(getAutomationEstimateTable());
+        removeAutomationRecommendColumn(getAutomationEstimateTable());
+        const existing = getControlPanel();
+        if (existing && !manualUpdateRunning) {
+          existing.remove();
+        }
+        return null;
+      }
+      refreshAutomationEstimatePanel(state);
+      const roomRows = Array.isArray(state.characterLabyrinth.roomData) ? state.characterLabyrinth.roomData : [];
+      const flatRooms = roomRows.flat();
+      if (!flatRooms.length) {
+        if (isAutomationEstimatePanelVisible()) {
+          markLabyrinthTransitionPreserveTooltip("");
+        } else {
+          markLabyrinthTransition("");
+          hidePreviewTooltip();
+        }
+        return null;
+      }
+      const signature = getLabyrinthDisplaySignature(state);
+      if (signature && signature !== lastLabyrinthDisplaySignature) {
+        markLabyrinthTransition(signature);
+        setControlStatus({
+          running: false,
+          ratio: 0,
+          message: t("pending")
+        });
+      }
+      syncCompletedRoomCleanup(state);
+      pruneInvalidRoomDisplays(state);
+      const gridParent = findRoomGridParent(flatRooms.length);
+      if (!gridParent) {
+        if (!isAutomationEstimatePanelVisible()) {
+          hidePreviewTooltip();
+        }
+        return null;
+      }
+      const panel = ensureControlPanel(gridParent);
+      scheduleAutoRecalcIfNeeded(state);
+      return panel;
+    }
+    async function updateRoomBadges(options = {}) {
+      ensureStyle();
+      hidePreviewTooltip();
+      lastLabyrinthCalcDoneMessage = t("calcDone");
+      const state = getGameState();
+      if (!state || !state.characterLabyrinth || !Array.isArray(state.characterLabyrinth.roomData)) {
+        markLabyrinthTransition("");
+        setControlStatus({
+          running: false,
+          ratio: 0,
+          message: t("notInLabyrinth")
+        });
+        return false;
+      }
+      const roomRows = state.characterLabyrinth.roomData;
+      const flatRooms = roomRows.flat();
+      const colCount = Array.isArray(roomRows[0]) ? roomRows[0].length : 0;
+      const targetRoomKeys = Array.isArray(options?.roomKeys) ? options.roomKeys : [];
+      const hasTargetRoomFilter = targetRoomKeys.length > 0;
+      if (!flatRooms.length) {
+        markLabyrinthTransition("");
+        setControlStatus({
+          running: false,
+          ratio: 0,
+          message: t("noLabyrinthData")
+        });
+        return false;
+      }
+      const runSignature = getLabyrinthDisplaySignature(state);
+      lastLabyrinthDisplaySignature = runSignature;
+      function isRunStale() {
+        const latestSignature = getLabyrinthDisplaySignature(getGameState());
+        return Boolean(runSignature && latestSignature && latestSignature !== runSignature);
+      }
+      const roomCells = findRoomGridCells(flatRooms.length);
+      if (roomCells.length !== flatRooms.length) {
+        setControlStatus({
+          running: false,
+          ratio: 0,
+          message: t("cellsNotFound")
+        });
+        return false;
+      }
+      ensureControlPanel(roomCells[0]?.parentElement || null);
+      const combatTrials = saveCombatSimTrialsSetting(getSelectedCombatSimTrials());
+      const targetIndexes = getTargetRoomIndexes(flatRooms, colCount, targetRoomKeys);
+      if (hasTargetRoomFilter && targetIndexes.length === 0) {
+        setControlStatus({
+          running: false,
+          ratio: 1,
+          message: t("noNewTiles")
+        });
+        return true;
+      }
+      const progressTracker = createProgressTracker(
+        hasTargetRoomFilter ? getTotalProgressUnitsForIndexes(flatRooms, targetIndexes, combatTrials) : getTotalProgressUnits(flatRooms, combatTrials)
+      );
+      const initClientData = getInitClientData();
+      const maxEnhancementByItem = buildMaxEnhancementByItem(state);
+      const labyrinthUpgradeLevels = getLabyrinthUpgradeLevels(true);
+      const targetCount = targetIndexes.length;
+      const loanPersonalActionTypeBuffsDict = options && options.loanPersonalActionTypeBuffsDict && typeof options.loanPersonalActionTypeBuffsDict === "object" ? options.loanPersonalActionTypeBuffsDict : null;
+      const selectedSealItemHrids = Array.isArray(options?.selectedSealItemHrids) ? options.selectedSealItemHrids : [];
+      for (let targetPos = 0; targetPos < targetCount; targetPos += 1) {
+        if (isRunStale()) {
+          markLabyrinthTransition(getLabyrinthDisplaySignature(getGameState()));
+          setControlStatus({
+            running: false,
+            ratio: 0,
+            message: t("pending")
+          });
+          return false;
+        }
+        const i = targetIndexes[targetPos];
+        const room = flatRooms[i];
+        const cell = roomCells[i];
+        const roomX = colCount > 0 ? i % colCount : -1;
+        const roomY = colCount > 0 ? Math.floor(i / colCount) : -1;
+        const roomKey = roomX >= 0 && roomY >= 0 ? `${roomX},${roomY}` : "";
+        if (!cell) {
+          continue;
+        }
+        const roomProgressMessage = hasTargetRoomFilter ? t("roomFmt", { current: targetPos + 1, total: targetCount }) : t("roomFmt", { current: i + 1, total: flatRooms.length });
+        const combatProgressMessage = hasTargetRoomFilter ? t("combatFmt", { current: targetPos + 1, total: targetCount }) : t("combatFmt", { current: i + 1, total: flatRooms.length });
+        let result = null;
+        if (room?.roomType === LABYRINTH_SKILLING_ROOM_TYPE) {
+          result = computeRoomClearChance(state, initClientData, room, maxEnhancementByItem, {
+            loanPersonalActionTypeBuffsDict,
+            labyrinthUpgradeLevels
+          });
+          progressTracker.add(1, roomProgressMessage);
+        } else if (room?.roomType === LABYRINTH_COMBAT_ROOM_TYPE) {
+          setControlStatus({
+            running: true,
+            message: combatProgressMessage
+          });
+          result = await computeCombatRoomClearChance(
+            state,
+            initClientData,
+            room,
+            maxEnhancementByItem,
+            progressTracker,
+            combatTrials,
+            roomKey,
+            {
+              selectedSealItemHrids,
+              labyrinthUpgradeLevels
+            }
+          );
+        }
+        if (isRunStale()) {
+          markLabyrinthTransition(getLabyrinthDisplaySignature(getGameState()));
+          setControlStatus({
+            running: false,
+            ratio: 0,
+            message: t("pending")
+          });
+          return false;
+        }
+        if (!result) {
+          removeBadge(cell);
+          clearCellSkillingPreview(cell);
+          clearCellCombatPreview(cell);
+          if (isCalculableRoom(room)) {
+            clearRoomEstimate(roomKey);
+          } else {
+            const rewardOnlyPreview = buildRewardOnlyPreview(state, room);
+            if (rewardOnlyPreview) {
+              setCellSkillingPreview(cell, rewardOnlyPreview);
+            }
+          }
+        } else {
+          upsertBadge(cell, result.clearChance, result.expectedSecondsPerClear, result.debug);
+          if (isCalculableRoom(room)) {
+            updateRoomEstimate(roomKey, result);
+          }
+          if (result.skillingPreview) {
+            setCellSkillingPreview(cell, result.skillingPreview);
+          } else {
+            clearCellSkillingPreview(cell);
+          }
+          const combatPreview = buildCombatPreview(state, room, initClientData, result);
+          if (combatPreview) {
+            setCellCombatPreview(cell, combatPreview);
+          } else {
+            clearCellCombatPreview(cell);
+          }
+        }
+        if ((targetPos + 1) % 2 === 0) {
+          await nextFrame();
+        }
+      }
+      const doneMessage = buildLabyrinthCalcDoneMessage(state, flatRooms, targetIndexes);
+      lastLabyrinthCalcDoneMessage = doneMessage;
+      progressTracker.finish(doneMessage);
+      return true;
+    }
+    async function runManualUpdate(options = {}) {
+      if (manualUpdateRunning) {
+        return;
+      }
+      if (autoRecalcTimerId) {
+        window.clearTimeout(autoRecalcTimerId);
+        autoRecalcTimerId = 0;
+      }
+      pendingAutoRecalcRoomKeys.clear();
+      const trigger = String(options?.trigger || "manual");
+      const explicitLoanOptions = normalizeLoanSimulationOptions(options);
+      let effectiveLoanOptions = explicitLoanOptions;
+      if (!effectiveLoanOptions && trigger === "auto-new-tiles") {
+        effectiveLoanOptions = normalizeLoanSimulationOptions(activeLoanSimulationOptions);
+      }
+      if (trigger !== "auto-new-tiles") {
+        activeLoanSimulationOptions = effectiveLoanOptions ? deepCloneJson(effectiveLoanOptions) : null;
+      }
+      const runOptions = {
+        ...options && typeof options === "object" ? options : {}
+      };
+      if (effectiveLoanOptions) {
+        runOptions.loanPersonalActionTypeBuffsDict = deepCloneJson(effectiveLoanOptions.loanPersonalActionTypeBuffsDict);
+        runOptions.selectedSealItemHrids = Array.isArray(effectiveLoanOptions.selectedSealItemHrids) ? Array.from(effectiveLoanOptions.selectedSealItemHrids) : [];
+      } else {
+        delete runOptions.loanPersonalActionTypeBuffsDict;
+        delete runOptions.selectedSealItemHrids;
+      }
+      manualUpdateRunning = true;
+      setControlStatus({
+        running: true,
+        ratio: 0,
+        message: trigger === "auto-new-tiles" ? t("autoNewTiles") : t("preparing")
+      });
+      try {
+        const ok = await updateRoomBadges(runOptions);
+        if (ok) {
+          const latestState = getGameState();
+          if (latestState?.characterLabyrinth) {
+            updateAutoRecalcBaseline(latestState);
+          }
+          setControlStatus({
+            running: false,
+            ratio: 1,
+            message: lastLabyrinthCalcDoneMessage || t("calcDone")
+          });
+        }
+      } catch (error) {
+        console.error("[Lab Clear Rate] manual update failed:", error);
+        if (trigger === "auto-new-tiles") {
+          const latestState = getGameState();
+          if (latestState?.characterLabyrinth) {
+            updateAutoRecalcBaseline(latestState);
+          }
+        }
+        setControlStatus({
+          running: false,
+          message: t("calcFailed")
+        });
+      } finally {
+        manualUpdateRunning = false;
+      }
+    }
+    function setInputControlValue(element, value) {
+      if (!element) {
+        return;
+      }
+      element.value = String(value ?? "");
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    function setSelectControlValue(select, value) {
+      if (!select || !select.options) {
+        return false;
+      }
+      const target = String(value || "");
+      if (!target) {
+        return false;
+      }
+      for (const option of Array.from(select.options)) {
+        if (String(option.value || "") === target) {
+          select.value = option.value;
+          select.dispatchEvent(new Event("input", { bubbles: true }));
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+          return true;
+        }
+      }
+      const targetTail = target.split("/").pop() || target;
+      for (const option of Array.from(select.options)) {
+        const optionValue = String(option.value || "");
+        const optionTail = optionValue.split("/").pop() || optionValue;
+        if (optionTail === targetTail) {
+          select.value = option.value;
+          select.dispatchEvent(new Event("input", { bubbles: true }));
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+          return true;
+        }
+      }
+      return false;
+    }
+    function setCheckboxControlValue(checkbox, checked) {
+      if (!checkbox) {
+        return false;
+      }
+      const target = checked === true;
+      if (checkbox.checked !== target) {
+        checkbox.checked = target;
+        checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      return true;
+    }
+    function resolveSimulatorLabyrinthSelection(payload) {
+      const monsterHrid = String(payload?.monsterHrid || "");
+      if (!monsterHrid) {
+        return null;
+      }
+      const roomLevelRaw = Number(payload?.mazeDifficulty);
+      const roomLevel = Number.isFinite(roomLevelRaw) ? Math.max(20, Math.floor(roomLevelRaw)) : null;
+      return {
+        labyrinthHrid: monsterHrid,
+        roomLevel
+      };
+    }
+    function applyMonsterSelectionOnSimulatorPage(payload) {
+      let applied = false;
+      setCheckboxControlValue(document.querySelector("input#simAllZoneToggle"), false);
+      setCheckboxControlValue(document.querySelector("input#simAllSoloToggle"), false);
+      setCheckboxControlValue(document.querySelector("input#simAllLabyrinthsToggle"), false);
+      const labyrinthSelection = resolveSimulatorLabyrinthSelection(payload);
+      if (!labyrinthSelection) {
+        return false;
+      }
+      if (setCheckboxControlValue(document.querySelector("input#simLabyrinthToggle"), true)) {
+        applied = true;
+      }
+      if (setCheckboxControlValue(document.querySelector("input#simDungeonToggle"), false)) {
+        applied = true;
+      }
+      if (setSelectControlValue(document.querySelector("select#selectLabyrinth"), labyrinthSelection.labyrinthHrid)) {
+        applied = true;
+      }
+      if (Number.isFinite(Number(labyrinthSelection.roomLevel))) {
+        setInputControlValue(
+          document.querySelector("input#inputRoomLevel"),
+          String(Math.max(20, Math.floor(Number(labyrinthSelection.roomLevel))))
+        );
+        applied = true;
+      }
+      return applied;
+    }
+    function applySimulatorPlayerSelectionOnPage() {
+      let applied = false;
+      for (let i = 1; i <= 5; i += 1) {
+        const checkbox = document.querySelector(`input#player${i}.form-check-input.player-checkbox`) || document.querySelector(`input#player${i}`);
+        if (!checkbox) {
+          continue;
+        }
+        const shouldCheck = i === 1;
+        if (setCheckboxControlValue(checkbox, shouldCheck)) {
+          applied = true;
+        }
+      }
+      return applied;
+    }
+    function applySimulatorCrateSelectionOnPage(payload) {
+      let applied = false;
+      if (setSelectControlValue(document.querySelector("select#selectCoffeeCrates"), payload?.coffeeCrateItemHrid)) {
+        applied = true;
+      }
+      if (setSelectControlValue(document.querySelector("select#selectFoodCrates"), payload?.foodCrateItemHrid)) {
+        applied = true;
+      }
+      if (setSelectControlValue(document.querySelector("select#selectTeaCrates"), payload?.teaCrateItemHrid)) {
+        applied = true;
+      }
+      return applied;
+    }
+    function applySimulatorLanguageOnPage(payload) {
+      const nextLanguage = normalizeUiLanguage(payload?.uiLanguage) || UI_LANGUAGE_EN;
+      try {
+        localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, nextLanguage);
+      } catch (_error) {
+      }
+      try {
+        if (window.i18next && typeof window.i18next.changeLanguage === "function") {
+          window.i18next.changeLanguage(nextLanguage);
+        }
+      } catch (_error) {
+      }
+    }
+    function applySimulatorExtraBuffsOnPage(payload) {
+      const configuredBuffs = Array.isArray(payload?.simulatorPersonalBuffItemHrids) ? payload.simulatorPersonalBuffItemHrids : [];
+      const expected = new Set(
+        configuredBuffs.map((value) => String(value || "")).filter((value) => SIMULATOR_PERSONAL_BUFF_ITEM_HRIDS.has(value))
+      );
+      const toggle = document.querySelector("input#personalBuffsToggle");
+      const buffInputs = Array.from(document.querySelectorAll("#personalBuffsBox input[type='checkbox']"));
+      if (!toggle && buffInputs.length === 0) {
+        return false;
+      }
+      let applied = false;
+      if (toggle && setCheckboxControlValue(toggle, expected.size > 0)) {
+        applied = true;
+      }
+      for (const input of buffInputs) {
+        const value = String(input?.value || "");
+        const shouldCheck = expected.has(value);
+        if (setCheckboxControlValue(input, shouldCheck)) {
+          applied = true;
+        }
+      }
+      return applied;
+    }
+    function applySimulatorBridgeFieldsOnPage(payload, sanitizedImportSet) {
+      applySimulatorLanguageOnPage(payload);
+      applyMonsterSelectionOnSimulatorPage(payload);
+      applySimulatorPlayerSelectionOnPage();
+      applySimulatorCrateSelectionOnPage(payload);
+      applySimulatorExtraBuffsOnPage(payload);
+      if (Number.isFinite(Number(payload?.mazeDifficulty))) {
+        const roomLevel = Math.max(20, Math.floor(Number(payload.mazeDifficulty)));
+        setInputControlValue(document.querySelector("input#inputRoomLevel"), String(roomLevel));
+      }
+      if (sanitizedImportSet?.simulationTime !== void 0) {
+        setInputControlValue(
+          document.querySelector("input#inputSimulationTime"),
+          String(sanitizedImportSet.simulationTime)
+        );
+      }
+    }
+    function collectSimulatorSupportedHrids(attributeName) {
+      const supported = /* @__PURE__ */ new Set();
+      if (!attributeName) {
+        return supported;
+      }
+      const selector = `[${attributeName}]`;
+      for (const element of Array.from(document.querySelectorAll(selector))) {
+        const hrid = String(element?.getAttribute(attributeName) || "").trim();
+        if (hrid) {
+          supported.add(hrid);
+        }
+      }
+      return supported;
+    }
+    function sanitizeImportMapBySupportedHrids(rawMap, supportedHrids, transformValue) {
+      const result = {};
+      if (!rawMap || typeof rawMap !== "object" || Array.isArray(rawMap)) {
+        return result;
+      }
+      if (!(supportedHrids instanceof Set) || supportedHrids.size === 0) {
+        return result;
+      }
+      for (const [rawKey, rawValue] of Object.entries(rawMap)) {
+        const hrid = String(rawKey || "");
+        if (!hrid || !supportedHrids.has(hrid)) {
+          continue;
+        }
+        result[hrid] = typeof transformValue === "function" ? transformValue(rawValue) : rawValue;
+      }
+      return result;
+    }
+    function sanitizeSimulatorImportSetForPage(importSet) {
+      if (!importSet || typeof importSet !== "object") {
+        return importSet;
+      }
+      const sanitized = {
+        ...importSet
+      };
+      const supportedHouseRoomHrids = collectSimulatorSupportedHrids("data-house-hrid");
+      sanitized.houseRooms = sanitizeImportMapBySupportedHrids(importSet.houseRooms, supportedHouseRoomHrids, (value) => {
+        return Math.max(0, Math.floor(finiteNumber(value, 0)));
+      });
+      const supportedAchievementHrids = collectSimulatorSupportedHrids("data-achievement-hrid");
+      sanitized.achievements = sanitizeImportMapBySupportedHrids(importSet.achievements, supportedAchievementHrids, (value) => {
+        return value === true;
+      });
+      return sanitized;
+    }
+    function buildSimulatorGroupImportSetForPage(importSet) {
+      if (!importSet || typeof importSet !== "object") {
+        return null;
+      }
+      const serialized = JSON.stringify(importSet);
+      return {
+        1: serialized,
+        2: serialized,
+        3: serialized,
+        4: serialized,
+        5: serialized
+      };
+    }
+    function applySimulatorBridgePayloadOnSimulatorPage(payload) {
+      const importSet = payload?.importSet;
+      if (!importSet || typeof importSet !== "object") {
+        return false;
+      }
+      const sanitizedImportSet = sanitizeSimulatorImportSetForPage(importSet);
+      const importButton = document.querySelector("button#buttonImportSet");
+      if (!importButton) {
+        return false;
+      }
+      let imported = false;
+      const groupTab = document.querySelector("a#group-combat-tab");
+      if (groupTab) {
+        groupTab.click();
+      }
+      const inputSetGroupAll = document.querySelector("input#inputSetGroupCombatAll, textarea#inputSetGroupCombatAll");
+      if (inputSetGroupAll) {
+        const groupImportSet = buildSimulatorGroupImportSetForPage(sanitizedImportSet);
+        if (groupImportSet) {
+          setInputControlValue(inputSetGroupAll, JSON.stringify(groupImportSet));
+          importButton.click();
+          imported = true;
+        }
+      }
+      if (!imported) {
+        const soloTab = document.querySelector("a#solo-tab");
+        if (soloTab) {
+          soloTab.click();
+        }
+        const inputSetSolo = document.querySelector("input#inputSetSolo, textarea#inputSetSolo");
+        if (!inputSetSolo) {
+          return false;
+        }
+        setInputControlValue(inputSetSolo, JSON.stringify(sanitizedImportSet));
+        importButton.click();
+        imported = true;
+      }
+      if (!imported) {
+        return false;
+      }
+      applySimulatorBridgeFieldsOnPage(payload, sanitizedImportSet);
+      window.setTimeout(() => {
+        applySimulatorBridgeFieldsOnPage(payload, sanitizedImportSet);
+      }, 180);
+      return true;
+    }
+    function bootstrapSimulatorBridgePage() {
+      const payload = extractSimulatorBridgePayloadFromLocation();
+      if (!payload || typeof payload !== "object") {
+        return;
+      }
+      clearSimulatorBridgePayloadFromLocation();
+      let attempts = 0;
+      const maxAttempts = 120;
+      const timerId = window.setInterval(() => {
+        attempts += 1;
+        try {
+          if (applySimulatorBridgePayloadOnSimulatorPage(payload)) {
+            window.clearInterval(timerId);
+            return;
+          }
+        } catch (error) {
+          console.error("[Lab Clear Rate] Simulator bridge apply failed:", error);
+          window.clearInterval(timerId);
+          return;
+        }
+        if (attempts >= maxAttempts) {
+          window.clearInterval(timerId);
+          console.error("[Lab Clear Rate] Simulator bridge timeout: import controls not found.");
+        }
+      }, 150);
+    }
+    let started = false;
+    return {
+      start() {
+        if (started) return;
+        started = true;
+        initializeRoomLogState();
+        ensureStyle();
+        refreshControlPanelPlacement();
+      },
+      refresh() {
+        if (!started) return;
+        ensureStyle();
+        refreshControlPanelPlacement();
+      },
+      onWsMessage(msg) {
+        if (!started) return;
+        handleLiveActionRateWsObject(msg);
+      },
+      isWorkerActive() {
+        return Boolean(combatSimulatorWorker);
+      },
+      terminateWorker(reason = "Labyrinth idle timeout") {
+        if (combatSimulatorWorker) {
+          resetCombatSimulatorWorker(new Error(reason));
+        }
+      },
+      dispose() {
+        started = false;
+        if (panelRefreshTimerId) {
+          clearTimeout(panelRefreshTimerId);
+          panelRefreshTimerId = 0;
+        }
+        if (combatSimulatorWorker) {
+          resetCombatSimulatorWorker(new Error("Labyrinth module disposed"));
+        }
+        document.getElementById(STYLE_ID)?.remove();
+        document.getElementById(CONTROL_ID)?.remove();
+        document.getElementById(AUTOMATION_ESTIMATE_CONTROL_ID)?.remove();
+        document.getElementById(PREVIEW_TOOLTIP_ID)?.remove();
+        document.getElementById(ROOM_LOG_FLOAT_ID)?.remove();
+        document.getElementById(LIVE_ACTION_RATE_ID)?.remove();
+        document.querySelectorAll("." + BADGE_CLASS + ", ." + AUTOMATION_MAX_FLOOR_TABLE_HEADER_CLASS + ", ." + AUTOMATION_MAX_FLOOR_CELL_CLASS + ", ." + AUTOMATION_ESTIMATE_TABLE_HEADER_CLASS + ", ." + AUTOMATION_ESTIMATE_CELL_CLASS + ", ." + AUTOMATION_RECOMMEND_TABLE_HEADER_CLASS + ", ." + AUTOMATION_RECOMMEND_CELL_CLASS).forEach((el) => el.remove());
+      }
+    };
+  }
+
+  // src/features/combat/labyrinth-rate.ts
+  var IDLE_TERMINATE_MS = 6e4;
+  var activeEngine = null;
+  function isLabyrinthWorkerActive() {
+    return activeEngine?.isWorkerActive() ?? false;
+  }
+  function createLabyrinthRateModule() {
+    let ctx = null;
+    let unregWs = null;
+    let unregRoute = null;
+    let idleTimer = null;
+    let unloadHandler = null;
+    const clearIdleTimer = () => {
+      if (idleTimer !== null) {
+        clearTimeout(idleTimer);
+        idleTimer = null;
+      }
+    };
+    const scheduleWorkerTermination = () => {
+      if (idleTimer !== null || !activeEngine?.isWorkerActive()) return;
+      idleTimer = window.setTimeout(() => {
+        idleTimer = null;
+        activeEngine?.terminateWorker("Left Labyrinth for 60s");
+      }, IDLE_TERMINATE_MS);
+    };
+    return {
+      id: "combat-labyrinth-rate",
+      nameZh: "迷宫胜率与耗时模拟（按需 Worker）",
+      nameEn: "Labyrinth Monte-Carlo Rate (Lazy Worker)",
+      descriptionZh: "保留真实蒙特卡洛战斗模拟与生活房清房计算；仅进迷宫后按需启动 1 个 Worker，离开 60 秒自动销毁",
+      descriptionEn: "Authentic Monte-Carlo combat & skilling clear rate; spawns 1 LazyWorker only inside Labyrinth and terminates 60s after leaving",
+      category: "combat",
+      defaultEnabled: true,
+      routes: ["labyrinth"],
+      init(context) {
+        ctx = context;
+        activeEngine = createLabyrinthEngine({
+          decompressFromUTF16,
+          getClientData: () => ctx?.gameData.getClientData() ?? null
+        });
+        unregWs = ctx.wsBus.on("labyrinth_room_progress", (msg) => {
+          activeEngine?.onWsMessage(msg);
+        });
+        unregRoute = ctx.domScheduler.onRouteChange((nextRoute) => {
+          if (nextRoute === "labyrinth") {
+            clearIdleTimer();
+            activeEngine?.start();
+            activeEngine?.refresh();
+          } else {
+            scheduleWorkerTermination();
+          }
+        });
+        unloadHandler = () => {
+          activeEngine?.terminateWorker("Page unload");
+        };
+        window.addEventListener("beforeunload", unloadHandler);
+        if (ctx.domScheduler.getActiveRoute() === "labyrinth") {
+          activeEngine.start();
+        }
+        return () => {
+          clearIdleTimer();
+          unregWs?.();
+          unregWs = null;
+          unregRoute?.();
+          unregRoute = null;
+          if (unloadHandler) {
+            window.removeEventListener("beforeunload", unloadHandler);
+            unloadHandler = null;
+          }
+          activeEngine?.dispose();
+          activeEngine = null;
+        };
+      },
+      onDom(_doc, route) {
+        if (route !== "labyrinth" || !activeEngine) return;
+        clearIdleTimer();
+        activeEngine.start();
+        activeEngine.refresh();
+      }
+    };
+  }
+
+  // src/features/combat/index.ts
+  var combatModules = [
+    createLabyrinthRateModule(),
+    createCombatLightTrackerModule(),
+    createLoadoutBadgeModule(),
+    createCombatScoreModule()
+  ];
+
+  // src/features/market/enhancement-math.ts
+  var BASE_SUCCESS_RATES = [
+    50,
+    45,
+    45,
+    40,
+    40,
+    40,
+    35,
+    35,
+    35,
+    35,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30,
+    30
+  ];
+  var ENHANCEMENT_BONUSES = {
+    1: 0.02,
+    2: 0.042,
+    3: 0.066,
+    4: 0.092,
+    5: 0.12,
+    6: 0.15,
+    7: 0.182,
+    8: 0.216,
+    9: 0.252,
+    10: 0.29,
+    11: 0.334,
+    12: 0.384,
+    13: 0.44,
+    14: 0.502,
+    15: 0.57,
+    16: 0.644,
+    17: 0.724,
+    18: 0.81,
+    19: 0.902,
+    20: 1
+  };
+  var ENHANCEMENT_MULTIPLIERS = {
+    "/equipment_types/neck": 5,
+    "/equipment_types/ring": 5,
+    "/equipment_types/earring": 5,
+    "/equipment_types/back": 5,
+    "/equipment_types/trinket": 5,
+    "/equipment_types/charm": 5
+  };
+  var MIN_ENHANCING_ACTION_TIME = 3;
+  var BASE_ENHANCING_ACTION_TIME = 12;
+  function getEnhancementStatMultiplier(itemDetails, enhancementLevel) {
+    if (!enhancementLevel || enhancementLevel <= 0) return 1;
+    const equipmentType = itemDetails?.equipmentDetail?.type;
+    const slotMult = ENHANCEMENT_MULTIPLIERS[equipmentType] || 1;
+    const bonus = ENHANCEMENT_BONUSES[enhancementLevel] || 0;
+    return 1 + bonus * slotMult;
+  }
+  function invertMatrix(matrix) {
+    const n = matrix.length;
+    const aug = Array.from({ length: n }, (_, i) => {
+      const row = new Array(2 * n).fill(0);
+      for (let j = 0; j < n; j++) row[j] = matrix[i][j];
+      row[n + i] = 1;
+      return row;
+    });
+    for (let col = 0; col < n; col++) {
+      let pivotRow = col;
+      let maxAbs = Math.abs(aug[col][col]);
+      for (let r = col + 1; r < n; r++) {
+        const abs = Math.abs(aug[r][col]);
+        if (abs > maxAbs) {
+          maxAbs = abs;
+          pivotRow = r;
+        }
+      }
+      if (maxAbs < 1e-12) return null;
+      if (pivotRow !== col) {
+        const tmp = aug[col];
+        aug[col] = aug[pivotRow];
+        aug[pivotRow] = tmp;
+      }
+      const pivot = aug[col][col];
+      for (let j = col; j < 2 * n; j++) {
+        aug[col][j] /= pivot;
+      }
+      for (let r = 0; r < n; r++) {
+        if (r === col) continue;
+        const factor = aug[r][col];
+        if (factor === 0) continue;
+        for (let j = col; j < 2 * n; j++) {
+          aug[r][j] -= factor * aug[col][j];
+        }
+      }
+    }
+    return aug.map((row) => row.slice(n));
+  }
+  function solveEnhancementMarkov(enhancingLevel, toolBonus, itemLevel, targetLevel, protectFrom, blessedTea, guzzlingBonus) {
+    const totalBonus = enhancingLevel >= itemLevel ? 1 + (toolBonus + 0.05 * (enhancingLevel - itemLevel)) / 100 : 1 - 0.5 * (1 - enhancingLevel / itemLevel) + toolBonus / 100;
+    const Q = Array.from({ length: targetLevel }, () => new Array(targetLevel).fill(0));
+    const iMinusQ = Array.from({ length: targetLevel }, () => new Array(targetLevel).fill(0));
+    for (let i = 0; i < targetLevel; i++) {
+      const baseRate = (BASE_SUCCESS_RATES[i] ?? 30) / 100;
+      const pSuccess = Math.max(0, Math.min(1, baseRate * totalBonus));
+      const failDest = protectFrom > 0 && i >= protectFrom ? i - 1 : 0;
+      if (blessedTea) {
+        const skipRatio = Math.max(0, Math.min(1, 0.01 * guzzlingBonus));
+        const pSkip = pSuccess * skipRatio;
+        const pNormal = pSuccess - pSkip;
+        if (i + 1 < targetLevel) Q[i][i + 1] += pNormal;
+        if (i + 2 < targetLevel) Q[i][i + 2] += pSkip;
+        if (failDest < targetLevel) Q[i][failDest] += 1 - pSuccess;
+      } else {
+        if (i + 1 < targetLevel) Q[i][i + 1] += pSuccess;
+        if (failDest < targetLevel) Q[i][failDest] += 1 - pSuccess;
+      }
+      for (let j = 0; j < targetLevel; j++) {
+        iMinusQ[i][j] = (i === j ? 1 : 0) - Q[i][j];
+      }
+    }
+    const M = invertMatrix(iMinusQ);
+    if (!M) return null;
+    let attempts = 0;
+    for (let i = 0; i < targetLevel; i++) {
+      attempts += M[0][i];
+    }
+    let protectionCount = 0;
+    if (protectFrom > 0 && protectFrom < targetLevel) {
+      for (let i = protectFrom; i < targetLevel; i++) {
+        const failChance = Q[i][i - 1] ?? 0;
+        protectionCount += M[0][i] * failChance;
+      }
+    }
+    return { attempts, protectionCount };
+  }
+  function calculateEnhancingActionTime(enhancingLevel, itemLevel, speedBonus) {
+    const speedMultiplier = enhancingLevel > itemLevel ? 1 + (enhancingLevel - itemLevel + speedBonus) / 100 : 1 + speedBonus / 100;
+    return Math.max(MIN_ENHANCING_ACTION_TIME, BASE_ENHANCING_ACTION_TIME / Math.max(0.1, speedMultiplier));
+  }
+  function detectCharacterEnhancingSetup(gameData2) {
+    const clientData = gameData2.getClientData();
+    const itemMap = clientData?.itemDetailMap || {};
+    const skills = gameData2.getCharacterSkills();
+    const enhSkill = skills.find((s) => s?.skillHrid === "/skills/enhancing");
+    const baseEnhancingLevel = enhSkill?.level || 1;
+    const houseRooms = gameData2.getHouseRooms();
+    const observatory = houseRooms.get("/house_rooms/observatory");
+    const houseLevel = observatory?.level || 0;
+    const equipped = gameData2.getCharacterItems().filter((i) => i && i.itemLocationHrid !== "/item_locations/inventory");
+    let equipSuccessBonus = 0;
+    let equipSpeedBonus = 0;
+    let drinkConcentration = 0;
+    const equippedLabels = [];
+    for (const eq of equipped) {
+      const details = itemMap[eq.itemHrid];
+      const stats = details?.equipmentDetail?.noncombatStats;
+      if (!stats) continue;
+      const enhLv = eq.enhancementLevel || 0;
+      const mult = getEnhancementStatMultiplier(details, enhLv);
+      const succ = (stats.enhancingSuccess || 0) * 100 * mult;
+      const spd = ((stats.enhancingSpeed || 0) + (stats.skillingSpeed || 0)) * 100 * mult;
+      const conc = (stats.drinkConcentration || 0) * 100 * mult;
+      if (succ > 0 || spd > 0 || conc > 0) {
+        equipSuccessBonus += succ;
+        equipSpeedBonus += spd;
+        if (conc > drinkConcentration) drinkConcentration = conc;
+        const baseName = details?.name || eq.itemHrid.replace("/items/", "");
+        equippedLabels.push(enhLv > 0 ? `${baseName} +${enhLv}` : baseName);
+      }
+    }
+    const guzzlingBonus = 1 + drinkConcentration / 100;
+    const drinkSlots = gameData2.getActionTypeDrinkSlots().get("/action_types/enhancing") || [];
+    const activeTeaHrids = [];
+    let hasBasic = false;
+    let hasSuper = false;
+    let hasUltra = false;
+    let blessedTea = false;
+    for (const slot of drinkSlots) {
+      const hrid = slot?.itemHrid;
+      if (!hrid) continue;
+      activeTeaHrids.push(hrid);
+      if (hrid === "/items/enhancing_tea") hasBasic = true;
+      else if (hrid === "/items/super_enhancing_tea") hasSuper = true;
+      else if (hrid === "/items/ultra_enhancing_tea") hasUltra = true;
+      else if (hrid === "/items/blessed_tea") blessedTea = true;
+    }
+    const baseTeaLv = hasUltra ? 8 : hasSuper ? 6 : hasBasic ? 3 : 0;
+    const baseTeaSpd = hasUltra ? 6 : hasSuper ? 4 : hasBasic ? 2 : 0;
+    const charData = gameData2.getCharacterData();
+    const communitySpeedLv = charData?.communityBuffsMap?.["/community_buff_types/enhancing_speed"]?.level ?? charData?.communityBuffs?.find?.((b) => b.typeHrid === "/community_buff_types/enhancing_speed")?.level ?? 0;
+    const communitySpeedBonus = communitySpeedLv > 0 ? 20 + (communitySpeedLv - 1) * 0.5 : 0;
+    const effectiveEnhancingLevel = baseEnhancingLevel + baseTeaLv * guzzlingBonus;
+    const toolBonus = equipSuccessBonus + houseLevel * 0.05;
+    const speedBonus = equipSpeedBonus + houseLevel * 1 + baseTeaSpd * guzzlingBonus + communitySpeedBonus;
+    return {
+      baseEnhancingLevel,
+      effectiveEnhancingLevel,
+      houseLevel,
+      toolBonus,
+      speedBonus,
+      drinkConcentration,
+      guzzlingBonus,
+      blessedTea,
+      activeTeaHrids,
+      equippedLabels
+    };
+  }
+  function computeEnhancementPlan(itemHrid, targetLevel, setup, clientData, marketStore2, getBasePrice, getMaterialAsk) {
+    const itemDetails = clientData?.itemDetailMap?.[itemHrid];
+    if (!itemDetails?.enhancementCosts?.length || targetLevel < 1 || targetLevel > 20) {
+      return null;
+    }
+    const itemLevel = itemDetails.itemLevel || 1;
+    const basePrice = getBasePrice(itemHrid);
+    let perActionMaterialCost = 0;
+    for (const mat of itemDetails.enhancementCosts) {
+      perActionMaterialCost += getMaterialAsk(mat.itemHrid) * (mat.count || 0);
+    }
+    const protOptions = [itemHrid, "/items/mirror_of_protection"];
+    if (Array.isArray(itemDetails.protectionItemHrids)) {
+      protOptions.push(...itemDetails.protectionItemHrids);
+    }
+    let protectUnitPrice = Infinity;
+    let protectItemHrid = null;
+    for (const hrid of protOptions) {
+      const p = getBasePrice(hrid);
+      if (p > 0 && p < protectUnitPrice) {
+        protectUnitPrice = p;
+        protectItemHrid = hrid;
+      }
+    }
+    if (protectUnitPrice === Infinity) protectUnitPrice = 0;
+    let teaCostPerDrink = 0;
+    for (const teaHrid of setup.activeTeaHrids) {
+      const tp = marketStore2.getPrice(teaHrid, 0);
+      teaCostPerDrink += tp?.ask && tp.ask > 0 ? tp.ask : tp?.bid && tp.bid > 0 ? tp.bid : 0;
+    }
+    const teaCostPerHour = teaCostPerDrink * 12;
+    const perActionTimeSec = calculateEnhancingActionTime(
+      setup.effectiveEnhancingLevel,
+      itemLevel,
+      setup.speedBonus
+    );
+    const dp = new Array(targetLevel + 1);
+    dp[0] = {
+      targetLevel: 0,
+      basePrice,
+      baseCount: 1,
+      perActionMaterialCost,
+      attempts: 0,
+      perActionTimeSec,
+      totalTimeHours: 0,
+      materialCost: 0,
+      protectionCount: 0,
+      protectionCost: 0,
+      protectFrom: 0,
+      protectItemHrid,
+      mirrorCount: 0,
+      mirrorCost: 0,
+      mirrorStartLevel: null,
+      teaCostPerHour,
+      teaCost: 0,
+      totalCost: basePrice
+    };
+    for (let lvl = 1; lvl <= targetLevel; lvl++) {
+      const strategies = [0];
+      for (let p = 2; p <= lvl; p++) strategies.push(p);
+      let best = null;
+      for (const protectFrom of strategies) {
+        const res = solveEnhancementMarkov(
+          setup.effectiveEnhancingLevel,
+          setup.toolBonus,
+          itemLevel,
+          lvl,
+          protectFrom,
+          setup.blessedTea,
+          setup.guzzlingBonus
+        );
+        if (!res) continue;
+        const totalTimeHours = res.attempts * perActionTimeSec / 3600;
+        const materialCost = perActionMaterialCost * res.attempts;
+        const protectionCost = protectFrom > 0 && res.protectionCount > 0 ? protectUnitPrice * res.protectionCount : 0;
+        const teaCost = teaCostPerHour * totalTimeHours;
+        const totalCost = basePrice + materialCost + protectionCost + teaCost;
+        if (!best || totalCost < best.totalCost) {
+          best = {
+            targetLevel: lvl,
+            basePrice,
+            baseCount: 1,
+            perActionMaterialCost,
+            attempts: res.attempts,
+            perActionTimeSec,
+            totalTimeHours,
+            materialCost,
+            protectionCount: res.protectionCount,
+            protectionCost,
+            protectFrom,
+            protectItemHrid,
+            mirrorCount: 0,
+            mirrorCost: 0,
+            mirrorStartLevel: null,
+            teaCostPerHour,
+            teaCost,
+            totalCost
+          };
+        }
+      }
+      dp[lvl] = best ?? { ...dp[0], targetLevel: lvl };
+    }
+    const mirrorPrice = getBasePrice("/items/philosophers_mirror");
+    if (mirrorPrice > 0) {
+      let firstMirrorLevel = null;
+      for (let lvl = 3; lvl <= targetLevel; lvl++) {
+        const low = dp[lvl - 2];
+        const high = dp[lvl - 1];
+        const combinedCost = low.totalCost + high.totalCost + mirrorPrice;
+        if (combinedCost < dp[lvl].totalCost) {
+          if (firstMirrorLevel === null) firstMirrorLevel = lvl;
+          dp[lvl] = {
+            targetLevel: lvl,
+            basePrice,
+            baseCount: low.baseCount + high.baseCount,
+            perActionMaterialCost,
+            attempts: low.attempts + high.attempts,
+            perActionTimeSec,
+            totalTimeHours: low.totalTimeHours + high.totalTimeHours,
+            materialCost: low.materialCost + high.materialCost,
+            protectionCount: low.protectionCount + high.protectionCount,
+            protectionCost: low.protectionCost + high.protectionCost,
+            protectFrom: high.protectFrom || low.protectFrom,
+            protectItemHrid,
+            mirrorCount: low.mirrorCount + high.mirrorCount + 1,
+            mirrorCost: low.mirrorCost + high.mirrorCost + mirrorPrice,
+            mirrorStartLevel: firstMirrorLevel,
+            teaCostPerHour,
+            teaCost: low.teaCost + high.teaCost,
+            totalCost: combinedCost
+          };
+        }
+      }
+    }
+    return dp[targetLevel] ?? null;
+  }
+  function createRealisticPriceResolvers(clientData, marketStore2) {
+    const prodCostCache = /* @__PURE__ */ new Map();
+    let recipeIndex = null;
+    const getProductionCost = (itemHrid, visiting = /* @__PURE__ */ new Set()) => {
+      if (prodCostCache.has(itemHrid)) return prodCostCache.get(itemHrid);
+      if (visiting.has(itemHrid)) return 0;
+      if (!recipeIndex && clientData?.actionDetailMap) {
+        recipeIndex = /* @__PURE__ */ new Map();
+        for (const act of Object.values(clientData.actionDetailMap)) {
+          const outHrid = act?.outputItems?.[0]?.itemHrid;
+          if (outHrid && !recipeIndex.has(outHrid)) {
+            recipeIndex.set(outHrid, act);
+          }
+        }
+      }
+      const action = recipeIndex?.get(itemHrid);
+      if (!action) {
+        prodCostCache.set(itemHrid, 0);
+        return 0;
+      }
+      visiting.add(itemHrid);
+      let total = 0;
+      if (Array.isArray(action.inputItems)) {
+        for (const inp of action.inputItems) {
+          const p = marketStore2.getPrice(inp.itemHrid, 0);
+          let unit = p?.ask && p.ask > 0 ? p.ask : p?.bid && p.bid > 0 ? p.bid : 0;
+          if (unit <= 0) unit = getProductionCost(inp.itemHrid, visiting);
+          total += unit * (inp.count || 0);
+        }
+      }
+      total *= 0.9;
+      if (action.upgradeItemHrid) {
+        const up = marketStore2.getPrice(action.upgradeItemHrid, 0);
+        let upgradeUnit = up?.ask && up.ask > 0 ? up.ask : up?.bid && up.bid > 0 ? up.bid : 0;
+        if (upgradeUnit <= 0) upgradeUnit = getProductionCost(action.upgradeItemHrid, visiting);
+        total += upgradeUnit;
+      }
+      const outCount = action.outputItems?.[0]?.count || 1;
+      const perUnit = outCount > 0 ? total / outCount : 0;
+      visiting.delete(itemHrid);
+      prodCostCache.set(itemHrid, perUnit);
+      return perUnit;
+    };
+    const getBasePrice = (hrid) => {
+      if (hrid === "/items/coin") return 1;
+      if (hrid.startsWith("/items/trainee_")) return 25e4;
+      const p = marketStore2.getPrice(hrid, 0);
+      const ask = p?.ask && p.ask > 0 ? p.ask : 0;
+      const bid = p?.bid && p.bid > 0 ? p.bid : 0;
+      const prod = getProductionCost(hrid);
+      if (ask > 0 && bid > 0) return ask / bid > 1.3 ? Math.max(bid, prod) : ask;
+      if (ask > 0) return prod > 0 && ask / prod > 1.3 ? prod : Math.max(ask, prod);
+      if (bid > 0) return Math.max(bid, prod);
+      return prod;
+    };
+    const getMaterialAsk = (hrid) => {
+      if (hrid === "/items/coin") return 1;
+      if (hrid.startsWith("/items/trainee_")) return 25e4;
+      const p = marketStore2.getPrice(hrid, 0);
+      const ask = p?.ask && p.ask > 0 ? p.ask : 0;
+      const bid = p?.bid && p.bid > 0 ? p.bid : 0;
+      if (ask > 0 && bid > 0) return ask / bid > 1.3 ? bid : ask;
+      if (ask > 0) return ask;
+      if (bid > 0) return bid;
+      return getProductionCost(hrid) || clientData?.itemDetailMap?.[hrid]?.sellPrice || 0;
+    };
+    return { getBasePrice, getMaterialAsk };
+  }
+
+  // src/features/market/networth-valuation.ts
+  var MARKET_TAX = 0.02;
+  var COWBELL_BAG_TAX = 0.18;
+  var HIGH_ENH_MIN_LEVEL = 13;
+  var STARTER_ABILITIES = [
+    "poke",
+    "scratch",
+    "smack",
+    "quick_shot",
+    "water_strike",
+    "fireball",
+    "entangle",
+    "minor_heal"
+  ];
+  var DUNGEON_CHEST_KEYS = {
+    "/items/chimerical_chest": "/items/chimerical_chest_key",
+    "/items/sinister_chest": "/items/sinister_chest_key",
+    "/items/enchanted_chest": "/items/enchanted_chest_key",
+    "/items/pirate_chest": "/items/pirate_chest_key",
+    "/items/chimerical_refinement_chest": "/items/chimerical_chest_key",
+    "/items/sinister_refinement_chest": "/items/sinister_chest_key",
+    "/items/enchanted_refinement_chest": "/items/enchanted_chest_key",
+    "/items/pirate_refinement_chest": "/items/pirate_chest_key"
+  };
+  var DUNGEON_TOKENS = /* @__PURE__ */ new Set([
+    "/items/chimerical_token",
+    "/items/sinister_token",
+    "/items/enchanted_token",
+    "/items/pirate_token"
+  ]);
+  var ToolashaNetworthEvaluator = class {
+    containerEvCache = /* @__PURE__ */ new Map();
+    prodCostCache = /* @__PURE__ */ new Map();
+    enhancementCostCache = /* @__PURE__ */ new Map();
+    recipeIndex = null;
+    cachePricingMode = "ask";
+    invalidate() {
+      this.containerEvCache.clear();
+      this.prodCostCache.clear();
+      this.enhancementCostCache.clear();
+    }
+    getWeightedMidPrice(marketStore2, itemHrid) {
+      const p = marketStore2.getPrice(itemHrid, 0);
+      if (!p) return 0;
+      let ask = p.ask ?? -1;
+      let bid = p.bid ?? -1;
+      if (ask > 0 && bid <= 0) bid = ask;
+      if (bid > 0 && ask <= 0) ask = bid;
+      if (ask <= 0 && bid <= 0) return 0;
+      return (ask + bid) / 2;
+    }
+    getProductionCost(itemHrid, clientData, marketStore2, visiting = /* @__PURE__ */ new Set()) {
+      if (this.prodCostCache.has(itemHrid)) return this.prodCostCache.get(itemHrid);
+      if (visiting.has(itemHrid)) return 0;
+      if (!this.recipeIndex && clientData?.actionDetailMap) {
+        this.recipeIndex = /* @__PURE__ */ new Map();
+        for (const act of Object.values(clientData.actionDetailMap)) {
+          const outHrid = act?.outputItems?.[0]?.itemHrid;
+          if (outHrid && !this.recipeIndex.has(outHrid)) {
+            this.recipeIndex.set(outHrid, act);
+          }
+        }
+      }
+      const action = this.recipeIndex?.get(itemHrid);
+      if (!action) {
+        this.prodCostCache.set(itemHrid, 0);
+        return 0;
+      }
+      visiting.add(itemHrid);
+      let total = 0;
+      if (Array.isArray(action.inputItems)) {
+        for (const inp of action.inputItems) {
+          const p = marketStore2.getPrice(inp.itemHrid, 0);
+          let unit = p?.ask && p.ask > 0 ? p.ask : 0;
+          if (unit <= 0) {
+            unit = this.getProductionCost(inp.itemHrid, clientData, marketStore2, visiting);
+          }
+          total += unit * (inp.count || 0);
+        }
+      }
+      total *= 0.9;
+      if (action.upgradeItemHrid) {
+        const up = marketStore2.getPrice(action.upgradeItemHrid, 0);
+        let upgradeUnit = up?.ask && up.ask > 0 ? up.ask : 0;
+        if (upgradeUnit <= 0) {
+          upgradeUnit = this.getProductionCost(action.upgradeItemHrid, clientData, marketStore2, visiting);
+        }
+        total += upgradeUnit;
+      }
+      const outCount = action.outputItems?.[0]?.count || 1;
+      const perUnit = outCount > 0 ? total / outCount : 0;
+      visiting.delete(itemHrid);
+      this.prodCostCache.set(itemHrid, perUnit);
+      return perUnit;
+    }
+    getRealisticBasePrice(itemHrid, clientData, marketStore2) {
+      if (itemHrid === "/items/coin") return 1;
+      if (itemHrid.startsWith("/items/trainee_")) return 25e4;
+      const p = marketStore2.getPrice(itemHrid, 0);
+      const ask = p?.ask && p.ask > 0 ? p.ask : 0;
+      const bid = p?.bid && p.bid > 0 ? p.bid : 0;
+      const prod = this.getProductionCost(itemHrid, clientData, marketStore2);
+      if (ask > 0 && bid > 0) {
+        return ask / bid > 1.3 ? Math.max(bid, prod) : ask;
+      }
+      if (ask > 0) {
+        return prod > 0 && ask / prod > 1.3 ? prod : Math.max(ask, prod);
+      }
+      if (bid > 0) {
+        return Math.max(bid, prod);
+      }
+      return prod;
+    }
+    getShopCoinCost(itemHrid, clientData) {
+      const shopMap = clientData?.shopItemDetailMap;
+      if (!shopMap) return 0;
+      for (const shopItem of Object.values(shopMap)) {
+        if (shopItem?.itemHrid !== itemHrid || !Array.isArray(shopItem.costs)) continue;
+        const coinCost = shopItem.costs.find((c) => c.itemHrid === "/items/coin");
+        if (coinCost?.count > 0) return coinCost.count;
+      }
+      return 0;
+    }
+    ensureContainerEvs(clientData, marketStore2, mode) {
+      if (this.containerEvCache.size > 0 && this.cachePricingMode === mode) return;
+      this.cachePricingMode = mode;
+      this.containerEvCache.clear();
+      const dropMap = clientData?.openableLootDropMap;
+      if (!dropMap) return;
+      for (let pass = 0; pass < 3; pass++) {
+        for (const [containerHrid, table] of Object.entries(dropMap)) {
+          if (!Array.isArray(table)) continue;
+          let ev = 0;
+          for (const drop of table) {
+            const rate = drop.dropRate || 0;
+            const avgCnt = ((drop.minCount || 0) + (drop.maxCount || 0)) / 2;
+            if (rate <= 0 || avgCnt <= 0) continue;
+            let unitVal = 0;
+            if (drop.itemHrid === "/items/coin") {
+              unitVal = 1;
+            } else {
+              const p = marketStore2.getPrice(drop.itemHrid, 0);
+              const marketVal = p?.[mode] && p[mode] > 0 ? p[mode] : p?.ask ?? p?.bid ?? 0;
+              const raw = marketVal > 0 ? marketVal : this.containerEvCache.get(drop.itemHrid) ?? 0;
+              const detail = clientData?.itemDetailMap?.[drop.itemHrid];
+              const tradable = detail && detail.isTradable !== false;
+              unitVal = tradable ? raw * (1 - MARKET_TAX) : raw;
+            }
+            ev += rate * avgCnt * unitVal;
+          }
+          this.containerEvCache.set(containerHrid, ev);
+        }
+      }
+    }
+    getCurrencyValue(itemHrid, clientData, marketStore2, mode) {
+      if (itemHrid === "/items/coin") return 1;
+      if (itemHrid === "/items/task_token") {
+        this.ensureContainerEvs(clientData, marketStore2, mode);
+        const taskShopItems = [
+          "/items/large_meteorite_cache",
+          "/items/large_artisans_crate",
+          "/items/large_treasure_chest"
+        ];
+        let best = 0;
+        for (const hrid of taskShopItems) {
+          const ev = this.containerEvCache.get(hrid) || 0;
+          if (ev > best) best = ev;
+        }
+        return best > 0 ? best / 30 : 3e4;
+      }
+      if (DUNGEON_TOKENS.has(itemHrid)) {
+        this.ensureContainerEvs(clientData, marketStore2, mode);
+        const shopMap = clientData?.shopItemDetailMap;
+        if (!shopMap) return 0;
+        let bestGpt = 0;
+        for (const shopItem of Object.values(shopMap)) {
+          if (!Array.isArray(shopItem?.costs)) continue;
+          const tokCost = shopItem.costs.find((c) => c.itemHrid === itemHrid);
+          if (!tokCost || !tokCost.count) continue;
+          const p = marketStore2.getPrice(shopItem.itemHrid, 0);
+          const raw = (p?.[mode] && p[mode] > 0 ? p[mode] : p?.ask ?? p?.bid ?? 0) * (1 - MARKET_TAX);
+          const val = raw > 0 ? raw : this.containerEvCache.get(shopItem.itemHrid) ?? 0;
+          const gpt = val / tokCost.count;
+          if (gpt > bestGpt) bestGpt = gpt;
+        }
+        return bestGpt;
+      }
+      return null;
+    }
+    getDefaultEnhancingSetup(clientData) {
+      const itemMap = clientData?.itemDetailMap || {};
+      const enhancer = itemMap["/items/celestial_enhancer"];
+      const enhancerSuccess = enhancer ? (enhancer.equipmentDetail?.noncombatStats?.enhancingSuccess || 0) * 100 * getEnhancementStatMultiplier(enhancer, 13) : 14.4;
+      const guzzling = itemMap["/items/guzzling_pouch"];
+      const guzzlingConc = guzzling ? (guzzling.equipmentDetail?.noncombatStats?.drinkConcentration || 0) * getEnhancementStatMultiplier(guzzling, 10) : 0.129;
+      const guzzlingBonus = 1 + guzzlingConc;
+      const houseLevel = 8;
+      const baseEnhancingLevel = 140;
+      const teaLevelBonus = 8 * guzzlingBonus;
+      const enhancingLevel = baseEnhancingLevel + teaLevelBonus;
+      const houseSuccessBonus = houseLevel * 0.05;
+      return {
+        enhancingLevel,
+        toolBonus: enhancerSuccess + houseSuccessBonus,
+        guzzlingBonus
+      };
+    }
+    getEnhancementCost(itemHrid, targetLevel, clientData, marketStore2) {
+      const cacheKey = `${itemHrid}:${targetLevel}`;
+      if (this.enhancementCostCache.has(cacheKey)) {
+        return this.enhancementCostCache.get(cacheKey);
+      }
+      const itemDetails = clientData?.itemDetailMap?.[itemHrid];
+      if (!itemDetails?.enhancementCosts?.length || targetLevel < 1 || targetLevel > 20) {
+        return null;
+      }
+      const itemLevel = itemDetails.itemLevel || 1;
+      const setup = this.getDefaultEnhancingSetup(clientData);
+      let perActionCost = 0;
+      for (const mat of itemDetails.enhancementCosts) {
+        let unitPrice = 0;
+        if (mat.itemHrid === "/items/coin") {
+          unitPrice = 1;
+        } else if (mat.itemHrid.startsWith("/items/trainee_")) {
+          unitPrice = 25e4;
+        } else {
+          const mp = marketStore2.getPrice(mat.itemHrid, 0);
+          if (mp) {
+            let ask = mp.ask ?? -1;
+            let bid = mp.bid ?? -1;
+            if (ask > 0 && bid < 0) bid = ask;
+            if (bid > 0 && ask < 0) ask = bid;
+            unitPrice = ask > 0 ? ask : 0;
+          }
+          if (unitPrice <= 0) {
+            unitPrice = this.getProductionCost(mat.itemHrid, clientData, marketStore2) || itemDetails?.sellPrice || 0;
+          }
+        }
+        perActionCost += unitPrice * (mat.count || 0);
+      }
+      const protOptions = [itemHrid, "/items/mirror_of_protection"];
+      if (Array.isArray(itemDetails.protectionItemHrids)) {
+        protOptions.push(...itemDetails.protectionItemHrids);
+      }
+      let cheapestProt = Infinity;
+      for (const protHrid of protOptions) {
+        const p = this.getRealisticBasePrice(protHrid, clientData, marketStore2);
+        if (p > 0 && p < cheapestProt) cheapestProt = p;
+      }
+      const protectPrice = cheapestProt === Infinity ? 0 : cheapestProt;
+      const targetCosts = new Array(targetLevel + 1).fill(0);
+      targetCosts[0] = this.getRealisticBasePrice(itemHrid, clientData, marketStore2);
+      for (let lvl = 1; lvl <= targetLevel; lvl++) {
+        let bestCost = Infinity;
+        const strategies = [0];
+        for (let p = 2; p <= lvl; p++) strategies.push(p);
+        for (const protectFrom of strategies) {
+          const res = solveEnhancementMarkov(
+            setup.enhancingLevel,
+            setup.toolBonus,
+            itemLevel,
+            lvl,
+            protectFrom,
+            true,
+            setup.guzzlingBonus
+          );
+          if (!res) continue;
+          const matCost = perActionCost * res.attempts;
+          const protCost = protectFrom > 0 && res.protectionCount > 0 ? protectPrice * res.protectionCount : 0;
+          const total = targetCosts[0] + matCost + protCost;
+          if (total < bestCost) bestCost = total;
+        }
+        targetCosts[lvl] = bestCost === Infinity ? targetCosts[0] : bestCost;
+      }
+      const mirrorPrice = this.getRealisticBasePrice("/items/philosophers_mirror", clientData, marketStore2);
+      if (mirrorPrice > 0) {
+        for (let lvl = 3; lvl <= targetLevel; lvl++) {
+          const mirrorCost = targetCosts[lvl - 2] + targetCosts[lvl - 1] + mirrorPrice;
+          if (mirrorCost < targetCosts[lvl]) {
+            targetCosts[lvl] = mirrorCost;
+          }
+        }
+      }
+      const result = targetCosts[targetLevel];
+      this.enhancementCostCache.set(cacheKey, result);
+      return result;
+    }
+    getUnitValue(itemHrid, enhancementLevel, clientData, marketStore2, mode) {
+      const currencyVal = this.getCurrencyValue(itemHrid, clientData, marketStore2, mode);
+      if (currencyVal !== null) return currencyVal;
+      if (enhancementLevel >= 1) {
+        if (enhancementLevel >= HIGH_ENH_MIN_LEVEL) {
+          const enhCost = this.getEnhancementCost(itemHrid, enhancementLevel, clientData, marketStore2);
+          if (enhCost !== null && enhCost > 0) return enhCost;
+        } else {
+          const mp2 = marketStore2.getPrice(itemHrid, enhancementLevel);
+          const direct2 = mp2?.[mode];
+          if (direct2 && direct2 > 0) return direct2;
+          const enhCost = this.getEnhancementCost(itemHrid, enhancementLevel, clientData, marketStore2);
+          if (enhCost !== null && enhCost > 0) return enhCost;
+        }
+        return this.getUnitValue(itemHrid, 0, clientData, marketStore2, mode);
+      }
+      const mp = marketStore2.getPrice(itemHrid, 0);
+      const direct = mp?.[mode];
+      if (direct && direct > 0) return direct;
+      const itemDetails = clientData?.itemDetailMap?.[itemHrid];
+      if (itemDetails?.isOpenable) {
+        this.ensureContainerEvs(clientData, marketStore2, mode);
+        let ev = this.containerEvCache.get(itemHrid) || 0;
+        if (ev > 0) {
+          const keyHrid = DUNGEON_CHEST_KEYS[itemHrid];
+          if (keyHrid) {
+            const kp = marketStore2.getPrice(keyHrid, 0);
+            ev -= kp?.[mode] ?? kp?.ask ?? 0;
+          }
+          if (ev > 0) return ev;
+        }
+      }
+      const prodCost = this.getProductionCost(itemHrid, clientData, marketStore2);
+      if (prodCost > 0) return prodCost;
+      return this.getShopCoinCost(itemHrid, clientData);
+    }
+    computeHousesValue(gameData2, clientData, marketStore2) {
+      const houseRoomDetailMap = clientData?.houseRoomDetailMap;
+      if (!houseRoomDetailMap) return 0;
+      const rooms = gameData2.getHouseRooms();
+      let total = 0;
+      for (const [roomHrid, data] of rooms.entries()) {
+        const level = data?.level || 0;
+        if (level <= 0) continue;
+        const upgradeCostsMap = houseRoomDetailMap[roomHrid]?.upgradeCostsMap;
+        if (!upgradeCostsMap) continue;
+        for (let lv = 1; lv <= level; lv++) {
+          const reqs = upgradeCostsMap[lv];
+          if (!Array.isArray(reqs)) continue;
+          for (const req of reqs) {
+            if (req.itemHrid === "/items/coin") {
+              total += req.count || 0;
+            } else {
+              const unit = this.getWeightedMidPrice(marketStore2, req.itemHrid);
+              total += (req.count || 0) * unit;
+            }
+          }
+        }
+      }
+      return total;
+    }
+    computeAbilitiesValue(gameData2, clientData, marketStore2) {
+      const abilities = gameData2.getCharacterAbilities();
+      const xpTable = clientData?.levelExperienceTable;
+      if (!Array.isArray(abilities) || !xpTable) return 0;
+      let total = 0;
+      for (const ab of abilities) {
+        if (!ab?.abilityHrid || !ab.level || ab.level <= 0) continue;
+        const targetXp = xpTable[ab.level] || 0;
+        const isStarter = STARTER_ABILITIES.some((s) => ab.abilityHrid.includes(s));
+        const xpPerBook = isStarter ? 50 : 500;
+        const booksNeeded = targetXp / xpPerBook + 1;
+        const bookItemHrid = ab.abilityHrid.replace("/abilities/", "/items/");
+        const weightedPrice = this.getWeightedMidPrice(marketStore2, bookItemHrid);
+        total += booksNeeded * weightedPrice;
+      }
+      return total;
+    }
+    compute(gameData2, marketStore2, mode) {
+      const clientData = gameData2.getClientData();
+      const items = gameData2.getCharacterItems();
+      const listings = gameData2.getMarketListings();
+      const itemDetailMap = clientData?.itemDetailMap || {};
+      let coins = 0;
+      let inventory = 0;
+      let equipped = 0;
+      let abilityBooks = 0;
+      let listingsVal = 0;
+      for (const item of items) {
+        if (!item || !item.count || item.count <= 0) continue;
+        if (item.itemHrid === "/items/coin") {
+          coins += item.count;
+          continue;
+        }
+        const unitVal = this.getUnitValue(
+          item.itemHrid,
+          item.enhancementLevel || 0,
+          clientData,
+          marketStore2,
+          mode
+        );
+        const val = unitVal * item.count;
+        if (item.itemLocationHrid === "/item_locations/inventory") {
+          const categoryHrid = itemDetailMap[item.itemHrid]?.categoryHrid;
+          if (categoryHrid === "/item_categories/ability_book") {
+            abilityBooks += val;
+          } else {
+            inventory += val;
+          }
+        } else {
+          equipped += val;
+        }
+      }
+      for (const l of listings) {
+        if (!l) continue;
+        const remaining = Math.max(0, (l.orderQuantity || 0) - (l.filledQuantity || 0));
+        if (l.isSell) {
+          const fee = l.itemHrid === "/items/bag_of_10_cowbells" ? COWBELL_BAG_TAX : MARKET_TAX;
+          const unitVal = this.getUnitValue(
+            l.itemHrid,
+            l.enhancementLevel || 0,
+            clientData,
+            marketStore2,
+            mode
+          );
+          listingsVal += remaining * unitVal * (1 - fee) + (l.unclaimedCoinCount || 0);
+        } else {
+          const unclaimedVal = (l.unclaimedItemCount || 0) * this.getUnitValue(l.itemHrid, l.enhancementLevel || 0, clientData, marketStore2, mode);
+          listingsVal += remaining * (l.price || 0) + unclaimedVal;
+        }
+      }
+      const houses = this.computeHousesValue(gameData2, clientData, marketStore2);
+      const abilities = this.computeAbilitiesValue(gameData2, clientData, marketStore2);
+      const currentAssets = coins + inventory + equipped + listingsVal;
+      const fixedAssets = houses + abilities + abilityBooks;
+      return {
+        pricingMode: mode,
+        coins,
+        inventory,
+        equipped,
+        listings: listingsVal,
+        currentAssets,
+        houses,
+        abilities,
+        abilityBooks,
+        fixedAssets,
+        total: currentAssets + fixedAssets
+      };
+    }
+  };
+
+  // src/features/market/economy-overlay.ts
+  var MARKET_TAX2 = 0.02;
+  var NW_BADGE_ID = "mwi-lite-networth-badge";
+  var NW_POPOVER_ID = "mwi-lite-networth-popover";
+  var DUNGEON_TOKENS2 = /* @__PURE__ */ new Set([
+    "/items/chimerical_token",
+    "/items/sinister_token",
+    "/items/enchanted_token",
+    "/items/pirate_token"
+  ]);
+  var TASK_TOKEN = "/items/task_token";
+  function formatCoins(n) {
+    if (!Number.isFinite(n)) return "0";
+    const abs = Math.abs(n);
+    if (abs >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
+    if (abs >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+    if (abs >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
+    return Math.round(n).toLocaleString();
+  }
+  function createTooltipEvModule() {
+    let ctx = null;
+    let unregStyle = null;
+    let unregPrice = null;
+    let evCache = /* @__PURE__ */ new Map();
+    let evCacheTs = 0;
+    let lastHoveredCount = 1;
+    let lastHoveredEnh = 0;
+    const computeAllContainerEVs = () => {
+      if (!ctx) return;
+      const clientData = ctx.gameData.getClientData();
+      const dropMap = clientData?.openableLootDropMap;
+      if (!dropMap || !ctx.marketStore.isPricesLoaded()) return;
+      const now = Date.now();
+      if (evCache.size > 0 && now - evCacheTs < 12e4) return;
+      const nextCache = /* @__PURE__ */ new Map();
+      for (let pass = 0; pass < 3; pass++) {
+        for (const [containerHrid, table] of Object.entries(dropMap)) {
+          if (!Array.isArray(table)) continue;
+          let ev = 0;
+          for (const drop of table) {
+            const rate = drop.dropRate || 0;
+            const avgCnt = ((drop.minCount || 0) + (drop.maxCount || 0)) / 2;
+            if (rate <= 0 || avgCnt <= 0) continue;
+            let unitVal = 0;
+            if (drop.itemHrid === "/items/coin") {
+              unitVal = 1;
+            } else {
+              const p = ctx.marketStore.getPrice(drop.itemHrid, 0);
+              const raw = p?.bid ?? p?.ask ?? nextCache.get(drop.itemHrid) ?? 0;
+              const itemDetail = clientData.itemDetailMap?.[drop.itemHrid];
+              const sellable = itemDetail && itemDetail.isTradable !== false;
+              unitVal = sellable ? raw * (1 - MARKET_TAX2) : raw;
+            }
+            ev += rate * avgCnt * unitVal;
+          }
+          nextCache.set(containerHrid, ev);
+        }
+      }
+      evCache = nextCache;
+      evCacheTs = now;
+    };
+    const getTokenBestValue = (tokenHrid) => {
+      if (!ctx) return null;
+      const clientData = ctx.gameData.getClientData();
+      if (!clientData) return null;
+      const shopMap = tokenHrid === TASK_TOKEN ? clientData.taskShopItemDetailMap : clientData.shopItemDetailMap;
+      if (!shopMap) return null;
+      let best = null;
+      for (const shopItem of Object.values(shopMap)) {
+        if (!shopItem?.costs || !Array.isArray(shopItem.costs)) continue;
+        const tokenCostObj = shopItem.costs.find((c) => c.itemHrid === tokenHrid);
+        if (!tokenCostObj || !tokenCostObj.count) continue;
+        const outHrid = shopItem.itemHrid;
+        let val = 0;
+        const p = ctx.marketStore.getPrice(outHrid, 0);
+        if (p?.bid || p?.ask) {
+          val = (p.bid ?? p.ask ?? 0) * (1 - MARKET_TAX2);
+        } else {
+          val = evCache.get(outHrid) ?? 0;
+        }
+        if (val <= 0) continue;
+        const gpt = val / tokenCostObj.count;
+        if (!best || gpt > best.goldPerToken) {
+          best = { bestName: ctx.i18n.getItemName(outHrid), goldPerToken: gpt };
+        }
+      }
+      return best;
+    };
+    const onPointerOver = (ev) => {
+      const target = ev.target;
+      const itemBox = target?.closest?.('[class*="Item_itemContainer"], [class*="Item_item"]');
+      if (!itemBox) {
+        lastHoveredCount = 1;
+        lastHoveredEnh = 0;
+        return;
+      }
+      const countTxt = itemBox.querySelector('[class*="Item_count"]')?.textContent?.trim() || "";
+      const numMatch = countTxt.replace(/,/g, "").match(/^([\d.]+)([KMB]?)$/i);
+      if (numMatch) {
+        const n = parseFloat(numMatch[1]);
+        const mult = numMatch[2].toUpperCase() === "B" ? 1e9 : numMatch[2].toUpperCase() === "M" ? 1e6 : numMatch[2].toUpperCase() === "K" ? 1e3 : 1;
+        lastHoveredCount = Math.max(1, Math.round(n * mult));
+      } else {
+        lastHoveredCount = 1;
+      }
+      const enhTxt = itemBox.querySelector('[class*="Item_enhancementLevel"]')?.textContent || "";
+      lastHoveredEnh = Number(enhTxt.replace(/\+/g, "").trim()) || 0;
+    };
+    const decorateTooltip = (tooltip) => {
+      if (!ctx) return;
+      if (tooltip.querySelector(".mwi-lite-tooltip-box")) return;
+      const nameEl = tooltip.querySelector('[class*="ItemTooltipText_name"]') || tooltip.querySelector('[class*="Collection_name"]');
+      if (!nameEl) return;
+      const rawName = (nameEl.textContent || "").trim();
+      const enhMatch = rawName.match(/\s+\+(\d+)$/);
+      const enh = enhMatch ? Number(enhMatch[1]) : lastHoveredEnh;
+      const cleanName = enhMatch ? rawName.slice(0, enhMatch.index).trim() : rawName;
+      const itemHrid = ctx.i18n.getItemHridByName(cleanName);
+      if (!itemHrid) return;
+      computeAllContainerEVs();
+      const price = ctx.marketStore.getPrice(itemHrid, enh);
+      const ev = enh === 0 ? evCache.get(itemHrid) : void 0;
+      const tokenBest = DUNGEON_TOKENS2.has(itemHrid) || itemHrid === TASK_TOKEN ? getTokenBestValue(itemHrid) : null;
+      if (!price && !ev && !tokenBest) return;
+      const lines = [];
+      if (price && (price.ask !== null || price.bid !== null)) {
+        const askStr = price.ask !== null ? formatCoins(price.ask) : "-";
+        const bidStr = price.bid !== null ? formatCoins(price.bid) : "-";
+        lines.push(`<div>Ask: <b>${askStr}</b> · Bid: <b>${bidStr}</b></div>`);
+        if (lastHoveredCount > 1) {
+          const unit = price.bid ?? price.ask ?? 0;
+          if (unit > 0) {
+            lines.push(
+              `<div class="sub">${ctx.i18n.t("堆叠估值", "Stack")} (×${lastHoveredCount.toLocaleString()}): <b>${formatCoins(unit * lastHoveredCount)}</b></div>`
+            );
+          }
+        }
+      }
+      if (ev && ev > 0) {
+        lines.push(
+          `<div class="ev">${ctx.i18n.t("期望开箱价值 (税后)", "Expected Value (after tax)")}: <b>${formatCoins(ev)}</b></div>`
+        );
+      }
+      if (tokenBest) {
+        lines.push(
+          `<div class="token">${ctx.i18n.t("最优兑换", "Best Exchange")}: ${tokenBest.bestName} (<b>${formatCoins(tokenBest.goldPerToken)}</b>/币)</div>`
+        );
+      }
+      const box = document.createElement("div");
+      box.className = "mwi-lite-tooltip-box";
+      box.setAttribute("data-mwi-lite", "1");
+      box.innerHTML = lines.join("");
+      const host = tooltip.querySelector('[class*="ItemTooltipText_itemTooltipText"]') || tooltip.querySelector('[class*="Collection_tooltipContent"]') || nameEl.parentElement;
+      host?.appendChild(box);
+    };
+    return {
+      id: "economy-tooltip-ev",
+      nameZh: "悬浮窗估价与开箱 EV",
+      nameEn: "Tooltip Market Prices & EV",
+      descriptionZh: "鼠标悬停物品时显示 Ask/Bid 价格、堆叠估值、宝箱期望收益及代币兑换性价比",
+      descriptionEn: "Show Ask/Bid prices, stack total, openable EV, and token exchange value on tooltips",
+      category: "market",
+      defaultEnabled: true,
+      init(context) {
+        ctx = context;
+        unregStyle = ctx.addStyle(
+          "economy-tooltip-ev",
+          `
+        .mwi-lite-tooltip-box {
+          margin-top: 6px;
+          padding-top: 5px;
+          border-top: 1px solid rgba(148, 163, 184, 0.25);
+          font-size: 11.5px;
+          line-height: 1.45;
+          color: #cbd5e1;
+        }
+        .mwi-lite-tooltip-box b { color: #fde68a; }
+        .mwi-lite-tooltip-box .ev b { color: #6ee7b7; }
+        .mwi-lite-tooltip-box .token b { color: #93c5fd; }
+        `
+        );
+        document.addEventListener("pointerover", onPointerOver, { passive: true, capture: true });
+        unregPrice = ctx.marketStore.onPriceUpdate(() => {
+          evCacheTs = 0;
+        });
+        return () => {
+          document.removeEventListener("pointerover", onPointerOver, true);
+          unregPrice?.();
+          unregPrice = null;
+          unregStyle?.();
+          unregStyle = null;
+          document.querySelectorAll(".mwi-lite-tooltip-box").forEach((el) => el.remove());
+        };
+      },
+      onDom(doc) {
+        const tooltips = doc.querySelectorAll(".MuiTooltip-popper");
+        if (!tooltips.length) return;
+        tooltips.forEach(decorateTooltip);
+      }
+    };
+  }
+  function createNetworthModule() {
+    let ctx = null;
+    let unregStyle = null;
+    let unsubs = [];
+    let throttleTimer = null;
+    let lastComputeTs = 0;
+    let evaluator = new ToolashaNetworthEvaluator();
+    let pricingMode = "ask";
+    let lastBreakdown = {
+      pricingMode: "ask",
+      coins: 0,
+      inventory: 0,
+      equipped: 0,
+      listings: 0,
+      currentAssets: 0,
+      houses: 0,
+      abilities: 0,
+      abilityBooks: 0,
+      fixedAssets: 0,
+      total: 0
+    };
+    let popoverOpen = false;
+    let outsideListenersActive = false;
+    const setPopoverOpen = (next) => {
+      popoverOpen = next;
+      if (popoverOpen && !outsideListenersActive) {
+        document.addEventListener("pointerdown", onOutsidePointerDown, true);
+        document.addEventListener("keydown", onKeyDown);
+        outsideListenersActive = true;
+      } else if (!popoverOpen && outsideListenersActive) {
+        document.removeEventListener("pointerdown", onOutsidePointerDown, true);
+        document.removeEventListener("keydown", onKeyDown);
+        outsideListenersActive = false;
+      }
+      renderPopover();
+    };
+    const onOutsidePointerDown = (e) => {
+      if (!popoverOpen) return;
+      const target = e.target;
+      if (!target) return;
+      const pop = document.getElementById(NW_POPOVER_ID);
+      const badge = document.getElementById(NW_BADGE_ID);
+      if (pop?.contains(target) || badge?.contains(target)) return;
+      setPopoverOpen(false);
+    };
+    const onKeyDown = (e) => {
+      if (e.key === "Escape" && popoverOpen) {
+        setPopoverOpen(false);
+      }
+    };
+    const computeNetWorth = () => {
+      if (!ctx) return lastBreakdown;
+      lastBreakdown = evaluator.compute(ctx.gameData, ctx.marketStore, pricingMode);
+      lastComputeTs = Date.now();
+      renderBadge();
+      return lastBreakdown;
+    };
+    const scheduleCompute = () => {
+      const elapsed = Date.now() - lastComputeTs;
+      if (elapsed >= 2e3) {
+        computeNetWorth();
+      } else if (throttleTimer === null) {
+        throttleTimer = window.setTimeout(() => {
+          throttleTimer = null;
+          computeNetWorth();
+        }, 2e3 - elapsed);
+      }
+    };
+    const renderBadge = () => {
+      if (!ctx || !document.body) return;
+      let badge = document.getElementById(NW_BADGE_ID);
+      const headerLevel = document.querySelector('[class*="Header_totalLevel"]');
+      if (!headerLevel?.parentElement) return;
+      if (!badge) {
+        badge = document.createElement("span");
+        badge.id = NW_BADGE_ID;
+        badge.setAttribute("data-mwi-lite", "1");
+        badge.addEventListener("click", (e) => {
+          e.stopPropagation();
+          setPopoverOpen(!popoverOpen);
+        });
+        headerLevel.parentElement.insertBefore(badge, headerLevel.nextSibling);
+      }
+      badge.textContent = `💰 ${formatCoins(lastBreakdown.total)}`;
+      badge.title = ctx.i18n.t("点击查看/收起净资产明细", "Click to toggle Net Worth breakdown");
+      if (popoverOpen) renderPopover();
+    };
+    const renderPopover = () => {
+      if (!ctx) return;
+      let pop = document.getElementById(NW_POPOVER_ID);
+      if (!popoverOpen) {
+        pop?.remove();
+        return;
+      }
+      if (!pop) {
+        pop = document.createElement("div");
+        pop.id = NW_POPOVER_ID;
+        pop.setAttribute("data-mwi-lite", "1");
+        document.body.appendChild(pop);
+      }
+      const badge = document.getElementById(NW_BADGE_ID);
+      if (badge) {
+        const rect = badge.getBoundingClientRect();
+        const top = Math.max(8, Math.min(window.innerHeight - 280, Math.round(rect.bottom + 8)));
+        const right = Math.max(12, Math.round(window.innerWidth - rect.right));
+        pop.style.top = `${top}px`;
+        pop.style.right = `${right}px`;
+      }
+      const b = lastBreakdown;
+      const modeLabel = b.pricingMode === "ask" ? ctx.i18n.t("卖一价 Ask", "Ask") : ctx.i18n.t("买一价 Bid", "Bid");
+      pop.innerHTML = `
+      <div class="mwi-lite-nw-header">
+        <span class="mwi-lite-nw-title">${ctx.i18n.t("净资产估算 (Toolasha 对齐)", "Net Worth Breakdown")}</span>
+        <div class="mwi-lite-nw-actions">
+          <button type="button" class="mwi-lite-nw-mode" title="${ctx.i18n.t("切换 Ask/Bid 计价模式", "Switch Ask/Bid pricing")}">${modeLabel}</button>
+          <button type="button" class="mwi-lite-nw-close" aria-label="Close">✕</button>
+        </div>
+      </div>
+      <div class="mwi-lite-nw-section">${ctx.i18n.t("流动资产 (Current Assets)", "Current Assets")}</div>
+      <div class="mwi-lite-nw-row"><span>${ctx.i18n.t("现金金币", "Coins")}</span><b>${formatCoins(b.coins)}</b></div>
+      <div class="mwi-lite-nw-row"><span>${ctx.i18n.t("仓库库存", "Inventory")}</span><b>${formatCoins(b.inventory)}</b></div>
+      <div class="mwi-lite-nw-row"><span>${ctx.i18n.t("身上装备", "Equipped")}</span><b>${formatCoins(b.equipped)}</b></div>
+      <div class="mwi-lite-nw-row"><span>${ctx.i18n.t("市场挂单", "Market Orders")}</span><b>${formatCoins(b.listings)}</b></div>
+      <div class="mwi-lite-nw-subtotal"><span>${ctx.i18n.t("流动资产小计", "Current Subtotal")}</span><b>${formatCoins(b.currentAssets)}</b></div>
+      <div class="mwi-lite-nw-section">${ctx.i18n.t("固定资产 (Fixed Assets)", "Fixed Assets")}</div>
+      <div class="mwi-lite-nw-row"><span>${ctx.i18n.t("房屋建造", "Houses")}</span><b>${formatCoins(b.houses)}</b></div>
+      <div class="mwi-lite-nw-row"><span>${ctx.i18n.t("已学技能", "Learned Abilities")}</span><b>${formatCoins(b.abilities)}</b></div>
+      <div class="mwi-lite-nw-row"><span>${ctx.i18n.t("背包技能书", "Ability Books")}</span><b>${formatCoins(b.abilityBooks)}</b></div>
+      <div class="mwi-lite-nw-subtotal"><span>${ctx.i18n.t("固定资产小计", "Fixed Subtotal")}</span><b>${formatCoins(b.fixedAssets)}</b></div>
+      <div class="mwi-lite-nw-total"><span>${ctx.i18n.t("净资产总计", "Total Net Worth")}</span><b>${formatCoins(b.total)}</b></div>
+    `;
+      pop.querySelector(".mwi-lite-nw-close")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        setPopoverOpen(false);
+      });
+      pop.querySelector(".mwi-lite-nw-mode")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!ctx) return;
+        pricingMode = pricingMode === "ask" ? "bid" : "ask";
+        ctx.storage.set("networth_pricing_mode", pricingMode);
+        evaluator.invalidate();
+        computeNetWorth();
+      });
+    };
+    return {
+      id: "economy-networth",
+      nameZh: "实时净资产统计",
+      nameEn: "Net Worth Tracker",
+      descriptionZh: "对齐 Toolasha 算法汇总流动与固定资产（房屋、技能、强化期望成本、2秒节流更新）",
+      descriptionEn: "Toolasha-aligned live Net Worth across current & fixed assets",
+      category: "market",
+      defaultEnabled: true,
+      init(context) {
+        ctx = context;
+        pricingMode = ctx.storage.get("networth_pricing_mode", "ask");
+        evaluator = new ToolashaNetworthEvaluator();
+        unregStyle = ctx.addStyle(
+          "economy-networth",
+          `
+        #${NW_BADGE_ID} {
+          display: inline-flex;
+          align-items: center;
+          margin-left: 8px;
+          padding: 2px 8px;
+          border-radius: 5px;
+          background: rgba(234, 179, 8, 0.14);
+          border: 1px solid rgba(250, 204, 21, 0.35);
+          color: #fde047;
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          user-select: none;
+        }
+        #${NW_POPOVER_ID} {
+          position: fixed;
+          top: 48px;
+          right: 20px;
+          z-index: 9600;
+          min-width: 270px;
+          background: #141927;
+          border: 1px solid #303d5c;
+          border-radius: 8px;
+          padding: 10px 12px;
+          color: #e2e8f0;
+          font-size: 12px;
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+        }
+        #${NW_POPOVER_ID} .mwi-lite-nw-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          margin-bottom: 8px;
+        }
+        #${NW_POPOVER_ID} .mwi-lite-nw-title {
+          font-weight: 700;
+          color: #fde047;
+        }
+        #${NW_POPOVER_ID} .mwi-lite-nw-actions {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+        #${NW_POPOVER_ID} .mwi-lite-nw-mode {
+          background: rgba(59, 130, 246, 0.18);
+          border: 1px solid rgba(96, 165, 250, 0.4);
+          color: #93c5fd;
+          border-radius: 4px;
+          font-size: 11px;
+          padding: 1px 6px;
+          cursor: pointer;
+        }
+        #${NW_POPOVER_ID} .mwi-lite-nw-close {
+          background: transparent;
+          border: none;
+          color: #94a3b8;
+          font-size: 13px;
+          line-height: 1;
+          padding: 2px 4px;
+          cursor: pointer;
+          border-radius: 4px;
+        }
+        #${NW_POPOVER_ID} .mwi-lite-nw-close:hover {
+          color: #f8fafc;
+          background: rgba(148, 163, 184, 0.18);
+        }
+        #${NW_POPOVER_ID} .mwi-lite-nw-section {
+          margin-top: 6px;
+          margin-bottom: 2px;
+          font-size: 11px;
+          font-weight: 600;
+          color: #94a3b8;
+        }
+        #${NW_POPOVER_ID} .mwi-lite-nw-row,
+        #${NW_POPOVER_ID} .mwi-lite-nw-subtotal,
+        #${NW_POPOVER_ID} .mwi-lite-nw-total {
+          display: flex;
+          justify-content: space-between;
+          padding: 2px 0;
+        }
+        #${NW_POPOVER_ID} .mwi-lite-nw-subtotal {
+          margin-top: 2px;
+          padding-top: 3px;
+          border-top: 1px dashed #2b3652;
+          color: #cbd5e1;
+        }
+        #${NW_POPOVER_ID} .mwi-lite-nw-total {
+          margin-top: 6px;
+          padding-top: 6px;
+          border-top: 1px solid #3b4b72;
+          color: #fde047;
+          font-size: 13px;
+        }
+        `
+        );
+        const onPriceUpdate = () => {
+          evaluator.invalidate();
+          scheduleCompute();
+        };
+        unsubs = [
+          ctx.gameData.on("character_initialized", scheduleCompute),
+          ctx.gameData.on("items_updated", scheduleCompute),
+          ctx.gameData.on("market_listings_updated", scheduleCompute),
+          ctx.gameData.on("house_rooms_updated", scheduleCompute),
+          ctx.gameData.on("abilities_updated", scheduleCompute),
+          ctx.marketStore.onPriceUpdate(onPriceUpdate)
+        ];
+        scheduleCompute();
+        return () => {
+          unsubs.forEach((u) => u());
+          unsubs = [];
+          unregStyle?.();
+          unregStyle = null;
+          if (throttleTimer !== null) {
+            clearTimeout(throttleTimer);
+            throttleTimer = null;
+          }
+          setPopoverOpen(false);
+          document.getElementById(NW_BADGE_ID)?.remove();
+          document.getElementById(NW_POPOVER_ID)?.remove();
+        };
+      },
+      onDom() {
+        if (!document.getElementById(NW_BADGE_ID)) {
+          renderBadge();
+        }
+      }
+    };
+  }
+
+  // src/features/market/magic-sort.ts
+  var SORT_STATE_KEY = "magic_sort_state_v1";
+  var PANEL_SEL = '[class*="MarketplacePanel_myListings__"]:not([class*="myListingsTable"])';
+  var TBODY_SEL = '[class*="MarketplacePanel_myListingsTable__"] tbody';
+  var BTN_CONT_SEL = '[class*="MarketplacePanel_buttonContainer__"]';
+  var MODAL_SEL = '[class*="MarketplacePanel_modalContent__"]';
+  var SORT_MODES = [
+    { key: "time-asc", zh: "时间↑", en: "Time↑" },
+    { key: "time-desc", zh: "时间↓", en: "Time↓" },
+    { key: "name-asc", zh: "名称↑", en: "Name↑" },
+    { key: "name-desc", zh: "名称↓", en: "Name↓" },
+    { key: "price-asc", zh: "价格↑", en: "Price↑" },
+    { key: "price-desc", zh: "价格↓", en: "Price↓" }
+  ];
+  function parsePriceText(text) {
+    const cleaned = text.replace(/[^\d.KMB]/gi, "").toUpperCase();
+    const num = parseFloat(cleaned.replace(/[KMB]/g, ""));
+    if (!Number.isFinite(num)) return 0;
+    if (cleaned.includes("B")) return num * 1e9;
+    if (cleaned.includes("M")) return num * 1e6;
+    if (cleaned.includes("K")) return num * 1e3;
+    return num;
+  }
+  function getRowItemName(row) {
+    const svg = row.querySelector("svg[aria-label]");
+    if (svg) return svg.getAttribute("aria-label") || "";
+    const item = row.querySelector('[class*="Item_item__"]');
+    return item ? (item.textContent || "").trim() : "";
+  }
+  function isRowCollectable(row) {
+    const claimsContainer = row.querySelector('[class*="MarketplacePanel_claimsContainer__"]');
+    const claims = row.querySelector('[class*="MarketplacePanel_claims__"]');
+    if (!claimsContainer || !claims || claims.children.length === 0) return false;
+    const button = claimsContainer.querySelector('[class*="Button_button__"]');
+    return !!(button?.textContent && /收集|Claim/i.test(button.textContent));
+  }
+  function getTableRows(tbody) {
+    if (!tbody) return [];
+    return Array.from(tbody.children).filter(
+      (row) => row.tagName === "TR" && !!row.querySelector("td")
+    );
+  }
+  function createMagicSortModule() {
+    let ctx = null;
+    let unregStyle = null;
+    let unregWs = null;
+    let sortIndex = 0;
+    let pinCollectable = true;
+    let rowTimestamps = /* @__PURE__ */ new WeakMap();
+    let rowMetaCache = /* @__PURE__ */ new WeakMap();
+    let isSorting = false;
+    let lastPanelRef = null;
+    let lastTbodyRef = null;
+    let lastStateSignature = "";
+    let lastPointerDownTs = 0;
+    let batchFreezeUntil = 0;
+    let debounceTimer = null;
+    const zhCollator = new Intl.Collator("zh-CN");
+    const getRowMeta = (row) => {
+      let cached = rowMetaCache.get(row);
+      if (!cached) {
+        const priceEl = row.querySelector('[class*="MarketplacePanel_price__"] span');
+        cached = {
+          name: getRowItemName(row),
+          price: parsePriceText(priceEl?.textContent?.trim() || "0")
+        };
+        rowMetaCache.set(row, cached);
+      }
+      return cached;
+    };
+    const getRowsSignature = (rows) => {
+      const parts = [
+        String(rows.length),
+        SORT_MODES[sortIndex]?.key || "time-asc",
+        pinCollectable ? "1" : "0"
+      ];
+      for (let i = 0; i < rows.length; i++) {
+        parts.push(isRowCollectable(rows[i]) ? "C" : "N");
+      }
+      return parts.join("|");
+    };
+    const savePref = () => {
+      ctx?.storage.set(SORT_STATE_KEY, {
+        sortKey: SORT_MODES[sortIndex]?.key || "time-asc",
+        pinCollectable
+      });
+    };
+    const scheduleSortDebounced = (ms) => {
+      if (debounceTimer !== null) {
+        clearTimeout(debounceTimer);
+      }
+      debounceTimer = window.setTimeout(() => {
+        debounceTimer = null;
+        batchFreezeUntil = 0;
+        sortRows(false);
+      }, ms);
+    };
+    const assignRowTimestamps = (tbody, reset = false) => {
+      if (reset) rowTimestamps = /* @__PURE__ */ new WeakMap();
+      const rows = getTableRows(tbody);
+      const now = Date.now();
+      rows.forEach((row, idx) => {
+        if (reset || !rowTimestamps.has(row)) {
+          rowTimestamps.set(row, now - (rows.length - idx) * 1e3);
+        }
+      });
+    };
+    const sortRows = (force = false) => {
+      if (!ctx || isSorting) return;
+      const now = Date.now();
+      if (!force) {
+        if (now < batchFreezeUntil) {
+          scheduleSortDebounced(Math.max(150, batchFreezeUntil - now + 40));
+          return;
+        }
+        if (now - lastPointerDownTs < 250) {
+          scheduleSortDebounced(260);
+          return;
+        }
+      }
+      const tbody = document.querySelector(TBODY_SEL);
+      if (!tbody) return;
+      const rows = getTableRows(tbody);
+      if (!rows.length) return;
+      assignRowTimestamps(tbody, false);
+      isSorting = true;
+      try {
+        const mode = SORT_MODES[sortIndex]?.key || "time-asc";
+        const direction = mode.endsWith("-desc") ? -1 : 1;
+        const field = mode.replace(/-asc$|-desc$/, "");
+        const data = rows.map((row, index) => {
+          const meta = getRowMeta(row);
+          return {
+            row,
+            name: meta.name,
+            price: meta.price,
+            timestamp: rowTimestamps.get(row) || now,
+            collectable: isRowCollectable(row),
+            index
+          };
+        });
+        data.sort((a, b) => {
+          if (pinCollectable) {
+            if (a.collectable && !b.collectable) return -1;
+            if (!a.collectable && b.collectable) return 1;
+          }
+          let cmp = 0;
+          if (field === "name") cmp = zhCollator.compare(a.name, b.name);
+          else if (field === "price") cmp = a.price - b.price;
+          else cmp = a.timestamp - b.timestamp;
+          return (cmp !== 0 ? cmp : a.index - b.index) * direction;
+        });
+        let alreadyOrdered = true;
+        for (let i = 0; i < data.length; i++) {
+          const wantBg = data[i].collectable ? "rgba(76,175,80,0.16)" : "";
+          if (data[i].row.style.backgroundColor !== wantBg) {
+            data[i].row.style.backgroundColor = wantBg;
+          }
+          if (data[i].row !== rows[i]) {
+            alreadyOrdered = false;
+          }
+        }
+        if (!alreadyOrdered) {
+          for (let i = data.length - 1; i >= 0; i--) {
+            const row = data[i].row;
+            const nextSibling = i + 1 < data.length ? data[i + 1].row : null;
+            if (row.nextSibling !== nextSibling) {
+              tbody.insertBefore(row, nextSibling);
+            }
+          }
+        }
+        lastStateSignature = getRowsSignature(getTableRows(tbody));
+      } finally {
+        isSorting = false;
+      }
+    };
+    const injectControls = (panel) => {
+      if (!ctx) return;
+      const container = panel.querySelector(BTN_CONT_SEL);
+      if (!container || container.closest(MODAL_SEL)) return;
+      if (container.querySelector(".mwi-lite-magic-sort-bar")) {
+        return;
+      }
+      const bar = document.createElement("div");
+      bar.className = "mwi-lite-magic-sort-bar";
+      bar.setAttribute("data-mwi-lite", "1");
+      const refreshBtn = document.createElement("button");
+      refreshBtn.type = "button";
+      refreshBtn.className = "Button_button__1Fe9z Button_small__3fqC7 mwi-lite-ms-btn mwi-lite-ms-refresh";
+      refreshBtn.textContent = ctx.i18n.t("刷新", "Refresh");
+      refreshBtn.title = ctx.i18n.t("重置时间戳并重新排序", "Reset timestamps and re-sort");
+      refreshBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const tbody = document.querySelector(TBODY_SEL);
+        if (tbody) assignRowTimestamps(tbody, true);
+        sortRows(true);
+      });
+      const pinBtn = document.createElement("button");
+      pinBtn.type = "button";
+      pinBtn.className = "Button_button__1Fe9z Button_small__3fqC7 mwi-lite-ms-btn";
+      const syncPinStyle = () => {
+        pinBtn.textContent = ctx.i18n.t("可收取置顶", "Pin Claim");
+        pinBtn.dataset.active = pinCollectable ? "1" : "0";
+      };
+      syncPinStyle();
+      pinBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        pinCollectable = !pinCollectable;
+        syncPinStyle();
+        savePref();
+        sortRows(true);
+      });
+      const sortBtn = document.createElement("button");
+      sortBtn.type = "button";
+      sortBtn.className = "Button_button__1Fe9z Button_small__3fqC7 mwi-lite-ms-btn mwi-lite-ms-sort";
+      const syncSortLabel = () => {
+        const m = SORT_MODES[sortIndex] || SORT_MODES[0];
+        sortBtn.textContent = `${ctx.i18n.t("排序", "Sort")} (${ctx.i18n.t(m.zh, m.en)})`;
+      };
+      syncSortLabel();
+      sortBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        sortIndex = (sortIndex + 1) % SORT_MODES.length;
+        syncSortLabel();
+        savePref();
+        sortRows(true);
+      });
+      bar.append(refreshBtn, pinBtn, sortBtn);
+      container.insertBefore(bar, container.firstChild);
+    };
+    const handlePanel = () => {
+      const panel = document.querySelector(PANEL_SEL);
+      const tbody = document.querySelector(TBODY_SEL);
+      if (!panel || !tbody) return;
+      injectControls(panel);
+      if (lastPanelRef !== panel) {
+        lastPanelRef = panel;
+        panel.addEventListener(
+          "click",
+          (ev) => {
+            const btn = ev.target?.closest?.("button");
+            if (btn && /收集|Claim/i.test(btn.textContent || "")) {
+              const isAll = /全部|All/i.test(btn.textContent || "");
+              batchFreezeUntil = Date.now() + (isAll ? 650 : 280);
+              scheduleSortDebounced(isAll ? 680 : 320);
+            }
+          },
+          true
+        );
+      }
+      if (Date.now() < batchFreezeUntil) return;
+      const rows = getTableRows(tbody);
+      const hasNewRow = rows.some((r) => !rowTimestamps.has(r));
+      if (lastTbodyRef !== tbody) {
+        lastTbodyRef = tbody;
+        lastStateSignature = "";
+        assignRowTimestamps(tbody, true);
+        tbody.addEventListener(
+          "pointerdown",
+          () => {
+            lastPointerDownTs = Date.now();
+          },
+          true
+        );
+        sortRows(false);
+        return;
+      }
+      const sig = getRowsSignature(rows);
+      if (hasNewRow || sig !== lastStateSignature) {
+        sortRows(false);
+      }
+    };
+    return {
+      id: "market-magic-sort",
+      nameZh: "我的挂单魔法排序",
+      nameEn: "My Listings Magic Sort",
+      descriptionZh: "按时间/名称/价格排序我的挂单，支持可收取订单强制置顶",
+      descriptionEn: "Sort My Listings by time/name/price and pin claimable orders to top",
+      category: "market",
+      defaultEnabled: true,
+      routes: ["market"],
+      init(context) {
+        ctx = context;
+        const saved = ctx.storage.get(SORT_STATE_KEY, null);
+        if (saved) {
+          const idx = SORT_MODES.findIndex((m) => m.key === saved.sortKey);
+          if (idx >= 0) sortIndex = idx;
+          if (typeof saved.pinCollectable === "boolean") pinCollectable = saved.pinCollectable;
+        }
+        unregStyle = ctx.addStyle(
+          "market-magic-sort",
+          `
+        ${PANEL_SEL} ${BTN_CONT_SEL} {
+          display: flex !important;
+          align-items: center !important;
+          gap: 8px !important;
+          flex-wrap: wrap !important;
+        }
+        ${PANEL_SEL} [class*="MarketplacePanel_listingCount__"] {
+          margin-right: auto !important;
+        }
+        .mwi-lite-magic-sort-bar {
+          order: -1;
+          display: inline-flex;
+          gap: 6px;
+          align-items: center;
+        }
+        .mwi-lite-ms-btn {
+          border: none !important;
+          color: #fff !important;
+          font-size: 12px !important;
+          padding: 3px 9px !important;
+          border-radius: 4px !important;
+          cursor: pointer;
+          background: #4b5563;
+        }
+        .mwi-lite-ms-refresh { background: #2e8b57 !important; }
+        .mwi-lite-ms-btn[data-active="1"] { background: #2e8b57 !important; }
+        .mwi-lite-ms-sort { background: #1e73be !important; min-width: 90px; }
+        `
+        );
+        unregWs = ctx.wsBus.on("market_listings_updated", () => {
+          if (ctx?.domScheduler.getActiveRoute() !== "market") return;
+          batchFreezeUntil = Date.now() + 260;
+          scheduleSortDebounced(300);
+        });
+        return () => {
+          unregWs?.();
+          unregWs = null;
+          unregStyle?.();
+          unregStyle = null;
+          if (debounceTimer !== null) {
+            clearTimeout(debounceTimer);
+            debounceTimer = null;
+          }
+          lastPanelRef = null;
+          lastTbodyRef = null;
+          document.querySelectorAll(".mwi-lite-magic-sort-bar").forEach((el) => el.remove());
+          const tbody = document.querySelector(TBODY_SEL);
+          if (tbody) getTableRows(tbody).forEach((r) => r.style.backgroundColor = "");
+        };
+      },
+      onDom() {
+        handlePanel();
+      }
+    };
+  }
+
+  // src/features/market/market-quick-ops.ts
+  var QUICK_MARK = "data-mwi-lite-qops";
+  var MARKET_TAX3 = 0.02;
+  var ENH_POPUP_ID = "mwi-lite-enh-profit-popup";
+  function setReactInputValue(input, value) {
+    const proto = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+    proto?.set?.call(input, String(value));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  function formatCompact2(n) {
+    if (!Number.isFinite(n)) return "0";
+    const abs = Math.abs(n);
+    if (abs >= 1e9) return `${(n / 1e9).toFixed(2).replace(/\.?0+$/, "")}B`;
+    if (abs >= 1e6) return `${(n / 1e6).toFixed(2).replace(/\.?0+$/, "")}M`;
+    if (abs >= 1e3) return `${(n / 1e3).toFixed(1).replace(/\.?0+$/, "")}K`;
+    return String(Math.round(n));
+  }
+  function formatSignedCompact(n) {
+    if (!Number.isFinite(n)) return "0";
+    const sign = n < 0 ? "-" : n > 0 ? "+" : "";
+    const abs = Math.abs(n);
+    if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(2)}B`;
+    if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(2)}M`;
+    if (abs >= 1e3) return `${sign}${(abs / 1e3).toFixed(2)}K`;
+    return `${sign}${Math.round(abs)}`;
+  }
+  function formatAgeDateTime(ts) {
+    const d = new Date(ts);
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mi = String(d.getMinutes()).padStart(2, "0");
+    const ss = String(d.getSeconds()).padStart(2, "0");
+    return `${mm}-${dd} ${hh}:${mi}:${ss}`;
+  }
+  function formatElapsedDuration(ageMs, isZh) {
+    const totalMin = Math.max(0, Math.floor(ageMs / 6e4));
+    const days = Math.floor(totalMin / 1440);
+    const hours = Math.floor(totalMin % 1440 / 60);
+    const mins = totalMin % 60;
+    return isZh ? `${days}天${hours}时${mins}分` : `${days}d ${hours}h ${mins}m`;
+  }
+  function getAgeGradientColor(ageMs) {
+    const hours = Math.max(0, ageMs / 36e5);
+    const ratio = Math.min(1, hours / 96);
+    const hue = Math.round(120 * (1 - ratio));
+    const sat = Math.round(78 + 6 * ratio);
+    const light = Math.round(50 + 4 * ratio);
+    return `hsl(${hue}, ${sat}%, ${light}%)`;
+  }
+  function getCurrentMarketItem() {
+    const cur = document.querySelector('[class*="MarketplacePanel_currentItem"]');
+    if (!cur) return null;
+    const useEl = cur.querySelector("use");
+    const href = useEl?.getAttribute("href") || useEl?.href?.baseVal || "";
+    const hash = href.split("#")[1] || "";
+    if (!hash) return null;
+    const enhEl = cur.querySelector('[class*="Item_enhancementLevel"]');
+    const enhancementLevel = enhEl ? Number((enhEl.textContent || "").replace(/\+/g, "").trim()) || 0 : 0;
+    return { itemHrid: `/items/${hash}`, enhancementLevel };
+  }
+  function createMarketQuickOpsModule() {
+    let ctx = null;
+    let unregStyle = null;
+    let unsubs = [];
+    const processedModals = /* @__PURE__ */ new WeakSet();
+    const anchors = [];
+    let timers = [];
+    let planCacheKey = "";
+    let planCache = null;
+    let outsidePopupListenerAttached = false;
+    const invalidateEnhPlan = () => {
+      planCacheKey = "";
+      planCache = null;
+    };
+    const closeEnhPopup = () => {
+      document.getElementById(ENH_POPUP_ID)?.remove();
+      if (outsidePopupListenerAttached) {
+        document.removeEventListener("pointerdown", onOutsidePopupPointerDown, true);
+        outsidePopupListenerAttached = false;
+      }
+    };
+    const onOutsidePopupPointerDown = (e) => {
+      const popup = document.getElementById(ENH_POPUP_ID);
+      const target = e.target;
+      if (!popup || !target) {
+        closeEnhPopup();
+        return;
+      }
+      if (popup.contains(target) || target.closest(".mwi-lite-ob-hourly-btn")) return;
+      closeEnhPopup();
+    };
+    const getCachedEnhPlan = (itemHrid, enhancementLevel) => {
+      if (!ctx || enhancementLevel < 1) return null;
+      const clientData = ctx.gameData.getClientData();
+      if (!clientData?.itemDetailMap?.[itemHrid]?.enhancementCosts?.length) return null;
+      const key = `${itemHrid}:${enhancementLevel}`;
+      if (planCacheKey === key && planCache) return planCache;
+      const setup = detectCharacterEnhancingSetup(ctx.gameData);
+      const { getBasePrice, getMaterialAsk } = createRealisticPriceResolvers(clientData, ctx.marketStore);
+      const plan = computeEnhancementPlan(
+        itemHrid,
+        enhancementLevel,
+        setup,
+        clientData,
+        ctx.marketStore,
+        getBasePrice,
+        getMaterialAsk
+      );
+      planCacheKey = key;
+      planCache = { setup, plan };
+      return planCache;
+    };
+    const openEnhDetailsPopup = (anchor, itemHrid, enhancementLevel, askPrice, setup, plan) => {
+      if (!ctx) return;
+      closeEnhPopup();
+      const netSale = askPrice * (1 - MARKET_TAX3);
+      const singleProfit = netSale - plan.totalCost;
+      const hourlyProfit = plan.totalTimeHours > 0 ? singleProfit / plan.totalTimeHours : 0;
+      const popup = document.createElement("div");
+      popup.id = ENH_POPUP_ID;
+      popup.setAttribute("data-mwi-lite", "1");
+      const rect = anchor.getBoundingClientRect();
+      const top = Math.min(window.innerHeight - 310, Math.max(10, Math.round(rect.bottom + 6)));
+      const left = Math.min(window.innerWidth - 330, Math.max(10, Math.round(rect.left)));
+      popup.style.top = `${top}px`;
+      popup.style.left = `${left}px`;
+      const teaNames = setup.activeTeaHrids.length ? setup.activeTeaHrids.map((h) => ctx.i18n.getItemName(h)).join(", ") : ctx.i18n.t("无茶水", "None");
+      const equipNames = setup.equippedLabels.length ? setup.equippedLabels.join(", ") : ctx.i18n.t("未检测到强化装备", "No enhancing gear equipped");
+      const protLabel = plan.protectFrom > 0 ? ctx.i18n.t(
+        `+${plan.protectFrom} 起保护 (${plan.protectItemHrid ? ctx.i18n.getItemName(plan.protectItemHrid) : ""})`,
+        `Protect >= +${plan.protectFrom}`
+      ) : ctx.i18n.t("全程不保护", "No protection");
+      popup.innerHTML = `
+      <div class="mwi-lite-enh-pop-hdr">
+        <span>${ctx.i18n.getItemName(itemHrid)} +${enhancementLevel}</span>
+        <button type="button" class="mwi-lite-enh-pop-close">✕</button>
+      </div>
+      <div class="mwi-lite-enh-pop-sec">${ctx.i18n.t("角色实时配装", "Character Setup")}</div>
+      <div class="mwi-lite-enh-pop-line"><span>${ctx.i18n.t("强化等级", "Enhancing Lv")}</span><b>${setup.baseEnhancingLevel} → ${setup.effectiveEnhancingLevel.toFixed(1)}</b></div>
+      <div class="mwi-lite-enh-pop-line"><span>${ctx.i18n.t("天文台房屋", "Observatory")}</span><b>Lv ${setup.houseLevel}</b></div>
+      <div class="mwi-lite-enh-pop-line"><span>${ctx.i18n.t("总成功/速度加成", "Success / Speed")}</span><b>+${setup.toolBonus.toFixed(2)}% / +${setup.speedBonus.toFixed(1)}%</b></div>
+      <div class="mwi-lite-enh-pop-line"><span>${ctx.i18n.t("喝茶 / 浓度", "Teas / Conc.")}</span><b>${teaNames} (+${setup.drinkConcentration.toFixed(1)}%)</b></div>
+      <div class="mwi-lite-enh-pop-gear" title="${equipNames}">${ctx.i18n.t("配装", "Gear")}: ${equipNames}</div>
+      <div class="mwi-lite-enh-pop-sec">${ctx.i18n.t("强化数学期望", "Markov Expectation")}</div>
+      <div class="mwi-lite-enh-pop-line"><span>${ctx.i18n.t("最优策略", "Strategy")}</span><b>${protLabel}${plan.mirrorStartLevel ? ` + ${ctx.i18n.t(`贤镜(+${plan.mirrorStartLevel})`, `Mirror(+${plan.mirrorStartLevel})`)}` : ""}</b></div>
+      <div class="mwi-lite-enh-pop-line"><span>${ctx.i18n.t("期望次数 / 单件耗时", "Attempts / Time")}</span><b>${plan.attempts.toFixed(1)} · ${plan.totalTimeHours.toFixed(2)}h</b></div>
+      <div class="mwi-lite-enh-pop-line"><span>${ctx.i18n.t(`坯子底价 (×${plan.baseCount})`, `Base (×${plan.baseCount})`)}</span><b>${formatCompact2(plan.basePrice * plan.baseCount)}</b></div>
+      <div class="mwi-lite-enh-pop-line"><span>${ctx.i18n.t("材料 + 保护 + 贤镜 + 茶", "Mats + Prot + Mirror + Tea")}</span><b>${formatCompact2(plan.materialCost)} + ${formatCompact2(plan.protectionCost)} + ${formatCompact2(plan.mirrorCost)} + ${formatCompact2(plan.teaCost)}</b></div>
+      <div class="mwi-lite-enh-pop-line"><span>${ctx.i18n.t("总期望成本", "Total Cost")}</span><b>${formatCompact2(plan.totalCost)}</b></div>
+      <div class="mwi-lite-enh-pop-line"><span>${ctx.i18n.t("挂单价 (税后)", "Ask (After 2%)")}</span><b>${formatCompact2(netSale)}</b></div>
+      <div class="mwi-lite-enh-pop-line mwi-lite-enh-pop-res"><span>${ctx.i18n.t("单次利润 / 工时费/h", "Profit / Hourly")}</span><b style="color:${singleProfit > 0 ? "#4ade80" : "#f87171"}">${formatSignedCompact(singleProfit)} / ${formatSignedCompact(hourlyProfit)}</b></div>
+    `;
+      popup.querySelector(".mwi-lite-enh-pop-close")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeEnhPopup();
+      });
+      document.body.appendChild(popup);
+      if (!outsidePopupListenerAttached) {
+        document.addEventListener("pointerdown", onOutsidePopupPointerDown, true);
+        outsidePopupListenerAttached = true;
+      }
+    };
+    const recordAnchors = (listings) => {
+      if (!Array.isArray(listings)) return;
+      let changed = false;
+      for (const l of listings) {
+        if (!l || typeof l.id !== "number" || !l.createdTimestamp) continue;
+        const ts = new Date(l.createdTimestamp).getTime();
+        if (!Number.isFinite(ts) || ts <= 0) continue;
+        if (!anchors.some((a) => a.id === l.id)) {
+          anchors.push({ id: l.id, ts });
+          changed = true;
+        }
+      }
+      if (changed) {
+        anchors.sort((a, b) => a.id - b.id);
+        if (anchors.length > 250) {
+          anchors.splice(0, anchors.length - 250);
+        }
+      }
+    };
+    const estimateTimestamp = (listingId) => {
+      const now = Date.now();
+      if (!anchors.length) return now - 36e5;
+      if (anchors.length === 1) return Math.min(now, anchors[0].ts);
+      const first = anchors[0];
+      const last = anchors[anchors.length - 1];
+      if (listingId >= first.id && listingId <= last.id) {
+        for (let i = 0; i < anchors.length - 1; i++) {
+          const a = anchors[i];
+          const b = anchors[i + 1];
+          if (listingId >= a.id && listingId <= b.id) {
+            if (b.id === a.id) return a.ts;
+            const ratio = (listingId - a.id) / (b.id - a.id);
+            return Math.min(now, Math.round(a.ts + ratio * (b.ts - a.ts)));
+          }
+        }
+      }
+      let sumX = 0;
+      let sumY = 0;
+      let sumXX = 0;
+      let sumXY = 0;
+      const n = anchors.length;
+      for (const pt of anchors) {
+        sumX += pt.id;
+        sumY += pt.ts;
+        sumXX += pt.id * pt.id;
+        sumXY += pt.id * pt.ts;
+      }
+      const denom = n * sumXX - sumX * sumX;
+      if (Math.abs(denom) < 1e-6) return Math.min(now, last.ts);
+      const slope = Math.max(0, (n * sumXY - sumX * sumY) / denom);
+      const intercept = (sumY - slope * sumX) / n;
+      return Math.min(now, Math.max(0, Math.round(intercept + slope * listingId)));
+    };
+    const handleOrderModal = (modal) => {
+      if (!ctx || processedModals.has(modal)) return;
+      const header = modal.querySelector('div[class*="MarketplacePanel_header"]');
+      if (!header) return;
+      processedModals.add(modal);
+      const headerText = (header.textContent || "").toLowerCase();
+      const translatedHeader = (header.getAttribute("script_translatedfrom") || "").toLowerCase();
+      const isBuy = headerText.includes("buy") || headerText.includes("购买") || translatedHeader.includes("buy");
+      const isSell = headerText.includes("sell") || headerText.includes("出售") || translatedHeader.includes("sell");
+      const bestPriceLabel = modal.querySelector('span[class*="MarketplacePanel_bestPrice"]');
+      if (bestPriceLabel) {
+        bestPriceLabel.click();
+        const t1 = window.setTimeout(() => {
+          if (!modal.isConnected) return;
+          const priceRow = modal.querySelector('div[class*="MarketplacePanel_priceInputs"]');
+          const input = priceRow?.querySelector('input[type="number"]');
+          if (input && ctx) {
+            const curVal = Number(input.value);
+            if (Number.isFinite(curVal) && curVal > 0) {
+              if (isBuy) {
+                setReactInputValue(input, ctx.marketStore.stepLegalPrice(curVal, 1));
+              } else if (isSell) {
+                setReactInputValue(input, ctx.marketStore.stepLegalPrice(curVal, -1));
+              }
+            }
+          }
+        }, 45);
+        timers.push(t1);
+      }
+      if (isSell) {
+        const t2 = window.setTimeout(() => {
+          if (!modal.isConnected) return;
+          const maxBtn = Array.from(modal.querySelectorAll("button")).find((b) => {
+            const txt = (b.textContent || "").trim();
+            return txt === "Max" || txt === "All" || txt === "最大" || txt === "全部";
+          });
+          if (maxBtn && !maxBtn.disabled) {
+            maxBtn.click();
+          }
+        }, 55);
+        timers.push(t2);
+      }
+      const t3 = window.setTimeout(() => {
+        if (!modal.isConnected || !ctx || modal.querySelector(`[${QUICK_MARK}]`)) return;
+        const priceRow = modal.querySelector('div[class*="MarketplacePanel_priceInputs"]');
+        if (priceRow) {
+          const priceInput = priceRow.querySelector('input[type="number"]');
+          const btnContainers = priceRow.querySelectorAll('div[class*="MarketplacePanel_buttonContainer"]');
+          const refBtn = btnContainers[0]?.querySelector("button");
+          const btnCls = refBtn?.className || "";
+          if (priceInput) {
+            const wrap = document.createElement("div");
+            wrap.setAttribute(QUICK_MARK, "price");
+            wrap.setAttribute("data-mwi-lite", "1");
+            wrap.className = "mwi-lite-qops-group";
+            const minusBtn = document.createElement("button");
+            minusBtn.type = "button";
+            minusBtn.className = `${btnCls} mwi-lite-qops-btn`;
+            minusBtn.textContent = ctx.i18n.t("N-1 压价", "Step -1");
+            minusBtn.title = ctx.i18n.t("降低 1 个合法价格档位 (Ask-1)", "Decrease by 1 legal price tick");
+            minusBtn.addEventListener("click", (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const v = Number(priceInput.value) || 0;
+              if (v > 1) setReactInputValue(priceInput, ctx.marketStore.stepLegalPrice(v, -1));
+            });
+            const plusBtn = document.createElement("button");
+            plusBtn.type = "button";
+            plusBtn.className = `${btnCls} mwi-lite-qops-btn`;
+            plusBtn.textContent = ctx.i18n.t("+1档", "Step +1");
+            plusBtn.title = ctx.i18n.t("提高 1 个合法价格档位 (Bid+1)", "Increase by 1 legal price tick");
+            plusBtn.addEventListener("click", (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const v = Number(priceInput.value) || 1;
+              setReactInputValue(priceInput, ctx.marketStore.stepLegalPrice(v, 1));
+            });
+            wrap.append(minusBtn, plusBtn);
+            priceRow.appendChild(wrap);
+          }
+        }
+        const qtyRow = modal.querySelector('div[class*="MarketplacePanel_quantityInputs"]');
+        if (qtyRow) {
+          const qtyInput = qtyRow.querySelector('input[type="number"]');
+          const refBtn = qtyRow.querySelector("button");
+          const btnCls = refBtn?.className || "";
+          if (qtyInput) {
+            const wrap = document.createElement("div");
+            wrap.setAttribute(QUICK_MARK, "qty");
+            wrap.setAttribute("data-mwi-lite", "1");
+            wrap.className = "mwi-lite-qops-group";
+            const divBtn = document.createElement("button");
+            divBtn.type = "button";
+            divBtn.className = `${btnCls} mwi-lite-qops-btn`;
+            divBtn.textContent = "÷2";
+            divBtn.addEventListener("click", (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const cur = parseInt(qtyInput.value, 10) || 1;
+              setReactInputValue(qtyInput, Math.max(1, Math.floor(cur / 2)));
+            });
+            const mulBtn = document.createElement("button");
+            mulBtn.type = "button";
+            mulBtn.className = `${btnCls} mwi-lite-qops-btn`;
+            mulBtn.textContent = "×2";
+            mulBtn.addEventListener("click", (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const cur = parseInt(qtyInput.value, 10) || 1;
+              setReactInputValue(qtyInput, Math.max(1, cur * 2));
+            });
+            wrap.append(divBtn, mulBtn);
+            qtyRow.appendChild(wrap);
+          }
+        }
+      }, 65);
+      timers.push(t3);
+    };
+    const renderOrderBookInsights = () => {
+      if (!ctx) return;
+      const current = getCurrentMarketItem();
+      if (!current) return;
+      const ob = ctx.marketStore.getOrderBook(current.itemHrid, current.enhancementLevel);
+      if (!ob) return;
+      const btnContainer = document.querySelector('[class*="MarketplacePanel_newListingButtonsContainer"]');
+      if (btnContainer) {
+        let badgeWrap = btnContainer.querySelector(".mwi-lite-queue-depth");
+        if (!badgeWrap) {
+          badgeWrap = document.createElement("div");
+          badgeWrap.className = "mwi-lite-queue-depth";
+          badgeWrap.setAttribute("data-mwi-lite", "1");
+          btnContainer.appendChild(badgeWrap);
+        }
+        const calcDepth = (listings) => {
+          if (!listings.length) return { qty: 0, est: false };
+          const topPrice = listings[0].price;
+          let visible = 0;
+          for (const l of listings) {
+            if (l.price === topPrice) visible += l.quantity || 0;
+          }
+          let qty = visible;
+          let est = false;
+          if (listings.length >= 20 && listings[19]?.price === topPrice && listings[0]?.listingId && listings[19]?.listingId) {
+            const tFirst = estimateTimestamp(listings[0].listingId);
+            const tLast = estimateTimestamp(listings[19].listingId);
+            const span = tLast - tFirst;
+            const since = Date.now() - tLast;
+            if (span > 0 && since > 0) {
+              qty = Math.round(visible * (1 + 19 / 20 * (since / span)));
+              est = true;
+            }
+          }
+          return { qty, est };
+        };
+        const askDepth = calcDepth(ob.asks);
+        const bidDepth = calcDepth(ob.bids);
+        badgeWrap.innerHTML = `
+        <span class="ask">${ctx.i18n.t("卖1队列", "Ask Q")}: ${askDepth.est ? "~" : ""}${formatCompact2(askDepth.qty)}</span>
+        <span class="bid">${ctx.i18n.t("买1队列", "Bid Q")}: ${bidDepth.est ? "~" : ""}${formatCompact2(bidDepth.qty)}</span>
+      `;
+      }
+      const obContainer = document.querySelector('[class*="MarketplacePanel_orderBooksContainer"]');
+      if (obContainer) {
+        const enhBundle = getCachedEnhPlan(current.itemHrid, current.enhancementLevel);
+        const hasEnhColumns = Boolean(current.enhancementLevel >= 1 && enhBundle?.plan);
+        const knownIdToTs = /* @__PURE__ */ new Map();
+        for (const l of ctx.gameData.getMarketListings()) {
+          if (l?.id && l?.createdTimestamp) {
+            const ts = new Date(l.createdTimestamp).getTime();
+            if (Number.isFinite(ts) && ts > 0) knownIdToTs.set(l.id, ts);
+          }
+        }
+        const tables = Array.from(obContainer.querySelectorAll("table"));
+        tables.forEach((tbl, tblIdx) => {
+          const listings = tblIdx === 0 ? ob.asks : tblIdx === 1 ? ob.bids : [];
+          const showEnhForTable = tblIdx === 0 && hasEnhColumns;
+          const theadRow = tbl.querySelector("thead tr");
+          const tbody = tbl.querySelector("tbody");
+          if (!theadRow || !tbody) return;
+          tbl.querySelectorAll(".mwi-lite-age-tag").forEach((el) => el.remove());
+          const desiredMode = showEnhForTable ? "enh-est-age" : "plain-est-age";
+          if (theadRow.getAttribute("data-mwi-ob-mode") !== desiredMode) {
+            theadRow.querySelectorAll(".mwi-lite-ob-hdr").forEach((el) => el.remove());
+            if (showEnhForTable) {
+              const thHourly = document.createElement("th");
+              thHourly.className = "mwi-lite-ob-hdr mwi-lite-ob-enh";
+              thHourly.setAttribute("data-mwi-lite", "1");
+              thHourly.textContent = ctx.i18n.t("工时费/h", "Hourly");
+              const thProfit = document.createElement("th");
+              thProfit.className = "mwi-lite-ob-hdr mwi-lite-ob-enh";
+              thProfit.setAttribute("data-mwi-lite", "1");
+              thProfit.textContent = ctx.i18n.t("单次利润", "Profit");
+              theadRow.append(thHourly, thProfit);
+            }
+            const thEst = document.createElement("th");
+            thEst.className = "mwi-lite-ob-hdr mwi-lite-ob-est-hdr";
+            thEst.setAttribute("data-mwi-lite", "1");
+            thEst.textContent = ctx.i18n.t("估计创建时间", "Est. Age");
+            const thAge = document.createElement("th");
+            thAge.className = "mwi-lite-ob-hdr mwi-lite-ob-age";
+            thAge.setAttribute("data-mwi-lite", "1");
+            thAge.textContent = "~Age";
+            thAge.title = ctx.i18n.t("挂单时间（基于挂单 ID 估算 / 己方为精确时间）", "Estimated listing timestamp");
+            theadRow.append(thEst, thAge);
+            theadRow.setAttribute("data-mwi-ob-mode", desiredMode);
+          }
+          const nowMs = Date.now();
+          const isZh = ctx.i18n.isZh();
+          const rows = Array.from(tbody.children).filter((tr) => tr.tagName === "TR");
+          rows.forEach((tr, rowIdx) => {
+            const listing = rowIdx < listings.length ? listings[rowIdx] : null;
+            if (tr.getAttribute("data-mwi-ob-row-mode") !== desiredMode) {
+              tr.querySelectorAll(".mwi-lite-ob-cell").forEach((el) => el.remove());
+              if (showEnhForTable) {
+                const tdHourly2 = document.createElement("td");
+                tdHourly2.className = "mwi-lite-ob-cell mwi-lite-ob-hourly";
+                tdHourly2.setAttribute("data-mwi-lite", "1");
+                const tdProfit2 = document.createElement("td");
+                tdProfit2.className = "mwi-lite-ob-cell mwi-lite-ob-profit";
+                tdProfit2.setAttribute("data-mwi-lite", "1");
+                tr.append(tdHourly2, tdProfit2);
+              }
+              const tdEst2 = document.createElement("td");
+              tdEst2.className = "mwi-lite-ob-cell mwi-lite-ob-est-cell";
+              tdEst2.setAttribute("data-mwi-lite", "1");
+              const tdAge2 = document.createElement("td");
+              tdAge2.className = "mwi-lite-ob-cell mwi-lite-ob-age-cell";
+              tdAge2.setAttribute("data-mwi-lite", "1");
+              tr.append(tdEst2, tdAge2);
+              tr.setAttribute("data-mwi-ob-row-mode", desiredMode);
+            }
+            const tdHourly = tr.querySelector(".mwi-lite-ob-hourly");
+            const tdProfit = tr.querySelector(".mwi-lite-ob-profit");
+            const tdEst = tr.querySelector(".mwi-lite-ob-est-cell");
+            const tdAge = tr.querySelector(".mwi-lite-ob-age-cell");
+            if (!listing || !listing.listingId) {
+              if (tdHourly) tdHourly.textContent = "";
+              if (tdProfit) tdProfit.textContent = "";
+              if (tdEst) tdEst.textContent = "";
+              if (tdAge) {
+                const isEllipsis = tr.textContent?.includes("...") || tr.textContent?.includes("·");
+                const fallbackTxt = isEllipsis ? "· · ·" : "";
+                if (tdAge.textContent !== fallbackTxt) {
+                  tdAge.textContent = fallbackTxt;
+                  tdAge.style.color = "#6b7280";
+                }
+              }
+              return;
+            }
+            if (showEnhForTable && tdHourly && tdProfit && enhBundle?.plan) {
+              const plan = enhBundle.plan;
+              const askPrice = Number(listing.price) || 0;
+              const netSale = askPrice * (1 - MARKET_TAX3);
+              const singleProfit = netSale - plan.totalCost;
+              const hourlyProfit = plan.totalTimeHours > 0 ? singleProfit / plan.totalTimeHours : 0;
+              const profitColor = singleProfit > 0 ? "#4ade80" : "#9ca3af";
+              const hourlyTxt = formatSignedCompact(hourlyProfit);
+              const profitTxt = formatSignedCompact(singleProfit);
+              let btn = tdHourly.querySelector(".mwi-lite-ob-hourly-btn");
+              if (!btn) {
+                btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "mwi-lite-ob-hourly-btn";
+                btn.setAttribute("data-mwi-lite", "1");
+                tdHourly.appendChild(btn);
+              }
+              if (btn.textContent !== hourlyTxt) btn.textContent = hourlyTxt;
+              btn.style.color = profitColor;
+              btn.title = ctx.i18n.t("点击查看角色强化配装与期望成本明细", "Click for enhancing setup & cost details");
+              btn.onclick = (e) => {
+                e.stopPropagation();
+                openEnhDetailsPopup(
+                  btn,
+                  current.itemHrid,
+                  current.enhancementLevel,
+                  askPrice,
+                  enhBundle.setup,
+                  plan
+                );
+              };
+              if (tdProfit.textContent !== profitTxt) tdProfit.textContent = profitTxt;
+              tdProfit.style.color = profitColor;
+            }
+            const exactTs = knownIdToTs.get(listing.listingId);
+            const ts = exactTs ?? (listing.createdTimestamp ? new Date(listing.createdTimestamp).getTime() : estimateTimestamp(listing.listingId));
+            const ageMs = Math.max(0, nowMs - ts);
+            if (tdEst) {
+              const estTxt = formatElapsedDuration(ageMs, isZh);
+              if (tdEst.textContent !== estTxt) tdEst.textContent = estTxt;
+              const estColor = getAgeGradientColor(ageMs);
+              if (tdEst.style.color !== estColor) tdEst.style.color = estColor;
+            }
+            if (tdAge) {
+              const txt = formatAgeDateTime(ts);
+              if (tdAge.textContent !== txt) tdAge.textContent = txt;
+              tdAge.style.color = exactTs ? "#00ff00" : "#00e600";
+              tdAge.style.fontWeight = exactTs ? "600" : "400";
+              tdAge.title = exactTs ? ctx.i18n.t("你的挂单精确创建时间", "Your listing exact creation time") : ctx.i18n.t("~基于挂单 ID 推算的创建时间", "Estimated listing creation time");
+            }
+          });
+        });
+      }
+    };
+    return {
+      id: "market-quick-ops",
+      nameZh: "市场快捷操作与排队估算",
+      nameEn: "Market Quick Ops & Queue Depth",
+      descriptionZh: "自动填竞争价、N-1 合法档位微调、Max/÷2/×2 快捷按钮、最优价队列深度与挂单账龄估算",
+      descriptionEn: "Auto-fill best price, N-1 legal tick buttons, Max/÷2/×2 helpers, queue length & listing age",
+      category: "market",
+      defaultEnabled: true,
+      routes: ["market"],
+      init(context) {
+        ctx = context;
+        unregStyle = ctx.addStyle(
+          "market-quick-ops",
+          `
+        .mwi-lite-qops-group {
+          display: inline-flex;
+          gap: 4px;
+          margin-left: 6px;
+          align-items: center;
+        }
+        .mwi-lite-qops-btn {
+          padding: 2px 7px !important;
+          font-size: 11px !important;
+          min-width: 34px !important;
+          background: #2b3b5a !important;
+          color: #dbeafe !important;
+          border: 1px solid #486291 !important;
+          border-radius: 4px !important;
+          cursor: pointer;
+        }
+        .mwi-lite-qops-btn:hover { background: #3b527e !important; }
+        .mwi-lite-queue-depth {
+          display: flex;
+          gap: 10px;
+          font-size: 11.5px;
+          margin-top: 4px;
+          color: #cbd5e1;
+        }
+        .mwi-lite-queue-depth .ask { color: #fca5a5; }
+        .mwi-lite-queue-depth .bid { color: #86efac; }
+        .mwi-estimated-age-header,
+        .mwi-estimated-age-cell {
+          display: none !important;
+        }
+        .mwi-lite-ob-hdr {
+          white-space: nowrap;
+          padding: 4px 8px !important;
+          text-align: center !important;
+          font-size: 12px;
+        }
+        .mwi-lite-ob-cell {
+          white-space: nowrap;
+          padding: 4px 8px !important;
+          text-align: center !important;
+          font-variant-numeric: tabular-nums;
+          font-size: 12px;
+        }
+        .mwi-lite-ob-hourly-btn {
+          background: none;
+          border: none;
+          padding: 0;
+          margin: 0;
+          font: inherit;
+          text-decoration: underline;
+          cursor: pointer;
+        }
+        #${ENH_POPUP_ID} {
+          position: fixed;
+          z-index: 9800;
+          width: 310px;
+          background: #141927;
+          border: 1px solid #38496e;
+          border-radius: 8px;
+          padding: 10px 12px;
+          color: #e2e8f0;
+          font-size: 12px;
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+        }
+        #${ENH_POPUP_ID} .mwi-lite-enh-pop-hdr {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          font-weight: 700;
+          color: #fde047;
+          margin-bottom: 6px;
+        }
+        #${ENH_POPUP_ID} .mwi-lite-enh-pop-close {
+          background: transparent;
+          border: none;
+          color: #94a3b8;
+          font-size: 13px;
+          cursor: pointer;
+          padding: 1px 4px;
+        }
+        #${ENH_POPUP_ID} .mwi-lite-enh-pop-sec {
+          margin-top: 6px;
+          margin-bottom: 2px;
+          font-size: 11px;
+          font-weight: 600;
+          color: #94a3b8;
+          border-top: 1px dashed #2b3652;
+          padding-top: 4px;
+        }
+        #${ENH_POPUP_ID} .mwi-lite-enh-pop-line {
+          display: flex;
+          justify-content: space-between;
+          gap: 8px;
+          padding: 1.5px 0;
+        }
+        #${ENH_POPUP_ID} .mwi-lite-enh-pop-gear {
+          font-size: 11px;
+          color: #cbd5e1;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          margin-top: 2px;
+        }
+        #${ENH_POPUP_ID} .mwi-lite-enh-pop-res {
+          margin-top: 4px;
+          padding-top: 4px;
+          border-top: 1px solid #3b4b72;
+        }
+        `
+        );
+        recordAnchors(ctx.gameData.getMarketListings());
+        const scheduleObRefresh = () => {
+          invalidateEnhPlan();
+          if (ctx?.domScheduler.getActiveRoute() !== "market") return;
+          const obEl = document.querySelector('[class*="MarketplacePanel_orderBooksContainer"]');
+          if (obEl && obEl.offsetParent !== null) {
+            ctx.domScheduler.scheduleRun(false);
+          }
+        };
+        unsubs = [
+          ctx.gameData.on("character_initialized", () => {
+            recordAnchors(ctx?.gameData.getMarketListings() || []);
+            scheduleObRefresh();
+          }),
+          ctx.gameData.on("items_updated", scheduleObRefresh),
+          ctx.gameData.on("skills_updated", scheduleObRefresh),
+          ctx.gameData.on("house_rooms_updated", scheduleObRefresh),
+          ctx.gameData.on("consumables_updated", scheduleObRefresh),
+          ctx.marketStore.onPriceUpdate(scheduleObRefresh),
+          ctx.wsBus.on("market_listings_updated", (data) => {
+            recordAnchors(data?.endMarketListings || []);
+            scheduleObRefresh();
+          }),
+          ctx.wsBus.on("market_item_order_books_updated", () => {
+            if (ctx?.domScheduler.getActiveRoute() === "market") {
+              ctx.domScheduler.scheduleRun(false);
+            }
+          })
+        ];
+        return () => {
+          closeEnhPopup();
+          unregStyle?.();
+          unregStyle = null;
+          unsubs.forEach((u) => u());
+          unsubs = [];
+          timers.forEach((t) => clearTimeout(t));
+          timers = [];
+          document.querySelectorAll(`[${QUICK_MARK}], .mwi-lite-queue-depth, .mwi-lite-age-tag, .mwi-lite-ob-hdr, .mwi-lite-ob-cell`).forEach((el) => el.remove());
+          document.querySelectorAll("[data-mwi-ob-mode]").forEach((el) => el.removeAttribute("data-mwi-ob-mode"));
+          document.querySelectorAll("[data-mwi-ob-row-mode]").forEach((el) => el.removeAttribute("data-mwi-ob-row-mode"));
+        };
+      },
+      onDom(doc) {
+        doc.querySelectorAll('[class*="Modal_modalContainer"]').forEach(handleOrderModal);
+        renderOrderBookInsights();
+      }
+    };
+  }
+
+  // src/features/market/market-shortcuts.ts
+  var SHORTCUTS_STORAGE_KEY = "sunnyMwi_market_shortcuts_v1";
+  var BAR_ID = "mwi-lite-market-shortcuts-bar";
+  var JUMP_BAR_ID = "mwi-lite-enh-jump-bar";
+  var PIN_BTN_ID = "mwi-lite-market-pin-btn";
+  var SETTINGS_POPOVER_ID = "mwi-lite-market-shortcuts-popover";
+  var ENH_LEVELS = [0, 5, 7, 8, 10, 12];
+  var ITEM_HRID_RE = /^\/items\/[a-z0-9_]+$/;
+  function itemKey(item) {
+    return `${item.itemHrid}:${item.level === null ? "all" : item.level}`;
+  }
+  function sanitizeList(raw, allowNullLevel) {
+    if (!Array.isArray(raw)) return [];
+    const seen = /* @__PURE__ */ new Set();
+    const out = [];
+    for (const entry of raw) {
+      if (!entry || typeof entry !== "object") continue;
+      const { itemHrid, level } = entry;
+      if (typeof itemHrid !== "string" || !ITEM_HRID_RE.test(itemHrid)) continue;
+      if (level === null) {
+        if (!allowNullLevel) continue;
+      } else if (typeof level !== "number" || !Number.isSafeInteger(level) || level < 0 || level > 20) {
+        continue;
+      }
+      const normalized = { itemHrid, level: level === null ? null : level };
+      const k = itemKey(normalized);
+      if (!seen.has(k)) {
+        seen.add(k);
+        out.push(normalized);
+      }
+    }
+    return out;
+  }
+  function loadState() {
+    try {
+      const raw = window.localStorage.getItem(SHORTCUTS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const limit = typeof parsed?.limit === "number" && Number.isInteger(parsed.limit) && parsed.limit >= 1 && parsed.limit <= 50 ? parsed.limit : 10;
+        return {
+          limit,
+          pinned: sanitizeList(parsed?.pinned, true),
+          recent: sanitizeList(parsed?.recent, false).slice(0, 50)
+        };
+      }
+    } catch {
+    }
+    return { limit: 10, pinned: [], recent: [] };
+  }
+  function saveState(state) {
+    try {
+      window.localStorage.setItem(SHORTCUTS_STORAGE_KEY, JSON.stringify(state));
+    } catch {
+    }
+  }
+  function resolveSpriteBase() {
+    const useEl = document.querySelector('use[href*="items_sprite"]');
+    const href = useEl?.getAttribute("href");
+    if (href && href.includes("#")) return href.split("#")[0];
+    return "/static/media/items_sprite.9c39e2ec.svg";
+  }
+  function isElementVisible(el) {
+    if (!el || !el.isConnected) return false;
+    return el.offsetParent !== null;
+  }
+  function findVisibleMarketPanel() {
+    const panels = document.querySelectorAll('[class*="MarketplacePanel_marketplacePanel"]');
+    for (let i = 0; i < panels.length; i++) {
+      if (isElementVisible(panels[i])) return panels[i];
+    }
+    return null;
+  }
+  function findVisibleCurrentItem(panel) {
+    const nodes = panel.querySelectorAll('[class*="MarketplacePanel_currentItem"]');
+    for (let i = 0; i < nodes.length; i++) {
+      const cur = nodes[i];
+      if (!isElementVisible(cur)) continue;
+      const useEl = cur.querySelector("use");
+      const href = useEl?.getAttribute("href") || useEl?.href?.baseVal || "";
+      const slug = href.split("#")[1] || "";
+      if (!slug) continue;
+      const itemHrid = `/items/${slug}`;
+      const enhEl = cur.querySelector('[class*="Item_enhancementLevel"]');
+      const level = enhEl ? Number((enhEl.textContent || "").replace(/\+/g, "").trim()) || 0 : 0;
+      return { el: cur, itemHrid, level };
+    }
+    return null;
+  }
+  function createMarketShortcutsModule() {
+    let ctx = null;
+    let unregStyle = null;
+    let state = loadState();
+    let lastRenderSig = "";
+    let settingsBtnRef = null;
+    let popoverEl = null;
+    let docListenersAttached = false;
+    const canEnhance = (itemHrid) => {
+      const detail = ctx?.gameData.getClientData()?.itemDetailMap?.[itemHrid];
+      return Array.isArray(detail?.enhancementCosts) && detail.enhancementCosts.length > 0;
+    };
+    const openItemAtLevel = (itemHrid, level) => {
+      const core = ctx?.gameData.getReactGameCore();
+      if (typeof core?.handleGoToMarketplace === "function") {
+        core.handleGoToMarketplace(itemHrid, level);
+        return true;
+      }
+      const roots = document.querySelectorAll('[class*="GamePage_gamePage"], [class^="GamePage"]');
+      for (let i = 0; i < roots.length; i++) {
+        const root = roots[i];
+        const fKey = Reflect.ownKeys(root).find(
+          (k) => typeof k === "string" && (k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"))
+        );
+        let fiber = fKey ? root[fKey] : null;
+        for (let depth = 0; fiber && depth < 64; depth++, fiber = fiber.return) {
+          const host = fiber.stateNode;
+          if (host && typeof host === "object") {
+            const fn = host.handleGoToMarketplace || host.goToMarketplace || host.openMarketplace;
+            if (typeof fn === "function") {
+              fn.call(host, itemHrid, level);
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    };
+    const openItemAllLevels = (itemHrid) => {
+      const panel = findVisibleMarketPanel();
+      if (!panel) return openItemAtLevel(itemHrid, 0);
+      const fKey = Reflect.ownKeys(panel).find(
+        (k) => typeof k === "string" && (k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"))
+      );
+      let fiber = fKey ? panel[fKey] : null;
+      for (let depth = 0; fiber && depth < 64; depth++, fiber = fiber.return) {
+        const host = fiber.stateNode;
+        if (host && typeof host === "object" && typeof host.handleViewItemSummary === "function" && typeof host.handleViewOrderBook === "function") {
+          host.handleViewItemSummary(itemHrid);
+          return true;
+        }
+      }
+      return openItemAtLevel(itemHrid, 0);
+    };
+    const closeSettingsPopover = (refocus = false) => {
+      if (popoverEl) {
+        popoverEl.remove();
+        popoverEl = null;
+      }
+      if (settingsBtnRef) {
+        settingsBtnRef.setAttribute("aria-expanded", "false");
+        if (refocus) settingsBtnRef.focus();
+      }
+      if (docListenersAttached) {
+        document.removeEventListener("pointerdown", onDocPointerDown, true);
+        document.removeEventListener("keydown", onDocKeyDown);
+        docListenersAttached = false;
+      }
+    };
+    const onDocPointerDown = (ev) => {
+      const target = ev.target;
+      if (target && !popoverEl?.contains(target) && !settingsBtnRef?.contains(target)) {
+        closeSettingsPopover(false);
+      }
+    };
+    const onDocKeyDown = (ev) => {
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        closeSettingsPopover(true);
+      }
+    };
+    const positionPopover = () => {
+      if (!popoverEl || !settingsBtnRef) return;
+      const btnRect = settingsBtnRef.getBoundingClientRect();
+      const popRect = popoverEl.getBoundingClientRect();
+      const vw = window.innerWidth || document.documentElement.clientWidth;
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      const left = Math.max(8, Math.min(btnRect.right - popRect.width, vw - popRect.width - 8));
+      const top = btnRect.bottom + popRect.height + 8 <= vh - 8 ? btnRect.bottom + 8 : Math.max(8, btnRect.top - popRect.height - 8);
+      popoverEl.style.left = `${left}px`;
+      popoverEl.style.top = `${top}px`;
+    };
+    const openSettingsPopover = () => {
+      if (!ctx) return;
+      if (popoverEl) {
+        closeSettingsPopover(true);
+        return;
+      }
+      const form = document.createElement("form");
+      form.id = SETTINGS_POPOVER_ID;
+      form.setAttribute("data-mwi-lite", "1");
+      form.setAttribute("role", "dialog");
+      const title = document.createElement("strong");
+      title.textContent = ctx.i18n.t("市场快捷栏设置", "Market Shortcut Settings");
+      const row = document.createElement("label");
+      row.className = "mwi-lite-ms-pop-row";
+      const rowLabel = document.createElement("span");
+      rowLabel.textContent = ctx.i18n.t("显示物品数量", "Items to display");
+      const limitInput = document.createElement("input");
+      limitInput.type = "number";
+      limitInput.min = "1";
+      limitInput.max = "50";
+      limitInput.step = "1";
+      limitInput.required = true;
+      limitInput.value = String(state.limit);
+      row.append(rowLabel, limitInput);
+      const hint = document.createElement("div");
+      hint.className = "mwi-lite-ms-pop-hint";
+      hint.textContent = ctx.i18n.t("固定与最近共用此上限（1–50）。", "Pinned and recent share this limit (1–50).");
+      const footer = document.createElement("div");
+      footer.className = "mwi-lite-ms-pop-actions";
+      const clearRecentBtn = document.createElement("button");
+      clearRecentBtn.type = "button";
+      clearRecentBtn.textContent = ctx.i18n.t("清空最近", "Clear Recent");
+      clearRecentBtn.addEventListener("click", () => {
+        state = { ...state, recent: [] };
+        saveState(state);
+        lastRenderSig = "";
+        syncDom();
+      });
+      const closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.textContent = ctx.i18n.t("关闭", "Close");
+      closeBtn.addEventListener("click", () => closeSettingsPopover(true));
+      const applyBtn = document.createElement("button");
+      applyBtn.type = "submit";
+      applyBtn.className = "primary";
+      applyBtn.textContent = ctx.i18n.t("应用", "Apply");
+      footer.append(clearRecentBtn, closeBtn, applyBtn);
+      form.append(title, row, hint, footer);
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        if (!limitInput.checkValidity()) {
+          limitInput.reportValidity();
+          return;
+        }
+        const nextLimit = Math.max(1, Math.min(50, Math.trunc(limitInput.valueAsNumber || 10)));
+        state = { ...state, limit: nextLimit };
+        saveState(state);
+        lastRenderSig = "";
+        closeSettingsPopover(true);
+        syncDom();
+      });
+      document.body.appendChild(form);
+      popoverEl = form;
+      settingsBtnRef?.setAttribute("aria-expanded", "true");
+      document.addEventListener("pointerdown", onDocPointerDown, true);
+      document.addEventListener("keydown", onDocKeyDown);
+      docListenersAttached = true;
+      positionPopover();
+      limitInput.focus();
+    };
+    const recordRecent = (item) => {
+      if (item.level === null) return false;
+      const k = itemKey(item);
+      if (state.recent[0] && itemKey(state.recent[0]) === k) return false;
+      state = {
+        ...state,
+        recent: [item, ...state.recent.filter((x) => itemKey(x) !== k)].slice(0, 50)
+      };
+      saveState(state);
+      return true;
+    };
+    const isPinned = (item) => {
+      const k = itemKey(item);
+      return state.pinned.some((x) => itemKey(x) === k);
+    };
+    const togglePin = (item) => {
+      const k = itemKey(item);
+      state = {
+        ...state,
+        pinned: isPinned(item) ? state.pinned.filter((x) => itemKey(x) !== k) : [item, ...state.pinned]
+      };
+      saveState(state);
+    };
+    const createShortcutButton = (item, kind, activeKey, spriteBase) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `mwi-lite-ms-item ${kind === "pinned" ? "is-pinned" : "is-recent"}`;
+      const k = itemKey(item);
+      const isActive = activeKey === k;
+      if (isActive) btn.classList.add("is-active");
+      btn.setAttribute("aria-pressed", String(isActive));
+      const itemName = ctx?.i18n.getItemName(item.itemHrid) || item.itemHrid.replace("/items/", "");
+      const labelSuffix = item.level === null ? ` · ${ctx?.i18n.t("全", "All")}` : canEnhance(item.itemHrid) ? ` +${item.level}` : "";
+      const kindPrefix = kind === "pinned" ? ctx?.i18n.t("固定", "Pinned") : ctx?.i18n.t("最近查看", "Recently viewed");
+      btn.title = `${kindPrefix} · ${itemName}${labelSuffix}`;
+      btn.setAttribute("aria-label", btn.title);
+      const slug = item.itemHrid.split("/").pop() || "";
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("width", "24");
+      svg.setAttribute("height", "24");
+      svg.style.display = "block";
+      const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+      use.setAttributeNS("http://www.w3.org/1999/xlink", "href", `${spriteBase}#${slug}`);
+      svg.appendChild(use);
+      btn.appendChild(svg);
+      if (item.level === null || canEnhance(item.itemHrid)) {
+        const badge = document.createElement("span");
+        badge.className = "mwi-lite-ms-badge";
+        badge.textContent = item.level === null ? ctx?.i18n.t("全", "All") || "All" : `+${item.level}`;
+        btn.appendChild(badge);
+      }
+      btn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (btn.disabled) return;
+        btn.disabled = true;
+        closeSettingsPopover(false);
+        try {
+          if (item.level === null) openItemAllLevels(item.itemHrid);
+          else openItemAtLevel(item.itemHrid, item.level);
+        } finally {
+          btn.disabled = false;
+        }
+      });
+      return btn;
+    };
+    const syncDom = () => {
+      if (!ctx) return;
+      const panel = findVisibleMarketPanel();
+      if (!panel) {
+        closeSettingsPopover(false);
+        document.getElementById(BAR_ID)?.remove();
+        document.getElementById(JUMP_BAR_ID)?.remove();
+        document.getElementById(PIN_BTN_ID)?.remove();
+        lastRenderSig = "";
+        return;
+      }
+      const isSummaryView = isElementVisible(panel.querySelector('[class*="MarketplacePanel_itemSummaryTable"]'));
+      const isOrderBookView = isElementVisible(panel.querySelector('[class*="MarketplacePanel_orderBooksContainer"]'));
+      const curItem = findVisibleCurrentItem(panel);
+      const activeDesc = curItem && (isSummaryView || isOrderBookView) ? { itemHrid: curItem.itemHrid, level: isSummaryView ? null : curItem.level } : null;
+      const activeKey = activeDesc ? itemKey(activeDesc) : null;
+      if (popoverEl && activeKey && !lastRenderSig.endsWith(`|${activeKey}`)) {
+        closeSettingsPopover(false);
+      }
+      if (activeDesc && !isSummaryView) {
+        recordRecent(activeDesc);
+      }
+      let bar = document.getElementById(BAR_ID);
+      if (!bar) {
+        bar = document.createElement("div");
+        bar.id = BAR_ID;
+        bar.setAttribute("data-mwi-lite", "1");
+        bar.setAttribute("role", "toolbar");
+        const inner = document.createElement("div");
+        inner.className = "mwi-lite-ms-inner";
+        const scrollWrap = document.createElement("div");
+        scrollWrap.className = "mwi-lite-ms-scroll";
+        const itemsHost = document.createElement("div");
+        itemsHost.className = "mwi-lite-ms-items";
+        scrollWrap.appendChild(itemsHost);
+        const gearBtn = document.createElement("button");
+        gearBtn.type = "button";
+        gearBtn.className = "mwi-lite-ms-item mwi-lite-ms-gear";
+        gearBtn.textContent = "⚙";
+        gearBtn.title = ctx.i18n.t("市场快捷栏设置", "Market Shortcut Settings");
+        gearBtn.setAttribute("aria-expanded", "false");
+        gearBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openSettingsPopover();
+        });
+        settingsBtnRef = gearBtn;
+        inner.append(scrollWrap, gearBtn);
+        bar.appendChild(inner);
+      }
+      const titleEl = panel.querySelector('[class*="MarketplacePanel_title"]');
+      const hostParent = titleEl?.parentElement || panel;
+      if (bar.parentElement !== hostParent || titleEl && titleEl.nextElementSibling !== bar) {
+        hostParent.insertBefore(bar, titleEl?.nextElementSibling ?? hostParent.firstChild);
+      }
+      const pinnedShown = state.pinned.slice(0, state.limit);
+      const pinnedSet = new Set(pinnedShown.map(itemKey));
+      const recentShown = state.recent.filter((r) => !pinnedSet.has(itemKey(r))).slice(0, state.limit - pinnedShown.length);
+      const sig = `${state.limit}|${pinnedShown.map(itemKey).join(",")}|${recentShown.map(itemKey).join(",")}|${activeKey || ""}`;
+      if (sig !== lastRenderSig) {
+        lastRenderSig = sig;
+        const itemsHost = bar.querySelector(".mwi-lite-ms-items");
+        if (itemsHost) {
+          const spriteBase = resolveSpriteBase();
+          const nodes = [];
+          for (const p of pinnedShown) {
+            nodes.push(createShortcutButton(p, "pinned", activeKey, spriteBase));
+          }
+          if (pinnedShown.length > 0 && recentShown.length > 0) {
+            const sep = document.createElement("span");
+            sep.className = "mwi-lite-ms-sep";
+            sep.setAttribute("role", "separator");
+            nodes.push(sep);
+          }
+          for (const r of recentShown) {
+            nodes.push(createShortcutButton(r, "recent", activeKey, spriteBase));
+          }
+          itemsHost.replaceChildren(...nodes);
+        }
+      }
+      if (!curItem || !activeDesc) {
+        document.getElementById(JUMP_BAR_ID)?.remove();
+        document.getElementById(PIN_BTN_ID)?.remove();
+        return;
+      }
+      if (!curItem.el.style.position) {
+        curItem.el.style.position = "relative";
+      }
+      curItem.el.classList.add("mwi-lite-current-item-host");
+      let pinBtn = document.getElementById(PIN_BTN_ID);
+      if (!pinBtn) {
+        pinBtn = document.createElement("button");
+        pinBtn.id = PIN_BTN_ID;
+        pinBtn.type = "button";
+        pinBtn.setAttribute("data-mwi-lite", "1");
+        pinBtn.textContent = "📌";
+      }
+      if (pinBtn.parentElement !== curItem.el) {
+        curItem.el.appendChild(pinBtn);
+      }
+      const pinnedNow = isPinned(activeDesc);
+      const itemName = ctx.i18n.getItemName(activeDesc.itemHrid);
+      const descName = activeDesc.level === null ? `${itemName} · ${ctx.i18n.t("全", "All")}` : canEnhance(activeDesc.itemHrid) ? `${itemName} +${activeDesc.level}` : itemName;
+      pinBtn.classList.toggle("is-pinned", pinnedNow);
+      pinBtn.setAttribute("aria-pressed", String(pinnedNow));
+      pinBtn.title = pinnedNow ? ctx.i18n.t(`取消固定「${descName}」`, `Unpin ${descName}`) : ctx.i18n.t(`固定「${descName}」`, `Pin ${descName}`);
+      pinBtn.onclick = (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        togglePin(activeDesc);
+        lastRenderSig = "";
+        syncDom();
+      };
+      if (canEnhance(curItem.itemHrid)) {
+        let jumpBar = document.getElementById(JUMP_BAR_ID);
+        if (!jumpBar) {
+          jumpBar = document.createElement("div");
+          jumpBar.id = JUMP_BAR_ID;
+          jumpBar.setAttribute("data-mwi-lite", "1");
+          for (const lv of ENH_LEVELS) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "mwi-lite-enh-btn";
+            btn.textContent = String(lv);
+            btn.dataset.level = String(lv);
+            btn.addEventListener("click", (ev) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+              const hrid = jumpBar?.dataset.itemHrid;
+              if (!hrid || btn.disabled) return;
+              btn.disabled = true;
+              try {
+                openItemAtLevel(hrid, lv);
+              } finally {
+                btn.disabled = false;
+              }
+            });
+            jumpBar.appendChild(btn);
+          }
+        }
+        if (jumpBar.parentElement !== curItem.el) {
+          curItem.el.appendChild(jumpBar);
+        }
+        jumpBar.dataset.itemHrid = curItem.itemHrid;
+        jumpBar.querySelectorAll(".mwi-lite-enh-btn").forEach((b) => {
+          const lv = Number(b.dataset.level);
+          const active = !isSummaryView && curItem.level === lv;
+          b.classList.toggle("is-active", active);
+          b.title = ctx.i18n.t(`市场跳转到 +${lv}`, `Open market at +${lv}`);
+        });
+      } else {
+        document.getElementById(JUMP_BAR_ID)?.remove();
+      }
+    };
+    return {
+      id: "market-shortcuts-nav",
+      nameZh: "市场快捷导航与强化档位跳转",
+      nameEn: "Market Shortcuts & Enhancement Jump Bar",
+      descriptionZh: "市场顶部固定/最近物品快捷栏（兼容继承 Sunny 固定清单）及可强化装备 0/5/7/8/10/12 一键跳转",
+      descriptionEn: "Top pinned/recent market shortcut bar (inherits Sunny pins) and 0/5/7/8/10/12 enhancement jump bar",
+      category: "market",
+      defaultEnabled: true,
+      routes: ["market"],
+      init(context) {
+        ctx = context;
+        state = loadState();
+        unregStyle = ctx.addStyle(
+          "market-shortcuts-nav",
+          `
+        #${BAR_ID} {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          width: 100%;
+          box-sizing: border-box;
+          padding: 8px;
+          min-height: 46px;
+        }
+        #${BAR_ID} .mwi-lite-ms-inner {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          max-width: 100%;
+          min-width: 0;
+        }
+        #${BAR_ID} .mwi-lite-ms-scroll {
+          overflow-x: auto;
+          min-width: 0;
+          max-width: 100%;
+          scrollbar-width: thin;
+          color-scheme: dark;
+        }
+        #${BAR_ID} .mwi-lite-ms-items {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          width: max-content;
+          min-height: 30px;
+        }
+        #${BAR_ID} .mwi-lite-ms-sep {
+          height: 24px;
+          width: 1px;
+          flex: 0 0 1px;
+          background: rgba(180, 184, 208, 0.4);
+          margin: 0 3px;
+        }
+        #${BAR_ID} .mwi-lite-ms-item {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 30px;
+          height: 30px;
+          flex: 0 0 30px;
+          padding: 2px;
+          position: relative;
+          border: 1px solid rgba(144, 166, 235, 0.55);
+          border-radius: 5px;
+          background: #282844;
+          color: #e8e8ef;
+          cursor: pointer;
+          box-sizing: border-box;
+        }
+        #${BAR_ID} .mwi-lite-ms-item.is-pinned {
+          border-color: rgba(251, 181, 75, 0.7);
+        }
+        #${BAR_ID} .mwi-lite-ms-item.is-active {
+          background: #404064;
+        }
+        #${BAR_ID} .mwi-lite-ms-badge {
+          position: absolute;
+          top: 0;
+          left: 1px;
+          z-index: 1;
+          color: #fbb54b;
+          font-size: 12px;
+          font-weight: 500;
+          line-height: 14px;
+          pointer-events: none;
+          text-shadow: -1px 0 #131419, 0 1px #131419, 1px 0 #131419, 0 -1px #131419;
+        }
+        .mwi-lite-current-item-host {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 60px;
+          position: relative;
+        }
+        #${JUMP_BAR_ID} {
+          position: absolute;
+          right: calc(100% + 6px);
+          top: 0;
+          display: flex;
+          flex-direction: row;
+          align-items: center;
+          gap: 4px;
+          z-index: 8;
+          white-space: nowrap;
+        }
+        #${JUMP_BAR_ID} .mwi-lite-enh-btn {
+          width: 28px;
+          height: 28px;
+          min-width: 28px;
+          min-height: 28px;
+          padding: 0;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: #282844;
+          border: 1px solid rgba(144, 166, 235, 0.55);
+          border-radius: 4px;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+          color: #e8e8ef;
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          box-sizing: border-box;
+        }
+        #${JUMP_BAR_ID} .mwi-lite-enh-btn.is-active {
+          background: #404064;
+          border-color: rgba(251, 181, 75, 0.85);
+          color: #fbb54b;
+        }
+        #${PIN_BTN_ID} {
+          position: absolute;
+          left: calc(100% + 4px);
+          top: 0;
+          width: 28px;
+          height: 28px;
+          min-width: 28px;
+          min-height: 28px;
+          padding: 0;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid rgba(144, 166, 235, 0.55);
+          border-radius: 5px;
+          background: #282844;
+          color: #e8e8ef;
+          cursor: pointer;
+          z-index: 8;
+          box-sizing: border-box;
+        }
+        #${PIN_BTN_ID}.is-pinned {
+          background: #68502d;
+          border-color: rgba(251, 181, 75, 0.75);
+          color: #fbb54b;
+        }
+        #${SETTINGS_POPOVER_ID} {
+          position: fixed;
+          z-index: 10002;
+          width: 232px;
+          max-width: calc(100vw - 16px);
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          padding: 12px;
+          box-sizing: border-box;
+          border: 1px solid rgba(144, 166, 235, 0.55);
+          border-radius: 8px;
+          background: #1b1c2c;
+          color: #e8e8ef;
+          box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+          font-size: 12px;
+        }
+        #${SETTINGS_POPOVER_ID} .mwi-lite-ms-pop-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+        }
+        #${SETTINGS_POPOVER_ID} input[type="number"] {
+          width: 60px;
+          padding: 4px 5px;
+          border: 1px solid #666a89;
+          border-radius: 4px;
+          background: #131419;
+          color: #e8e8ef;
+          font: inherit;
+        }
+        #${SETTINGS_POPOVER_ID} .mwi-lite-ms-pop-hint {
+          color: #a3a6bd;
+          line-height: 1.45;
+        }
+        #${SETTINGS_POPOVER_ID} .mwi-lite-ms-pop-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 6px;
+        }
+        #${SETTINGS_POPOVER_ID} button {
+          padding: 4px 9px;
+          border-radius: 4px;
+          border: 1px solid #4d5478;
+          background: #282844;
+          color: #e8e8ef;
+          cursor: pointer;
+          font-size: 12px;
+        }
+        #${SETTINGS_POPOVER_ID} button.primary {
+          background: #2563eb;
+          border-color: #3b82f6;
+          color: #fff;
+        }
+        @media (max-width: 760px) {
+          #${JUMP_BAR_ID} { gap: 2px; }
+          #${JUMP_BAR_ID} .mwi-lite-enh-btn {
+            width: 22px; height: 22px; min-width: 22px; min-height: 22px; font-size: 11px;
+          }
+        }
+        `
+        );
+        return () => {
+          closeSettingsPopover(false);
+          unregStyle?.();
+          unregStyle = null;
+          lastRenderSig = "";
+          settingsBtnRef = null;
+          document.getElementById(BAR_ID)?.remove();
+          document.getElementById(JUMP_BAR_ID)?.remove();
+          document.getElementById(PIN_BTN_ID)?.remove();
+        };
+      },
+      onDom() {
+        syncDom();
+      }
+    };
+  }
+
+  // src/features/market/volume-display.ts
+  var PANEL_ID = "mwi-lite-volume-detail";
+  var POS_KEY = "volume_panel_pos_v1";
+  var COLS_KEY = "volume_panel_cols_v1";
+  function formatCompactNumber(num, fractionDigits) {
+    if (!Number.isFinite(num) || num === 0) return "0";
+    const absNum = Math.abs(num);
+    const fmtVal = (v) => {
+      const factor = Math.pow(10, fractionDigits);
+      const rounded = Math.round(v * factor) / factor;
+      return rounded.toFixed(fractionDigits).replace(/\.?0+$/, "");
+    };
+    if (absNum < 1 && absNum > 0) return fmtVal(num);
+    if (absNum >= 1e9) return `${fmtVal(num / 1e9)}B`;
+    if (absNum >= 1e6) return `${fmtVal(num / 1e6)}M`;
+    if (absNum >= 1e3) return `${fmtVal(num / 1e3)}K`;
+    return `${Math.floor(num)}`;
+  }
+  var showPrice = (n) => formatCompactNumber(n, 3);
+  var showNum = (n) => formatCompactNumber(n, 2);
+  var COLUMNS = [
+    { id: "avgPrice", labelZh: "均价", labelEn: "Avg", color: "#FFD700", value: (d) => showPrice(d.avgPrice) },
+    { id: "medianPrice", labelZh: "中位", labelEn: "Med", color: "#FFA500", value: (d) => showPrice(d.medianPrice) },
+    { id: "volume", labelZh: "交易量", labelEn: "Vol", color: "#87CEEB", value: (d) => showNum(d.volume) },
+    {
+      id: "buySell",
+      labelZh: "买/卖",
+      labelEn: "B/S",
+      color: "#90EE90",
+      value: (d) => `${showNum(d.buyVolume)}/${showNum(d.sellVolume)}`
+    },
+    {
+      id: "minMax",
+      labelZh: "min/max",
+      labelEn: "min/max",
+      color: "#FFFF00",
+      value: (d) => `${showPrice(d.minPrice)}/${showPrice(d.maxPrice)}`
+    }
+  ];
+  var DEFAULT_COLUMNS = ["volume", "buySell", "minMax"];
+  function getInspectedMarketItem() {
+    const currentItem = document.querySelector('[class*="MarketplacePanel_currentItem"]');
+    if (!currentItem) return null;
+    const itemNode = currentItem.querySelector('[class*="Item_item"]');
+    if (!itemNode) return null;
+    const useEl = itemNode.querySelector("use");
+    const href = useEl?.getAttribute("href") || useEl?.href?.baseVal || "";
+    const hash = href.split("#")[1] || "";
+    if (!hash) return null;
+    const enhEl = itemNode.querySelector('[class*="Item_enhancementLevel"]');
+    const enhancementLevel = enhEl ? Number((enhEl.textContent || "").replace(/\+/g, "").trim()) || 0 : 0;
+    return {
+      container: currentItem,
+      itemHrid: `/items/${hash}`,
+      enhancementLevel
+    };
+  }
+  function createVolumeDisplayModule() {
+    let ctx = null;
+    let unregStyle = null;
+    let lastItemKey = "";
+    let lastStats = null;
+    let requestSerial = 0;
+    let menuOpen = false;
+    let outsideListenerAttached = false;
+    const getVisibleCols = () => {
+      const saved = ctx?.storage.get(COLS_KEY, DEFAULT_COLUMNS);
+      const validSet = new Set(
+        Array.isArray(saved) && saved.length > 0 ? saved.filter((id) => COLUMNS.some((c) => c.id === id)) : DEFAULT_COLUMNS
+      );
+      const cols = COLUMNS.filter((c) => validSet.has(c.id));
+      return cols.length > 0 ? cols : COLUMNS.filter((c) => DEFAULT_COLUMNS.includes(c.id));
+    };
+    const closeMenu = () => {
+      menuOpen = false;
+      const menu = document.querySelector(`#${PANEL_ID} .mwi-lite-vol-menu`);
+      if (menu) menu.style.display = "none";
+      if (outsideListenerAttached) {
+        document.removeEventListener("pointerdown", onOutsidePointerDown, true);
+        outsideListenerAttached = false;
+      }
+    };
+    const onOutsidePointerDown = (e) => {
+      const panel = document.getElementById(PANEL_ID);
+      const target = e.target;
+      if (!panel || !target) {
+        closeMenu();
+        return;
+      }
+      const menu = panel.querySelector(".mwi-lite-vol-menu");
+      const gear = panel.querySelector(".mwi-lite-vol-gear");
+      if (menu?.contains(target) || gear?.contains(target)) return;
+      closeMenu();
+    };
+    const ensurePanel = (parent) => {
+      let panel = document.getElementById(PANEL_ID);
+      if (!panel) {
+        panel = document.createElement("div");
+        panel.id = PANEL_ID;
+        panel.setAttribute("data-mwi-lite", "1");
+        const content = document.createElement("div");
+        content.className = "mwi-lite-vol-content";
+        const gear = document.createElement("button");
+        gear.type = "button";
+        gear.className = "mwi-lite-vol-gear";
+        gear.textContent = "⚙";
+        gear.title = ctx?.i18n.t("设置显示列", "Configure columns") || "Columns";
+        const menu = document.createElement("div");
+        menu.className = "mwi-lite-vol-menu";
+        menu.setAttribute("data-mwi-lite", "1");
+        menu.style.display = "none";
+        const stop = (e) => e.stopPropagation();
+        ["pointerdown", "mousedown", "click", "dblclick"].forEach((evt) => menu.addEventListener(evt, stop));
+        gear.addEventListener("pointerdown", stop);
+        gear.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (menuOpen) {
+            closeMenu();
+          } else {
+            renderMenu(menu);
+            menu.style.display = "block";
+            menuOpen = true;
+            if (!outsideListenerAttached) {
+              document.addEventListener("pointerdown", onOutsidePointerDown, true);
+              outsideListenerAttached = true;
+            }
+          }
+        });
+        panel.append(content, gear, menu);
+        const savedPos = ctx?.storage.get(POS_KEY, null);
+        if (savedPos && Number.isFinite(savedPos.x) && Number.isFinite(savedPos.y)) {
+          panel.style.transform = `translate(${savedPos.x}px, ${savedPos.y}px)`;
+        }
+        let dragging = false;
+        let startX = 0;
+        let startY = 0;
+        let baseX = savedPos?.x || 0;
+        let baseY = savedPos?.y || 0;
+        panel.addEventListener("pointerdown", (e) => {
+          const t = e.target;
+          if (t?.closest("button, label, input, .mwi-lite-vol-menu")) return;
+          dragging = true;
+          startX = e.clientX;
+          startY = e.clientY;
+          panel.setPointerCapture?.(e.pointerId);
+        });
+        panel.addEventListener("pointermove", (e) => {
+          if (!dragging) return;
+          panel.style.transform = `translate(${baseX + e.clientX - startX}px, ${baseY + e.clientY - startY}px)`;
+        });
+        panel.addEventListener("pointerup", (e) => {
+          if (!dragging) return;
+          dragging = false;
+          baseX += e.clientX - startX;
+          baseY += e.clientY - startY;
+          if (Math.abs(baseX) < 12 && Math.abs(baseY) < 12) {
+            baseX = 0;
+            baseY = 0;
+            panel.style.transform = "";
+            ctx?.storage.del(POS_KEY);
+          } else {
+            ctx?.storage.set(POS_KEY, { x: Math.round(baseX), y: Math.round(baseY) });
+          }
+        });
+        panel.addEventListener("dblclick", (e) => {
+          const t = e.target;
+          if (t?.closest("button, label, input, .mwi-lite-vol-menu")) return;
+          baseX = 0;
+          baseY = 0;
+          panel.style.transform = "";
+          ctx?.storage.del(POS_KEY);
+        });
+      }
+      if (panel.parentElement !== parent) {
+        parent.style.position = "relative";
+        parent.style.zIndex = "30";
+        parent.appendChild(panel);
+      }
+      return panel;
+    };
+    const renderMenu = (menu) => {
+      if (!ctx) return;
+      const selected = new Set(getVisibleCols().map((c) => c.id));
+      menu.replaceChildren();
+      for (const col of COLUMNS) {
+        const label = document.createElement("label");
+        label.className = "mwi-lite-vol-opt";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.value = col.id;
+        checkbox.checked = selected.has(col.id);
+        checkbox.addEventListener("change", (e) => {
+          e.stopPropagation();
+          const checked = Array.from(menu.querySelectorAll('input[type="checkbox"]:checked')).map(
+            (i) => i.value
+          );
+          if (checked.length === 0) {
+            checkbox.checked = true;
+            return;
+          }
+          ctx?.storage.set(COLS_KEY, checked);
+          const panel = document.getElementById(PANEL_ID);
+          if (panel) renderStats(panel, lastStats);
+        });
+        const span = document.createElement("span");
+        span.textContent = ctx.i18n.t(col.labelZh, col.labelEn);
+        label.append(checkbox, span);
+        menu.appendChild(label);
+      }
+    };
+    const renderLoading = (panel) => {
+      if (!ctx) return;
+      const content = panel.querySelector(".mwi-lite-vol-content");
+      if (!content) return;
+      content.innerHTML = `<span class="mwi-lite-vol-status">${ctx.i18n.t("正在加载...", "Loading...")}</span>`;
+    };
+    const renderStats = (panel, stats) => {
+      if (!ctx) return;
+      const content = panel.querySelector(".mwi-lite-vol-content");
+      if (!content) return;
+      if (!stats || stats.d1.volume === 0 && stats.d3.volume === 0 && stats.d5.volume === 0) {
+        content.innerHTML = `<span class="mwi-lite-vol-status">${ctx.i18n.t("无交易记录", "No trade data")}</span>`;
+        return;
+      }
+      const cols = getVisibleCols();
+      const getPad = (idx, len, isHead) => {
+        const gap = 6;
+        const top = isHead ? 0 : 1;
+        const bottom = isHead ? 3 : 1;
+        const right = idx === len - 1 ? 0 : gap;
+        const left = idx === 0 ? 0 : gap;
+        return `${top}px ${right}px ${bottom}px ${left}px`;
+      };
+      const headCells = cols.map(
+        (c, i) => `<th style="padding:${getPad(i, cols.length, true)}">${ctx.i18n.t(c.labelZh, c.labelEn)}</th>`
+      ).join("");
+      const renderRow = (lbl, lblColor, data) => {
+        const cells = cols.map(
+          (c, i) => `<td style="padding:${getPad(i, cols.length, false)};color:${c.color};">${c.value(data)}</td>`
+        ).join("");
+        return `<tr><td class="mwi-lite-vol-day" style="color:${lblColor};">${lbl}</td>${cells}</tr>`;
+      };
+      content.innerHTML = `
+      <table class="mwi-lite-vol-tbl">
+        <thead>
+          <tr>
+            <th class="mwi-lite-vol-corner"></th>${headCells}
+          </tr>
+        </thead>
+        <tbody>
+          ${renderRow("1d", "#FF6B6B", stats.d1)}
+          ${renderRow("3d", "#4ECDC4", stats.d3)}
+          ${renderRow("5d", "#95E1D3", stats.d5)}
+        </tbody>
+      </table>
+    `;
+    };
+    const syncDom = () => {
+      if (!ctx) return;
+      const target = getInspectedMarketItem();
+      if (!target) {
+        closeMenu();
+        document.getElementById(PANEL_ID)?.remove();
+        lastItemKey = "";
+        lastStats = null;
+        return;
+      }
+      const itemKey2 = `${target.itemHrid}:${target.enhancementLevel}`;
+      const existing = document.getElementById(PANEL_ID);
+      if (itemKey2 === lastItemKey && existing?.isConnected && existing.parentElement === target.container) {
+        return;
+      }
+      lastItemKey = itemKey2;
+      lastStats = null;
+      closeMenu();
+      const panel = ensurePanel(target.container);
+      renderLoading(panel);
+      const serial = ++requestSerial;
+      void ctx.marketStore.getVolumeStats(target.itemHrid, target.enhancementLevel).then((stats) => {
+        if (serial !== requestSerial || !panel.isConnected) return;
+        lastStats = stats;
+        renderStats(panel, stats);
+      });
+    };
+    return {
+      id: "market-volume-display",
+      nameZh: "市场交易量与均价",
+      nameEn: "Market Volume & Avg Price",
+      descriptionZh: "经典紧凑交易量面板：1d/3d/5d 交易量、买卖量、min/max 及可配置均价/中位列",
+      descriptionEn: "Classic compact market volume widget with 1d/3d/5d volume, B/S, min/max, and column selector",
+      category: "market",
+      defaultEnabled: true,
+      routes: ["market"],
+      init(context) {
+        ctx = context;
+        unregStyle = ctx.addStyle(
+          "market-volume-display",
+          `
+        #${PANEL_ID} {
+          position: absolute;
+          left: 100%;
+          top: -8px;
+          margin-left: 36px;
+          z-index: 40;
+          background: rgba(10, 12, 16, 0.88);
+          border-radius: 8px;
+          padding: 5px 10px;
+          color: #EEEEEE;
+          font-size: 13px;
+          line-height: 1.35;
+          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+          cursor: grab;
+          user-select: none;
+          white-space: nowrap;
+        }
+        #${PANEL_ID} .mwi-lite-vol-gear {
+          position: absolute;
+          top: 4px;
+          left: 6px;
+          background: none;
+          border: none;
+          color: #AAAAAA;
+          cursor: pointer;
+          font-size: 13px;
+          padding: 1px 2px;
+          line-height: 1;
+        }
+        #${PANEL_ID} .mwi-lite-vol-gear:hover {
+          color: #FFFFFF;
+        }
+        #${PANEL_ID} .mwi-lite-vol-status {
+          display: block;
+          color: #AAAAAA;
+          font-size: 11px;
+          padding: 18px 8px 4px 18px;
+        }
+        #${PANEL_ID} .mwi-lite-vol-tbl {
+          border-collapse: collapse;
+          font-size: 13px;
+        }
+        #${PANEL_ID} .mwi-lite-vol-tbl th {
+          color: #AAAAAA;
+          font-size: 11px;
+          font-weight: 400;
+          text-align: center;
+        }
+        #${PANEL_ID} .mwi-lite-vol-corner {
+          width: 24px;
+          min-width: 24px;
+          padding: 0 0 3px !important;
+        }
+        #${PANEL_ID} .mwi-lite-vol-tbl td {
+          text-align: center;
+          font-variant-numeric: tabular-nums;
+        }
+        #${PANEL_ID} .mwi-lite-vol-day {
+          padding: 1px 8px 1px 0 !important;
+          text-align: left !important;
+          font-weight: 700;
+        }
+        #${PANEL_ID} .mwi-lite-vol-menu {
+          position: absolute;
+          top: 24px;
+          left: 4px;
+          z-index: 10001;
+          min-width: 118px;
+          padding: 6px 8px;
+          background: #171822;
+          border: 1px solid #555;
+          border-radius: 4px;
+          color: #EEEEEE;
+          font-size: 12px;
+          line-height: 1.35;
+          text-align: left;
+          cursor: default;
+        }
+        #${PANEL_ID} .mwi-lite-vol-opt {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          min-height: 22px;
+          white-space: nowrap;
+          cursor: pointer;
+        }
+        #${PANEL_ID} .mwi-lite-vol-opt input {
+          margin: 0;
+        }
+        `
+        );
+        return () => {
+          closeMenu();
+          unregStyle?.();
+          unregStyle = null;
+          document.getElementById(PANEL_ID)?.remove();
+        };
+      },
+      onDom() {
+        syncDom();
+      }
+    };
+  }
+
+  // src/features/market/index.ts
+  var marketModules = [
+    createMarketShortcutsModule(),
+    createMagicSortModule(),
+    createVolumeDisplayModule(),
+    createMarketQuickOpsModule(),
+    createTooltipEvModule(),
+    createNetworthModule()
+  ];
+
+  // src/features/planner/action-timer.ts
+  var HEADER_TIMER_ID = "mwi-lite-action-timer";
+  var QUEUE_TAG_CLASS = "mwi-lite-queue-time-tag";
+  function formatDuration(sec) {
+    if (!Number.isFinite(sec) || sec <= 0) return "0s";
+    const s = Math.ceil(sec);
+    const d = Math.floor(s / 86400);
+    const h = Math.floor(s % 86400 / 3600);
+    const m = Math.floor(s % 3600 / 60);
+    const rem = s % 60;
+    if (d > 0) return `${d}d ${h}h ${m}m`;
+    if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
+    if (m > 0) return `${m}m ${String(rem).padStart(2, "0")}s`;
+    return `${rem}s`;
+  }
+  function formatFinishClock(secFromNow) {
+    if (!Number.isFinite(secFromNow) || secFromNow <= 0) return "";
+    const end = new Date(Date.now() + secFromNow * 1e3);
+    const hh = String(end.getHours()).padStart(2, "0");
+    const mm = String(end.getMinutes()).padStart(2, "0");
+    const now = /* @__PURE__ */ new Date();
+    if (end.getDate() !== now.getDate() || end.getMonth() !== now.getMonth()) {
+      return `${end.getMonth() + 1}/${end.getDate()} ${hh}:${mm}`;
+    }
+    return `${hh}:${mm}`;
+  }
+  function estimateActionSeconds(ctx, action) {
+    const clientData = ctx.gameData.getClientData();
+    const detail = clientData?.actionDetailMap?.[action.actionHrid];
+    if (!detail) {
+      return { perActionSec: 0, remainingActions: 0, totalSec: 0, isInfinite: false };
+    }
+    let baseSec = (detail.baseTimeCost || 0) / 1e9;
+    if (baseSec <= 0) baseSec = 3;
+    const actionType = detail.type;
+    let speedBonus = 0;
+    const personal = ctx.gameData.getPersonalBuffs()?.[actionType];
+    if (Array.isArray(personal)) {
+      for (const b of personal) {
+        if (b?.typeHrid === "/buff_types/action_speed") {
+          speedBonus += (b.flatBoost || 0) + (b.ratioBoost || 0);
+        }
+      }
+    }
+    const guildBuffs = ctx.gameData.getGuildActionBuffs()?.[actionType];
+    if (Array.isArray(guildBuffs)) {
+      for (const b of guildBuffs) {
+        if (b?.typeHrid === "/buff_types/action_speed") {
+          speedBonus += (b.flatBoost || 0) + (b.ratioBoost || 0);
+        }
+      }
+    }
+    const itemDetailMap = clientData?.itemDetailMap || {};
+    const multTable = clientData?.enhancementLevelTotalBonusMultiplierTable || [];
+    for (const item of ctx.gameData.getCharacterItems()) {
+      if (!item || item.itemLocationHrid === "/item_locations/inventory") continue;
+      const eq = itemDetailMap[item.itemHrid]?.equipmentDetail;
+      if (!eq) continue;
+      const stats = eq.noncombatStats || {};
+      const enhStats = eq.noncombatEnhancementBonuses || {};
+      const enhMult = multTable[item.enhancementLevel || 0] || 0;
+      const skillPart = actionType?.split("/").pop() || "";
+      const speedKey = `${skillPart}Speed`;
+      if (typeof stats[speedKey] === "number") speedBonus += stats[speedKey];
+      if (typeof enhStats[speedKey] === "number") speedBonus += enhStats[speedKey] * enhMult;
+      if (typeof stats.skillingSpeed === "number") speedBonus += stats.skillingSpeed;
+      if (typeof enhStats.skillingSpeed === "number") speedBonus += enhStats.skillingSpeed * enhMult;
+    }
+    const drinks = ctx.gameData.getActionTypeDrinkSlots().get(actionType) || [];
+    for (const d of drinks) {
+      const buff = itemDetailMap[d?.itemHrid]?.consumableDetail?.buffs;
+      if (Array.isArray(buff)) {
+        for (const b of buff) {
+          if (b?.typeHrid === "/buff_types/action_speed") {
+            speedBonus += b.flatBoost || 0;
+          }
+        }
+      }
+    }
+    const perActionSec = baseSec / Math.max(0.2, 1 + speedBonus);
+    const hasMax = action.hasMaxCount && (action.maxCount || 0) > 0;
+    const remainingActions = hasMax ? Math.max(0, action.maxCount - (action.currentCount || 0)) : 0;
+    let elapsedFraction = 0;
+    if (action.startTime) {
+      const elapsedSec = Math.max(0, (Date.now() - new Date(action.startTime).getTime()) / 1e3);
+      elapsedFraction = Math.min(perActionSec * 0.99, elapsedSec % perActionSec);
+    }
+    const totalSec = hasMax ? Math.max(0, remainingActions * perActionSec - elapsedFraction) : 0;
+    return { perActionSec, remainingActions, totalSec, isInfinite: !hasMax };
+  }
+  function createActionTimerModule() {
+    let ctx = null;
+    let unregStyle = null;
+    let unsubs = [];
+    let intervalId = null;
+    const updateHeaderBar = () => {
+      if (!ctx) return;
+      const actionNameEl = document.querySelector('div[class*="Header_actionName"]');
+      if (!actionNameEl?.parentElement) return;
+      let timerEl = document.getElementById(HEADER_TIMER_ID);
+      const actions = [...ctx.gameData.getCharacterActions()].sort(
+        (a, b) => (a.ordinal ?? 0) - (b.ordinal ?? 0)
+      );
+      const current = actions[0];
+      if (!current || (actionNameEl.textContent || "").includes("Doing nothing") || (actionNameEl.textContent || "").includes("无")) {
+        if (timerEl) timerEl.textContent = "";
+        return;
+      }
+      if (!timerEl) {
+        timerEl = document.createElement("span");
+        timerEl.id = HEADER_TIMER_ID;
+        timerEl.setAttribute("data-mwi-lite", "1");
+        actionNameEl.parentElement.insertBefore(timerEl, actionNameEl.nextSibling);
+      }
+      const curEst = estimateActionSeconds(ctx, current);
+      if (curEst.perActionSec <= 0) {
+        timerEl.textContent = "";
+        return;
+      }
+      let queueTotal = curEst.totalSec;
+      let queueInf = curEst.isInfinite;
+      for (let i = 1; i < actions.length; i++) {
+        const est = estimateActionSeconds(ctx, actions[i]);
+        if (est.isInfinite) queueInf = true;
+        queueTotal += est.totalSec;
+      }
+      const curPart = curEst.isInfinite ? `∞ (${curEst.perActionSec.toFixed(1)}s)` : `${formatDuration(curEst.totalSec)} → ${formatFinishClock(curEst.totalSec)}`;
+      const queuePart = actions.length > 1 ? queueInf ? ` | ${ctx.i18n.t("队列", "Q")}: ∞` : ` | ${ctx.i18n.t("总计", "Total")}: ${formatDuration(queueTotal)} (${formatFinishClock(queueTotal)})` : "";
+      const nextText = `⏱ ${curPart}${queuePart}`;
+      if (timerEl.textContent !== nextText) {
+        timerEl.textContent = nextText;
+      }
+    };
+    const updateQueuePopups = () => {
+      const context = ctx;
+      if (!context) return;
+      const actions = [...context.gameData.getCharacterActions()].sort(
+        (a, b) => (a.ordinal ?? 0) - (b.ordinal ?? 0)
+      );
+      if (!actions.length) return;
+      const actionById = /* @__PURE__ */ new Map();
+      for (const a of actions) {
+        if (typeof a.id === "number") actionById.set(a.id, a);
+      }
+      const menu = document.querySelector('[class*="QueuedActions_queuedActionsEditMenu"]');
+      if (menu) {
+        const firstEst = estimateActionSeconds(context, actions[0]);
+        let accSec = firstEst.totalSec;
+        let hasInf = firstEst.isInfinite;
+        const rows = menu.querySelectorAll('[class*="QueuedActions_action__"][data-action-id]');
+        rows.forEach((row) => {
+          const id = Number(row.getAttribute("data-action-id"));
+          const act = actionById.get(id);
+          if (!act) return;
+          const est = estimateActionSeconds(context, act);
+          accSec += est.totalSec;
+          if (est.isInfinite) hasInf = true;
+          let tag = row.querySelector(`.${QUEUE_TAG_CLASS}`);
+          if (!tag) {
+            tag = document.createElement("span");
+            tag.className = QUEUE_TAG_CLASS;
+            tag.setAttribute("data-mwi-lite", "1");
+            row.appendChild(tag);
+          }
+          const txt = est.isInfinite ? "∞" : `${formatDuration(est.totalSec)}${hasInf ? "" : ` (${formatFinishClock(accSec)})`}`;
+          if (tag.textContent !== txt) tag.textContent = txt;
+        });
+      }
+    };
+    const syncTimers = () => {
+      if (document.hidden) {
+        if (intervalId !== null) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
+        return;
+      }
+      updateHeaderBar();
+      updateQueuePopups();
+      if (intervalId === null) {
+        intervalId = window.setInterval(() => {
+          if (!document.hidden) {
+            updateHeaderBar();
+          }
+        }, 1e3);
+      }
+    };
+    return {
+      id: "planner-action-timer",
+      nameZh: "动作完成时间与倒计时",
+      nameEn: "Action Completion Time & Countdown",
+      descriptionZh: "在顶部状态栏与队列面板显示当前及队列动作的剩余耗时与精确完成时刻（切后台自动休眠）",
+      descriptionEn: "Show remaining countdown and finish wall-clock time on action bar and queue menu",
+      category: "planner",
+      defaultEnabled: true,
+      init(context) {
+        ctx = context;
+        unregStyle = ctx.addStyle(
+          "planner-action-timer",
+          `
+        #${HEADER_TIMER_ID} {
+          margin-left: 8px;
+          font-size: 12px;
+          color: #93c5fd;
+          font-weight: 500;
+          white-space: nowrap;
+        }
+        .${QUEUE_TAG_CLASS} {
+          margin-left: 6px;
+          font-size: 11px;
+          color: #a5b4fc;
+          white-space: nowrap;
+        }
+        `
+        );
+        unsubs = [
+          ctx.gameData.on("character_initialized", syncTimers),
+          ctx.gameData.on("actions_updated", syncTimers),
+          ctx.gameData.on("action_completed", updateHeaderBar)
+        ];
+        document.addEventListener("visibilitychange", syncTimers);
+        syncTimers();
+        return () => {
+          document.removeEventListener("visibilitychange", syncTimers);
+          unsubs.forEach((u) => u());
+          unsubs = [];
+          unregStyle?.();
+          unregStyle = null;
+          if (intervalId !== null) {
+            clearInterval(intervalId);
+            intervalId = null;
+          }
+          document.getElementById(HEADER_TIMER_ID)?.remove();
+          document.querySelectorAll(`.${QUEUE_TAG_CLASS}`).forEach((el) => el.remove());
+        };
+      },
+      onDom() {
+        updateHeaderBar();
+        updateQueuePopups();
+      }
+    };
+  }
+
+  // src/features/planner/item-calculator.ts
+  var STORAGE_KEY_TARGETS = "calc_targets_v1";
+  var STORAGE_KEY_CATS = "calc_cats_v1";
+  var TAB_BTN_ID = "mwi-lite-calculator-tab";
+  var TAB_PANEL_ID = "mwi-lite-calculator-panel";
+  var IMPORT_BTN_CLASS = "mwi-lite-import-tasks-btn";
+  var ITEM_CATEGORIES = [
+    "/item_categories/task",
+    "/item_categories/house_rooms",
+    "/item_categories/currency",
+    "/item_categories/loot",
+    "/item_categories/key",
+    "/item_categories/labyrinth",
+    "/item_categories/dungeon_key",
+    "/item_categories/food",
+    "/item_categories/tea",
+    "/item_categories/coffee",
+    "/item_categories/drink",
+    "/item_categories/ability_book",
+    "/item_categories/equipment",
+    "/item_categories/materials",
+    "/item_categories/resource"
+  ];
+  var PROCESSABLE_ITEMS = /* @__PURE__ */ new Map([
+    ["/items/milk", "/items/cheese"],
+    ["/items/verdant_milk", "/items/verdant_cheese"],
+    ["/items/azure_milk", "/items/azure_cheese"],
+    ["/items/burble_milk", "/items/burble_cheese"],
+    ["/items/crimson_milk", "/items/crimson_cheese"],
+    ["/items/rainbow_milk", "/items/rainbow_cheese"],
+    ["/items/holy_milk", "/items/holy_cheese"],
+    ["/items/log", "/items/lumber"],
+    ["/items/birch_log", "/items/birch_lumber"],
+    ["/items/cedar_log", "/items/cedar_lumber"],
+    ["/items/purpleheart_log", "/items/purpleheart_lumber"],
+    ["/items/ginkgo_log", "/items/ginkgo_lumber"],
+    ["/items/redwood_log", "/items/redwood_lumber"],
+    ["/items/arcane_log", "/items/arcane_lumber"],
+    ["/items/cotton", "/items/cotton_fabric"],
+    ["/items/flax", "/items/linen_fabric"],
+    ["/items/bamboo_branch", "/items/bamboo_fabric"],
+    ["/items/cocoon", "/items/silk_fabric"],
+    ["/items/radiant_fiber", "/items/radiant_fabric"],
+    ["/items/rough_hide", "/items/rough_leather"],
+    ["/items/reptile_hide", "/items/reptile_leather"],
+    ["/items/gobo_hide", "/items/gobo_leather"],
+    ["/items/beast_hide", "/items/beast_leather"],
+    ["/items/umbral_hide", "/items/umbral_leather"]
+  ]);
+  function formatNum(num) {
+    if (!Number.isFinite(num)) return "0";
+    if (Math.abs(num) <= 999) {
+      const fixed = num.toFixed(1);
+      return fixed.endsWith(".0") ? String(Math.round(num)) : fixed;
+    }
+    if (Math.abs(num) <= 99999) return String(Math.ceil(num));
+    if (Math.abs(num) <= 9999999) return `${Math.floor(num / 1e3)}K`;
+    if (Math.abs(num) <= 9999999999) return `${Math.floor(num / 1e6)}M`;
+    return `${Math.floor(num / 1e9)}B`;
+  }
+  function resolveSpriteBase2(prefix, fallback) {
+    const use = document.querySelector(`use[href*="${prefix}"]`);
+    const href = use?.getAttribute("href");
+    if (href && href.includes("#")) return href.split("#")[0];
+    return fallback;
+  }
+  function createSpriteSvg(spritePrefix, fallbackUrl, symbolId) {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("width", "18");
+    svg.setAttribute("height", "18");
+    svg.style.display = "block";
+    svg.style.flexShrink = "0";
+    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    use.setAttributeNS(
+      "http://www.w3.org/1999/xlink",
+      "href",
+      `${resolveSpriteBase2(spritePrefix, fallbackUrl)}#${symbolId}`
+    );
+    svg.appendChild(use);
+    return svg;
+  }
+  function findMarketplaceComponent(el) {
+    const fiberKey = Reflect.ownKeys(el).find(
+      (k) => typeof k === "string" && (k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"))
+    );
+    let fiber = fiberKey ? el[fiberKey] : null;
+    for (let d = 0; fiber && d < 30; d++, fiber = fiber.return) {
+      const sn = fiber.stateNode;
+      if (sn?.state && "showPostListing" in sn.state && typeof sn.handleQuantityInputChanged === "function") {
+        return sn;
+      }
+    }
+    return null;
+  }
+  function isElementVisible2(el) {
+    for (let node = el; node; node = node.parentElement) {
+      if (node.hidden) return false;
+      const style = getComputedStyle(node);
+      if (style.display === "none" || style.visibility === "hidden") return false;
+    }
+    return true;
+  }
+  function createItemCalculatorModule() {
+    let ctx = null;
+    let unregStyle = null;
+    let unsubs = [];
+    let targets = /* @__PURE__ */ new Map();
+    let catEnabled = /* @__PURE__ */ new Map();
+    let tabButton = null;
+    let tabPanel = null;
+    let listHost = null;
+    let renderTimer = null;
+    let pendingPrefill = null;
+    let lastCharId = null;
+    const getCharScope = () => String(ctx?.gameData.getCharacterId() ?? "default");
+    const loadSaved = () => {
+      if (!ctx) return;
+      const scope = getCharScope();
+      lastCharId = scope;
+      const savedTargets = ctx.storage.get(`${STORAGE_KEY_TARGETS}_${scope}`, []);
+      const savedCats = ctx.storage.get(`${STORAGE_KEY_CATS}_${scope}`, {});
+      targets = /* @__PURE__ */ new Map();
+      for (const t of savedTargets) {
+        if (t?.itemHrid) targets.set(t.itemHrid, t);
+      }
+      catEnabled = /* @__PURE__ */ new Map();
+      for (const c of ITEM_CATEGORIES) {
+        catEnabled.set(c, typeof savedCats[c] === "boolean" ? savedCats[c] : true);
+      }
+    };
+    const saveAll = () => {
+      if (!ctx) return;
+      const scope = getCharScope();
+      ctx.storage.set(`${STORAGE_KEY_TARGETS}_${scope}`, Array.from(targets.values()));
+      ctx.storage.set(`${STORAGE_KEY_CATS}_${scope}`, Object.fromEntries(catEnabled.entries()));
+    };
+    const getItemCategory = (itemHrid, override) => {
+      if (override) return override;
+      if (itemHrid.startsWith("/house_rooms/")) return "/item_categories/house_rooms";
+      if (Array.from(PROCESSABLE_ITEMS.values()).includes(itemHrid)) return "/item_categories/materials";
+      if (itemHrid.endsWith("_tea")) return "/item_categories/tea";
+      if (itemHrid.endsWith("_coffee")) return "/item_categories/coffee";
+      return ctx?.gameData.getClientData()?.itemDetailMap?.[itemHrid]?.categoryHrid || "/item_categories/materials";
+    };
+    const getInventoryCountMap = () => {
+      const map = /* @__PURE__ */ new Map();
+      if (!ctx) return map;
+      for (const item of ctx.gameData.getCharacterItems()) {
+        if (!item || item.itemLocationHrid !== "/item_locations/inventory" || (item.enhancementLevel || 0) !== 0) {
+          continue;
+        }
+        map.set(item.itemHrid, (map.get(item.itemHrid) || 0) + (item.count || 0));
+      }
+      return map;
+    };
+    const getDrinkConcentration = () => {
+      if (!ctx) return 1;
+      const clientData = ctx.gameData.getClientData();
+      const gp = clientData?.itemDetailMap?.["/items/guzzling_pouch"]?.equipmentDetail;
+      const multTable = clientData?.enhancementLevelTotalBonusMultiplierTable || [];
+      let bestEnh = -1;
+      for (const item of ctx.gameData.getCharacterItems()) {
+        if (item?.itemHrid === "/items/guzzling_pouch") {
+          bestEnh = Math.max(bestEnh, item.enhancementLevel || 0);
+        }
+      }
+      if (bestEnh >= 0 && gp) {
+        return 1 + (gp.noncombatStats?.drinkConcentration || 0) + (gp.noncombatEnhancementBonuses?.drinkConcentration || 0) * (multTable[bestEnh] || 0);
+      }
+      return 1;
+    };
+    const tryGetRecipe = (itemHrid) => {
+      if (!ctx) return null;
+      const clientData = ctx.gameData.getClientData();
+      if (!clientData) return null;
+      const slug = itemHrid.split("/").pop() || "";
+      const shopDetail = clientData.shopItemDetailMap?.[`/shop_items/${slug}`];
+      if (shopDetail?.category === "/shop_categories/dungeon" && Array.isArray(shopDetail.costs)) {
+        return {
+          inputs: shopDetail.costs.map((c) => ({ itemHrid: c.itemHrid, count: c.count })),
+          outputCount: 1
+        };
+      }
+      const drinkSlotsMap = ctx.gameData.getActionTypeDrinkSlots();
+      const conc = getDrinkConcentration();
+      const craftTypes = ["cheesesmithing", "crafting", "tailoring", "cooking", "brewing"];
+      for (const actType of craftTypes) {
+        const act = clientData.actionDetailMap?.[`/actions/${actType}/${slug}`];
+        if (!act) continue;
+        const drinks = drinkSlotsMap.get(`/action_types/${actType}`) || [];
+        const hasArtisan = drinks.some((d) => d?.itemHrid === "/items/artisan_tea");
+        const hasGourmet = drinks.some((d) => d?.itemHrid === "/items/gourmet_tea");
+        const artisanBuff = hasArtisan ? 0.1 * conc : 0;
+        const gourmetBuff = hasGourmet && (actType === "cooking" || actType === "brewing") ? 0.12 * conc : 0;
+        const inputs = (act.inputItems || []).map((i) => ({
+          itemHrid: i.itemHrid,
+          count: i.count * (1 - artisanBuff)
+        }));
+        if (act.upgradeItemHrid) {
+          inputs.push({ itemHrid: act.upgradeItemHrid, count: 1 });
+        }
+        const matchedOut = (act.outputItems || []).find((o) => o.itemHrid === itemHrid);
+        const outputCount = (matchedOut?.count || 1) * (1 + gourmetBuff);
+        return { inputs, outputCount };
+      }
+      return null;
+    };
+    const computeRequiredMap = (inventoryPool) => {
+      const result = /* @__PURE__ */ new Map();
+      const queue = /* @__PURE__ */ new Map();
+      const clientData = ctx?.gameData.getClientData();
+      const houseRooms = ctx?.gameData.getHouseRooms() || /* @__PURE__ */ new Map();
+      for (const target of targets.values()) {
+        const cat = getItemCategory(target.itemHrid, target.categoryOverride);
+        if (!target.needCalc || catEnabled.get(cat) === false) continue;
+        if (target.itemHrid.startsWith("/house_rooms/")) {
+          const curLv = houseRooms.get(target.itemHrid)?.level || 0;
+          const costsMap = clientData?.houseRoomDetailMap?.[target.itemHrid]?.upgradeCostsMap;
+          if (costsMap) {
+            for (let lv = curLv + 1; lv <= target.count && lv <= 8; lv++) {
+              const arr = costsMap[lv];
+              if (!Array.isArray(arr)) continue;
+              for (const c of arr) {
+                queue.set(c.itemHrid, (queue.get(c.itemHrid) || 0) + c.count);
+              }
+            }
+          }
+        } else if (target.count < 0) {
+          inventoryPool.set(target.itemHrid, (inventoryPool.get(target.itemHrid) || 0) - target.count);
+        } else if (target.categoryOverride === "/item_categories/task" && (target.taskRemaining || 0) > 0) {
+          const ownedNow = inventoryPool.get(target.itemHrid) || 0;
+          const crafted = Math.max(0, ownedNow - (target.ownedAtImport || 0));
+          if (crafted > (target.maxCrafted || 0)) target.maxCrafted = crafted;
+          const remTask = Math.max(0, (target.taskRemaining || 0) - (target.maxCrafted || 0));
+          if (remTask > 0) {
+            result.set(target.itemHrid, (result.get(target.itemHrid) || 0) + remTask);
+            inventoryPool.set(target.itemHrid, (inventoryPool.get(target.itemHrid) || 0) + remTask);
+            const recipe = tryGetRecipe(target.itemHrid);
+            if (recipe) {
+              const times = Math.ceil(remTask / recipe.outputCount);
+              for (const inp of recipe.inputs) {
+                queue.set(inp.itemHrid, (queue.get(inp.itemHrid) || 0) + inp.count * times);
+              }
+            }
+          }
+        } else {
+          queue.set(target.itemHrid, (queue.get(target.itemHrid) || 0) + target.count);
+        }
+      }
+      let guard = 0;
+      while (queue.size > 0 && guard++ < 5e3) {
+        const [hrid, need] = queue.entries().next().value;
+        queue.delete(hrid);
+        const have = inventoryPool.get(hrid) || 0;
+        const used = Math.min(have, need);
+        if (used > 0) inventoryPool.set(hrid, have - used);
+        const remain = need - used;
+        if (remain > 0) {
+          result.set(hrid, (result.get(hrid) || 0) + remain);
+          const recipe = tryGetRecipe(hrid);
+          if (!recipe) continue;
+          const times = Math.ceil(remain / recipe.outputCount);
+          for (const inp of recipe.inputs) {
+            queue.set(inp.itemHrid, (queue.get(inp.itemHrid) || 0) + inp.count * times);
+          }
+        }
+      }
+      return result;
+    };
+    const openMarketAndPrefill = (itemHrid, qty) => {
+      if (!ctx || !itemHrid.startsWith("/items/")) return;
+      const count = Math.ceil(qty);
+      if (!Number.isSafeInteger(count) || count <= 0) return;
+      const core = ctx.gameData.getReactGameCore();
+      if (typeof core?.handleGoToMarketplace !== "function") return;
+      pendingPrefill = {
+        itemHrid,
+        quantity: count,
+        seen: false,
+        filledInputs: /* @__PURE__ */ new WeakSet(),
+        expiresAt: Date.now() + 1e4
+      };
+      try {
+        core.handleGoToMarketplace(itemHrid, 0);
+        tryApplyMarketPrefill();
+      } catch {
+        pendingPrefill = null;
+      }
+    };
+    const tryApplyMarketPrefill = () => {
+      if (!pendingPrefill) return;
+      if (Date.now() > pendingPrefill.expiresAt && !pendingPrefill.seen) {
+        pendingPrefill = null;
+        return;
+      }
+      const marketPanels = Array.from(document.querySelectorAll('[class*="MarketplacePanel_marketListings"]'));
+      const matchingMarket = marketPanels.some((panel) => {
+        if (!isElementVisible2(panel)) return false;
+        const comp = findMarketplaceComponent(panel);
+        return comp?.state?.itemHrid === pendingPrefill?.itemHrid && Number(comp?.state?.enhancementLevel || 0) === 0;
+      });
+      if (matchingMarket) {
+        pendingPrefill.seen = true;
+      } else if (pendingPrefill.seen) {
+        pendingPrefill = null;
+        return;
+      }
+      const inputs = document.querySelectorAll(
+        '[class*="MarketplacePanel_modalContent"] [class*="quantityInputs"] input'
+      );
+      for (const input of inputs) {
+        if (pendingPrefill.filledInputs.has(input) || input.disabled || input.readOnly || !isElementVisible2(input)) {
+          continue;
+        }
+        const comp = findMarketplaceComponent(input);
+        if (!comp?.state?.showPostListing || comp.state.isSell !== false || comp.state.itemHrid !== pendingPrefill.itemHrid || Number(comp.state.enhancementLevelInput || 0) !== 0) {
+          continue;
+        }
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        if (!setter) continue;
+        pendingPrefill.filledInputs.add(input);
+        setter.call(input, String(pendingPrefill.quantity));
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    };
+    const importTasksToCalculator = () => {
+      if (!ctx) return 0;
+      const actionDetailMap = ctx.gameData.getClientData()?.actionDetailMap;
+      if (!actionDetailMap) return 0;
+      const taskEls = document.querySelectorAll('[class*="RandomTask_randomTask"]');
+      if (!taskEls.length) return 0;
+      const inv = getInventoryCountMap();
+      const taskInfoMap = /* @__PURE__ */ new Map();
+      for (const el of taskEls) {
+        const fKey = Reflect.ownKeys(el).find(
+          (k) => typeof k === "string" && (k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"))
+        );
+        if (!fKey) continue;
+        let actionHrid = null;
+        let f = el[fKey];
+        for (let d = 0; f && d < 20; d++, f = f.return) {
+          const props = f.memoizedProps;
+          if (!props) continue;
+          if (props.task?.actionHrid) {
+            actionHrid = props.task.actionHrid;
+            break;
+          }
+          if (props.randomTask?.actionHrid) {
+            actionHrid = props.randomTask.actionHrid;
+            break;
+          }
+          if (props.actionHrid) {
+            actionHrid = props.actionHrid;
+            break;
+          }
+        }
+        if (!actionHrid) continue;
+        const info = el.querySelector('[class*="RandomTask_taskInfo"]');
+        if (!info) continue;
+        let done = 0;
+        let total = 0;
+        for (const div of info.querySelectorAll("div")) {
+          const m = (div.textContent || "").match(/(\d[\d,]*)\s*\/\s*(\d[\d,]*)/);
+          if (m) {
+            done = parseInt(m[1].replace(/,/g, ""), 10) || 0;
+            total = parseInt(m[2].replace(/,/g, ""), 10) || 0;
+            break;
+          }
+        }
+        const rem = Math.max(0, total - done);
+        if (rem <= 0) continue;
+        const act = actionDetailMap[actionHrid];
+        if (!act?.inputItems?.length || !act?.outputItems?.length) continue;
+        const outHrid = act.outputItems[0]?.itemHrid;
+        if (!outHrid) continue;
+        const prev = taskInfoMap.get(outHrid) || { done: 0, total: 0, remaining: 0 };
+        taskInfoMap.set(outHrid, {
+          done: prev.done + done,
+          total: prev.total + total,
+          remaining: prev.remaining + rem
+        });
+      }
+      if (!taskInfoMap.size) return 0;
+      for (const [k, v] of targets) {
+        if (v.categoryOverride === "/item_categories/task") targets.delete(k);
+      }
+      for (const [outHrid, stat] of taskInfoMap) {
+        targets.set(outHrid, {
+          itemHrid: outHrid,
+          count: stat.total,
+          needCalc: true,
+          categoryOverride: "/item_categories/task",
+          taskRemaining: stat.remaining,
+          taskDone: stat.done,
+          taskTotal: stat.total,
+          ownedAtImport: inv.get(outHrid) || 0,
+          maxCrafted: 0
+        });
+      }
+      saveAll();
+      scheduleRender();
+      return taskInfoMap.size;
+    };
+    const renderCalculatorContent = () => {
+      if (!ctx || !listHost || !tabPanel || tabPanel.style.display === "none") return;
+      const inv = getInventoryCountMap();
+      const houseRooms = ctx.gameData.getHouseRooms();
+      const totalNeeds = computeRequiredMap(/* @__PURE__ */ new Map());
+      const remainNeeds = computeRequiredMap(new Map(inv));
+      const clientData = ctx.gameData.getClientData();
+      const catTargetRows = /* @__PURE__ */ new Map();
+      for (const t of targets.values()) {
+        const cat = getItemCategory(t.itemHrid, t.categoryOverride);
+        const arr = catTargetRows.get(cat) || [];
+        arr.push(t);
+        catTargetRows.set(cat, arr);
+      }
+      const leftEl = listHost.querySelector(".mwi-lite-calc-left");
+      const rightEl = listHost.querySelector(".mwi-lite-calc-right");
+      if (!leftEl || !rightEl) return;
+      leftEl.innerHTML = "";
+      for (const cat of ITEM_CATEGORIES) {
+        const list = catTargetRows.get(cat);
+        if (!list?.length) continue;
+        list.sort(
+          (a, b) => (clientData?.itemDetailMap?.[a.itemHrid]?.sortIndex || 9999) - (clientData?.itemDetailMap?.[b.itemHrid]?.sortIndex || 9999)
+        );
+        const isCatOn = catEnabled.get(cat) !== false;
+        const details = document.createElement("details");
+        details.open = true;
+        details.className = `mwi-lite-calc-cat ${isCatOn ? "active" : "muted"}`;
+        const summary = document.createElement("summary");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = isCatOn;
+        cb.addEventListener("change", () => {
+          catEnabled.set(cat, cb.checked);
+          saveAll();
+          renderCalculatorContent();
+        });
+        const titleSpan = document.createElement("span");
+        titleSpan.textContent = cat === "/item_categories/task" ? ctx.i18n.t("任务", "Tasks") : cat === "/item_categories/house_rooms" ? ctx.i18n.t("房屋", "House") : ctx.i18n.getName(cat, "itemCategoryNames") || cat.split("/").pop() || "";
+        const clearBtn = document.createElement("span");
+        clearBtn.className = "mwi-lite-calc-x";
+        clearBtn.textContent = "✕";
+        clearBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          for (const t of list) targets.delete(t.itemHrid);
+          saveAll();
+          renderCalculatorContent();
+        });
+        summary.append(cb, titleSpan, clearBtn);
+        details.appendChild(summary);
+        for (const item of list) {
+          const row = document.createElement("div");
+          row.className = `mwi-lite-calc-row ${item.needCalc ? "" : "off"}`;
+          const check = document.createElement("input");
+          check.type = "checkbox";
+          check.checked = item.needCalc;
+          check.addEventListener("change", () => {
+            item.needCalc = check.checked;
+            saveAll();
+            renderCalculatorContent();
+          });
+          const isHouse = item.itemHrid.startsWith("/house_rooms/");
+          const nameLabel = isHouse ? ctx.i18n.getHouseRoomName(item.itemHrid) : ctx.i18n.getItemName(item.itemHrid);
+          const icon = isHouse ? createSpriteSvg(
+            "skills_sprite",
+            "/static/media/skills_sprite.3bb4d936.svg",
+            (clientData?.houseRoomDetailMap?.[item.itemHrid]?.skillHrid || "").split("/").pop() || "house"
+          ) : createSpriteSvg("items_sprite", "/static/media/items_sprite.9c39e2ec.svg", item.itemHrid.split("/").pop() || "");
+          const labelBtn = document.createElement("div");
+          labelBtn.className = "mwi-lite-calc-itemname";
+          labelBtn.append(icon, Object.assign(document.createElement("span"), { textContent: nameLabel }));
+          if (!isHouse) {
+            labelBtn.title = ctx.i18n.t("双击前往市场购买缺口", "Dbl-click to buy shortage in Market");
+            labelBtn.addEventListener("dblclick", () => {
+              const owned = inv.get(item.itemHrid) || 0;
+              openMarketAndPrefill(item.itemHrid, Math.max(1, item.count - owned));
+            });
+          }
+          const ownedVal = isHouse ? houseRooms.get(item.itemHrid)?.level || 0 : item.categoryOverride === "/item_categories/task" ? Math.min((item.taskDone || 0) + (item.maxCrafted || 0), item.taskTotal || item.count) : inv.get(item.itemHrid) || 0;
+          const rightControls = document.createElement("div");
+          rightControls.className = "mwi-lite-calc-rightctrl";
+          const ownedSpan = document.createElement("span");
+          ownedSpan.textContent = formatNum(ownedVal);
+          const input = document.createElement("input");
+          input.type = "text";
+          input.className = "mwi-lite-calc-num";
+          input.value = String(item.count);
+          if (item.categoryOverride === "/item_categories/task") {
+            input.readOnly = true;
+          } else {
+            input.addEventListener("change", () => {
+              const v = parseInt(input.value, 10) || 0;
+              item.count = v;
+              saveAll();
+              renderCalculatorContent();
+            });
+          }
+          const delBtn = document.createElement("button");
+          delBtn.type = "button";
+          delBtn.className = "mwi-lite-calc-del";
+          delBtn.textContent = "✕";
+          delBtn.addEventListener("click", () => {
+            targets.delete(item.itemHrid);
+            saveAll();
+            renderCalculatorContent();
+          });
+          rightControls.append(ownedSpan, document.createTextNode("/"), input, delBtn);
+          row.append(check, labelBtn, rightControls);
+          details.appendChild(row);
+        }
+        leftEl.appendChild(details);
+      }
+      rightEl.innerHTML = "";
+      let estTotalGold = 0;
+      const shortageWrap = document.createElement("details");
+      shortageWrap.open = true;
+      shortageWrap.className = "mwi-lite-calc-shortages";
+      const shortageSummary = document.createElement("summary");
+      const sortedItems = Array.from(totalNeeds.keys()).sort(
+        (a, b) => (clientData?.itemDetailMap?.[a]?.sortIndex || 9999) - (clientData?.itemDetailMap?.[b]?.sortIndex || 9999)
+      );
+      const shortageListEl = document.createElement("div");
+      const reqListEl = document.createElement("div");
+      for (const hrid of sortedItems) {
+        const req = totalNeeds.get(hrid) || 0;
+        const short = remainNeeds.get(hrid) || 0;
+        const have = inv.get(hrid) || 0;
+        const name = ctx.i18n.getItemName(hrid);
+        if (short > 0) {
+          const p = ctx.marketStore.getPrice(hrid, 0);
+          const unit = p?.ask ?? p?.bid ?? 0;
+          estTotalGold += unit * short;
+          const row = document.createElement("div");
+          row.className = "mwi-lite-calc-row";
+          row.title = ctx.i18n.t("双击前往市场自动填入缺口数量", "Dbl-click to open Market & prefill shortage");
+          row.addEventListener("dblclick", () => openMarketAndPrefill(hrid, short));
+          const left = document.createElement("div");
+          left.className = "mwi-lite-calc-itemname";
+          left.append(
+            createSpriteSvg("items_sprite", "/static/media/items_sprite.9c39e2ec.svg", hrid.split("/").pop() || ""),
+            Object.assign(document.createElement("span"), { textContent: name })
+          );
+          const badge = document.createElement("span");
+          badge.className = "mwi-lite-calc-short-badge";
+          badge.textContent = formatNum(short);
+          row.append(left, badge);
+          shortageListEl.appendChild(row);
+        }
+        const rRow = document.createElement("div");
+        rRow.className = "mwi-lite-calc-row";
+        rRow.addEventListener("dblclick", () => {
+          if (short > 0) openMarketAndPrefill(hrid, short);
+        });
+        const rLeft = document.createElement("div");
+        rLeft.className = "mwi-lite-calc-itemname";
+        rLeft.append(
+          createSpriteSvg("items_sprite", "/static/media/items_sprite.9c39e2ec.svg", hrid.split("/").pop() || ""),
+          Object.assign(document.createElement("span"), { textContent: name })
+        );
+        const net = short > 0 ? -short : have;
+        const rRight = document.createElement("span");
+        rRight.style.color = short > 0 ? "#f87171" : "#86efac";
+        rRight.textContent = `${formatNum(net)} / ${formatNum(req)}`;
+        rRow.append(rLeft, rRight);
+        reqListEl.appendChild(rRow);
+      }
+      shortageSummary.textContent = `${ctx.i18n.t("缺口", "Shortages")}${estTotalGold > 0 ? ` (≈ ${formatNum(estTotalGold)})` : ""}`;
+      shortageWrap.append(shortageSummary, shortageListEl);
+      const reqWrap = document.createElement("details");
+      reqWrap.className = "mwi-lite-calc-required";
+      const reqSummary = document.createElement("summary");
+      reqSummary.textContent = ctx.i18n.t("详情 (净值/总需求)", "Details (Net/Required)");
+      reqWrap.append(reqSummary, reqListEl);
+      rightEl.append(shortageWrap, reqWrap);
+    };
+    const scheduleRender = () => {
+      if (!tabPanel || tabPanel.style.display === "none") return;
+      if (renderTimer !== null) clearTimeout(renderTimer);
+      renderTimer = window.setTimeout(() => {
+        renderTimer = null;
+        renderCalculatorContent();
+      }, 180);
+    };
+    const buildCalculatorPanelDom = () => {
+      const panel = document.createElement("div");
+      panel.className = "mwi-lite-calc-root";
+      panel.setAttribute("data-mwi-lite", "1");
+      const topBar = document.createElement("div");
+      topBar.className = "mwi-lite-calc-topbar";
+      const searchWrap = document.createElement("div");
+      searchWrap.className = "mwi-lite-calc-searchbox";
+      const searchInput = document.createElement("input");
+      searchInput.type = "text";
+      searchInput.placeholder = ctx.i18n.t("搜索物品名称...", "Search item...");
+      const dropdown = document.createElement("div");
+      dropdown.className = "mwi-lite-calc-dropdown";
+      dropdown.style.display = "none";
+      const qtyInput = document.createElement("input");
+      qtyInput.type = "text";
+      qtyInput.className = "mwi-lite-calc-qty";
+      qtyInput.value = "1";
+      const addBtn = document.createElement("button");
+      addBtn.type = "button";
+      addBtn.className = "mwi-lite-calc-add";
+      addBtn.textContent = ctx.i18n.t("添加", "Add");
+      const clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.className = "mwi-lite-calc-clear";
+      clearBtn.textContent = ctx.i18n.t("清空", "Clear");
+      const commitItem = () => {
+        const hrid = ctx.i18n.getItemHridByName(searchInput.value.trim());
+        if (!hrid) return;
+        const cnt = parseInt(qtyInput.value, 10) || 1;
+        const existing = targets.get(hrid);
+        if (existing) {
+          if (existing.categoryOverride !== "/item_categories/task") existing.count += cnt;
+        } else {
+          targets.set(hrid, { itemHrid: hrid, count: cnt, needCalc: true });
+        }
+        searchInput.value = "";
+        qtyInput.value = "1";
+        dropdown.style.display = "none";
+        saveAll();
+        renderCalculatorContent();
+      };
+      searchInput.addEventListener("input", () => {
+        const q = searchInput.value.trim().toLowerCase();
+        if (q.length < 1) {
+          dropdown.style.display = "none";
+          return;
+        }
+        const itemMap = ctx?.gameData.getClientData()?.itemDetailMap;
+        if (!itemMap) return;
+        const hits = Object.keys(itemMap).filter((h) => ctx.i18n.getItemName(h).toLowerCase().includes(q)).slice(0, 30);
+        if (!hits.length) {
+          dropdown.style.display = "none";
+          return;
+        }
+        dropdown.innerHTML = "";
+        for (const hrid of hits) {
+          const opt = document.createElement("div");
+          opt.className = "mwi-lite-calc-opt";
+          opt.append(
+            createSpriteSvg("items_sprite", "/static/media/items_sprite.9c39e2ec.svg", hrid.split("/").pop() || ""),
+            Object.assign(document.createElement("span"), { textContent: ctx.i18n.getItemName(hrid) })
+          );
+          opt.addEventListener("click", () => {
+            searchInput.value = ctx.i18n.getItemName(hrid);
+            dropdown.style.display = "none";
+          });
+          dropdown.appendChild(opt);
+        }
+        dropdown.style.display = "block";
+      });
+      searchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") commitItem();
+        else if (e.key === "Escape") dropdown.style.display = "none";
+      });
+      addBtn.addEventListener("click", commitItem);
+      clearBtn.addEventListener("click", () => {
+        targets.clear();
+        saveAll();
+        renderCalculatorContent();
+      });
+      searchWrap.append(searchInput, qtyInput, addBtn, clearBtn, dropdown);
+      const houseWrap = document.createElement("div");
+      houseWrap.className = "mwi-lite-calc-housebox";
+      const houseSelect = document.createElement("select");
+      const houseRoomsMap = ctx.gameData.getClientData()?.houseRoomDetailMap || {};
+      for (const hr of Object.values(houseRoomsMap).sort((a, b) => (a.sortIndex ?? 99) - (b.sortIndex ?? 99))) {
+        const opt = document.createElement("option");
+        opt.value = hr.hrid;
+        opt.textContent = ctx.i18n.getHouseRoomName(hr.hrid);
+        houseSelect.appendChild(opt);
+      }
+      const houseLv = document.createElement("input");
+      houseLv.type = "number";
+      houseLv.min = "1";
+      houseLv.max = "8";
+      houseLv.value = "1";
+      houseLv.className = "mwi-lite-calc-lv";
+      const addHouseBtn = document.createElement("button");
+      addHouseBtn.type = "button";
+      addHouseBtn.className = "mwi-lite-calc-add";
+      addHouseBtn.textContent = ctx.i18n.t("房屋", "+Room");
+      addHouseBtn.addEventListener("click", () => {
+        const hrid = houseSelect.value;
+        const lv = Math.max(1, Math.min(8, parseInt(houseLv.value, 10) || 1));
+        if (!hrid) return;
+        targets.set(hrid, { itemHrid: hrid, count: lv, needCalc: true });
+        saveAll();
+        renderCalculatorContent();
+      });
+      houseWrap.append(houseSelect, houseLv, addHouseBtn);
+      topBar.append(searchWrap, houseWrap);
+      listHost = document.createElement("div");
+      listHost.className = "mwi-lite-calc-columns";
+      listHost.innerHTML = `<div class="mwi-lite-calc-left"></div><div class="mwi-lite-calc-right"></div>`;
+      panel.append(topBar, listHost);
+      return panel;
+    };
+    const ensureTabInjected = () => {
+      if (!ctx) return;
+      const tabsContainer = document.querySelector(
+        '[class^="CharacterManagement_tabsComponentContainer"] [class*="TabsComponent_tabsContainer"]'
+      );
+      const panelsContainer = document.querySelector(
+        '[class^="CharacterManagement_tabsComponentContainer"] [class*="TabsComponent_tabPanelsContainer"]'
+      );
+      if (!tabsContainer || !panelsContainer) return;
+      const charId = getCharScope();
+      if (lastCharId !== charId) {
+        loadSaved();
+      }
+      if (document.getElementById(TAB_BTN_ID)) {
+        const gameButtons2 = Array.from(tabsContainer.querySelectorAll("button")).filter(
+          (b) => b.id !== TAB_BTN_ID
+        );
+        if (tabPanel && tabPanel.style.display !== "none" && gameButtons2.some((b) => b.classList.contains("Mui-selected"))) {
+          Array.from(panelsContainer.children).forEach((n) => {
+            if (n !== tabPanel && n.style.display === "none") {
+              n.style.display = "";
+            }
+          });
+          tabPanel.style.display = "none";
+          tabButton?.classList.remove("Mui-selected");
+        }
+        return;
+      }
+      const gameButtons = Array.from(tabsContainer.querySelectorAll("button"));
+      const samplePanel = panelsContainer.children[0];
+      if (!gameButtons.length || !samplePanel) return;
+      tabButton = gameButtons[gameButtons.length - 1].cloneNode(true);
+      tabButton.id = TAB_BTN_ID;
+      tabButton.setAttribute("data-mwi-lite", "1");
+      const labelNode = tabButton.children[0] || tabButton;
+      labelNode.textContent = ctx.i18n.t("MWI计算器", "Calculator");
+      gameButtons[0].parentElement?.appendChild(tabButton);
+      tabPanel = document.createElement("div");
+      tabPanel.id = TAB_PANEL_ID;
+      tabPanel.setAttribute("data-mwi-lite", "1");
+      tabPanel.className = samplePanel.className.replace(/TabPanel_hidden__[A-Za-z0-9_-]+/g, "").trim();
+      tabPanel.style.display = "none";
+      tabPanel.appendChild(buildCalculatorPanelDom());
+      panelsContainer.appendChild(tabPanel);
+      const showMine = () => {
+        Array.from(panelsContainer.children).forEach((p) => {
+          if (p !== tabPanel) p.style.display = "none";
+        });
+        if (tabPanel) tabPanel.style.display = "";
+        gameButtons.forEach((b) => {
+          b.classList.remove("Mui-selected");
+          b.tabIndex = -1;
+        });
+        if (tabButton) {
+          tabButton.classList.add("Mui-selected");
+          tabButton.tabIndex = 0;
+        }
+        renderCalculatorContent();
+        ctx?.domScheduler.scheduleRun(false);
+      };
+      const showTheirs = () => {
+        Array.from(panelsContainer.children).forEach((p) => {
+          if (p !== tabPanel && p.style.display === "none") {
+            p.style.display = "";
+          }
+        });
+        if (tabPanel) tabPanel.style.display = "none";
+        if (tabButton) {
+          tabButton.classList.remove("Mui-selected");
+          tabButton.tabIndex = -1;
+        }
+        ctx?.domScheduler.scheduleRun(false);
+      };
+      gameButtons.forEach((b) => b.addEventListener("click", showTheirs, true));
+      tabButton.addEventListener("click", showMine, true);
+    };
+    const ensureImportTasksButton = () => {
+      if (!ctx) return;
+      const taskBoardInfo = document.querySelector('[class*="TasksPanel_taskBoardInfo"]');
+      if (!taskBoardInfo || taskBoardInfo.querySelector(`.${IMPORT_BTN_CLASS}`)) return;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = IMPORT_BTN_CLASS;
+      btn.setAttribute("data-mwi-lite", "1");
+      btn.textContent = ctx.i18n.t("导入计算器", "Import to Calc");
+      btn.addEventListener("click", () => {
+        const cnt = importTasksToCalculator();
+        if (cnt === 0) {
+          alert(ctx.i18n.t("未找到可导入的制造任务", "No crafting tasks found"));
+        }
+      });
+      const slotCount = taskBoardInfo.querySelector('[class*="TasksPanel_taskSlotCount"]');
+      (slotCount || taskBoardInfo).appendChild(btn);
+    };
+    return {
+      id: "planner-item-calculator",
+      nameZh: "物品规划计算器",
+      nameEn: "Item Planner Calculator",
+      descriptionZh: "目标物品/房屋材料递归计算、导入制造任务、库存抵扣与缺口双击跳市场自动填量",
+      descriptionEn: "Recursive crafting & house material planner with task import and market shortage prefill",
+      category: "planner",
+      defaultEnabled: true,
+      init(context) {
+        ctx = context;
+        loadSaved();
+        unregStyle = ctx.addStyle(
+          "planner-item-calculator",
+          `
+        .${IMPORT_BTN_CLASS} {
+          background: #1770b3;
+          color: #fff;
+          border: none;
+          border-radius: 4px;
+          padding: 4px 10px;
+          margin-left: 8px;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: 600;
+        }
+        .mwi-lite-calc-root {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          font-size: 12.5px;
+          color: #e5e7eb;
+        }
+        .mwi-lite-calc-topbar {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+        }
+        .mwi-lite-calc-searchbox, .mwi-lite-calc-housebox {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          background: #2c2e45;
+          padding: 4px;
+          border-radius: 5px;
+          position: relative;
+        }
+        .mwi-lite-calc-searchbox { flex: 1.4; min-width: 240px; }
+        .mwi-lite-calc-housebox { flex: 1; min-width: 180px; }
+        .mwi-lite-calc-searchbox input[type="text"],
+        .mwi-lite-calc-housebox select,
+        .mwi-lite-calc-housebox input {
+          background: #dde2f8;
+          color: #0f172a;
+          border: none;
+          border-radius: 4px;
+          padding: 4px 6px;
+          font-size: 12px;
+        }
+        .mwi-lite-calc-searchbox > input:first-child,
+        .mwi-lite-calc-housebox select { flex: 1; min-width: 60px; }
+        .mwi-lite-calc-qty { width: 52px; }
+        .mwi-lite-calc-lv { width: 42px; }
+        .mwi-lite-calc-add {
+          background: #2e8b57; color: #fff; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer;
+        }
+        .mwi-lite-calc-clear, .mwi-lite-calc-del {
+          background: #dc2626; color: #fff; border: none; border-radius: 4px; padding: 3px 7px; cursor: pointer;
+        }
+        .mwi-lite-calc-dropdown {
+          position: absolute; left: 4px; top: 34px; width: 220px; max-height: 280px; overflow-y: auto;
+          background: #1e2438; border: 1px solid #3f4b70; border-radius: 5px; z-index: 1200; padding: 3px;
+        }
+        .mwi-lite-calc-opt {
+          display: flex; align-items: center; gap: 6px; padding: 4px 6px; cursor: pointer; border-radius: 4px;
+        }
+        .mwi-lite-calc-opt:hover { background: #3b4668; }
+        .mwi-lite-calc-columns {
+          display: grid; grid-template-columns: 1.3fr 1fr; gap: 8px; align-items: start;
+        }
+        .mwi-lite-calc-cat, .mwi-lite-calc-shortages, .mwi-lite-calc-required {
+          background: #23273d; border-radius: 5px; margin-bottom: 6px; padding: 3px;
+        }
+        .mwi-lite-calc-cat.active > summary { background: #147147; }
+        .mwi-lite-calc-cat.muted > summary { background: #393a5b; }
+        .mwi-lite-calc-shortages > summary { background: #af3914; }
+        .mwi-lite-calc-required > summary { background: #1770b3; }
+        .mwi-lite-calc-root summary {
+          display: flex; align-items: center; gap: 5px; padding: 3px 6px; border-radius: 4px; cursor: pointer; font-weight: 600;
+        }
+        .mwi-lite-calc-x { margin-left: auto; color: #fca5a5; padding: 0 4px; cursor: pointer; }
+        .mwi-lite-calc-row {
+          display: flex; align-items: center; justify-content: space-between; gap: 6px;
+          padding: 3px 5px; border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .mwi-lite-calc-row.off { opacity: 0.55; }
+        .mwi-lite-calc-itemname {
+          display: flex; align-items: center; gap: 5px; cursor: pointer; min-width: 0; overflow: hidden;
+        }
+        .mwi-lite-calc-itemname span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .mwi-lite-calc-rightctrl { display: flex; align-items: center; gap: 4px; }
+        .mwi-lite-calc-num {
+          width: 56px; background: #dde2f8; color: #111827; border: none; border-radius: 3px; padding: 2px 4px; text-align: right;
+        }
+        .mwi-lite-calc-short-badge {
+          background: #393a5b; color: #fde68a; border-radius: 4px; padding: 1px 6px; font-weight: 600;
+        }
+        `
+        );
+        unsubs = [
+          ctx.gameData.on("character_initialized", () => {
+            loadSaved();
+            scheduleRender();
+          }),
+          ctx.gameData.on("items_updated", scheduleRender),
+          ctx.gameData.on("house_rooms_updated", scheduleRender),
+          ctx.marketStore.onPriceUpdate(scheduleRender)
+        ];
+        return () => {
+          unsubs.forEach((u) => u());
+          unsubs = [];
+          unregStyle?.();
+          unregStyle = null;
+          if (renderTimer !== null) clearTimeout(renderTimer);
+          pendingPrefill = null;
+          document.getElementById(TAB_BTN_ID)?.remove();
+          document.getElementById(TAB_PANEL_ID)?.remove();
+          document.querySelectorAll(`.${IMPORT_BTN_CLASS}`).forEach((el) => el.remove());
+          tabButton = null;
+          tabPanel = null;
+          listHost = null;
+        };
+      },
+      onDom(_doc, route) {
+        ensureTabInjected();
+        if (route === "tasks" || document.querySelector('[class*="TasksPanel_taskBoardInfo"]')) {
+          ensureImportTasksButton();
+        }
+        if (pendingPrefill) {
+          tryApplyMarketPrefill();
+        }
+      }
+    };
+  }
+
+  // src/features/planner/queue-next.ts
+  var MENU_SEL = '[class*="QueuedActions_queuedActionsEditMenu"]';
+  var ROW_SEL = '[class*="QueuedActions_action__"][data-action-id]';
+  var NEXT_ATTR = "data-mwi-lite-queue-next";
+  var SVG_NS = "http://www.w3.org/2000/svg";
+  function createNextIcon(doc, refSvg) {
+    const icon = refSvg.cloneNode(false);
+    icon.setAttribute("aria-label", "next");
+    icon.setAttribute("viewBox", "0 0 20 20");
+    icon.removeAttribute("fill");
+    const line1 = doc.createElementNS(SVG_NS, "path");
+    line1.setAttribute("d", "M0 1.5h20");
+    line1.setAttribute("stroke", "#FEFEFE");
+    line1.setAttribute("stroke-width", "3");
+    const line2 = doc.createElementNS(SVG_NS, "path");
+    line2.setAttribute("d", "M0 5.5h20");
+    line2.setAttribute("stroke", "#FEFEFE");
+    line2.setAttribute("stroke-width", "3");
+    const arrow = doc.createElementNS(SVG_NS, "path");
+    arrow.setAttribute("d", "M10 9 0 19h20L10 9Z");
+    arrow.setAttribute("fill", "#FEFEFE");
+    icon.replaceChildren(line1, line2, arrow);
+    return icon;
+  }
+  function findQueueOwnerInstance(menuEl) {
+    const fiberKey = Reflect.ownKeys(menuEl).find(
+      (k) => typeof k === "string" && (k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"))
+    );
+    let fiber = fiberKey ? menuEl[fiberKey] : null;
+    for (let depth = 0; fiber && depth < 48; depth++, fiber = fiber.return) {
+      const inst = fiber.stateNode;
+      const props = inst?.props;
+      if (inst && props && Array.isArray(props.characterActions) && typeof props.moveCharacterActionHandler === "function") {
+        return inst;
+      }
+    }
+    return null;
+  }
+  function readVerifiedQueueState(menuEl) {
+    const owner = findQueueOwnerInstance(menuEl);
+    if (!owner) return null;
+    const actions = owner.props.characterActions;
+    if (!Array.isArray(actions) || actions.length < 2) return null;
+    const currentId = Number(actions[0]?.id);
+    if (!Number.isSafeInteger(currentId) || currentId <= 0) return null;
+    const pendingIds = actions.slice(1).filter((a) => !a?.partyID).map((a) => Number(a?.id));
+    if (pendingIds.some((id) => !Number.isSafeInteger(id) || id <= 0)) return null;
+    const rows = Array.from(menuEl.querySelectorAll(ROW_SEL)).filter((r) => r.closest(MENU_SEL) === menuEl);
+    const rowIds = rows.map((r) => Number(r.getAttribute("data-action-id")));
+    if (rowIds.length !== pendingIds.length || rowIds.some((id, i) => id !== pendingIds[i])) {
+      return null;
+    }
+    return { owner, currentId, pendingIds };
+  }
+  function createQueueNextModule() {
+    let ctx = null;
+    let unregStyle = null;
+    let unregWs = null;
+    let pendingLock = null;
+    const clearLock = () => {
+      if (pendingLock) {
+        clearTimeout(pendingLock.timer);
+        pendingLock = null;
+      }
+    };
+    const syncMenu = () => {
+      if (!ctx) return;
+      const menu = document.querySelector(MENU_SEL);
+      if (!menu) {
+        clearLock();
+        return;
+      }
+      const snapshot = readVerifiedQueueState(menu);
+      if (!snapshot) return;
+      if (pendingLock) {
+        if (snapshot.currentId === pendingLock.targetId || !snapshot.pendingIds.includes(pendingLock.targetId) || snapshot.pendingIds[0] === pendingLock.targetId) {
+          clearLock();
+        }
+      }
+      const rows = Array.from(menu.querySelectorAll(ROW_SEL)).filter((r) => r.closest(MENU_SEL) === menu);
+      rows.forEach((row, index) => {
+        const actionId = snapshot.pendingIds[index];
+        const topBtn = Array.from(row.querySelectorAll("button")).find(
+          (b) => !b.hasAttribute(NEXT_ATTR) && b.querySelector('svg[aria-label="top"]') !== null
+        );
+        const topIcon = topBtn?.querySelector('svg[aria-label="top"]');
+        if (!topBtn || !topIcon) return;
+        let nextBtn = row.querySelector(`button[${NEXT_ATTR}]`);
+        if (!nextBtn) {
+          nextBtn = document.createElement("button");
+          nextBtn.type = "button";
+          nextBtn.className = topBtn.className;
+          nextBtn.setAttribute("data-mwi-lite", "1");
+          nextBtn.appendChild(createNextIcon(document, topIcon));
+          nextBtn.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            if (!ev.isTrusted || pendingLock) return;
+            const latest = readVerifiedQueueState(menu);
+            if (!latest) return;
+            const targetIdx = latest.pendingIds.indexOf(actionId);
+            if (targetIdx <= 0) return;
+            pendingLock = {
+              targetId: actionId,
+              baselinePending: [...latest.pendingIds],
+              timer: window.setTimeout(() => {
+                clearLock();
+                syncMenu();
+              }, 3e3)
+            };
+            syncMenu();
+            try {
+              Reflect.apply(latest.owner.props.moveCharacterActionHandler, latest.owner, [actionId, 0]);
+            } catch {
+              clearLock();
+              syncMenu();
+            }
+          });
+          topBtn.parentNode?.insertBefore(nextBtn, topBtn.nextSibling);
+        }
+        nextBtn.setAttribute(NEXT_ATTR, String(actionId));
+        const isAlreadyNext = index === 0;
+        nextBtn.disabled = isAlreadyNext || pendingLock !== null;
+        const tip = isAlreadyNext ? ctx.i18n.t("当前已是下一项动作", "Already next in queue") : ctx.i18n.t("设为下一项（排在当前动作之后）", "Set as Next action");
+        nextBtn.title = tip;
+        nextBtn.setAttribute("aria-label", tip);
+      });
+    };
+    return {
+      id: "planner-queue-next",
+      nameZh: "队列设为下一步",
+      nameEn: "Queue: Set as Next",
+      descriptionZh: "在排队编辑菜单注入「设为下一项」按钮，1:1 安全触发原生移动逻辑不打断当前动作",
+      descriptionEn: "Add a 'Set as Next' button in queue edit menu (1:1 human click -> native queue move)",
+      category: "planner",
+      defaultEnabled: true,
+      init(context) {
+        ctx = context;
+        unregStyle = ctx.addStyle(
+          "planner-queue-next",
+          `
+        [${NEXT_ATTR}] {
+          position: relative;
+          min-width: 26px;
+        }
+        [${NEXT_ATTR}]:disabled {
+          cursor: default;
+          opacity: 0.4;
+          filter: saturate(0.35);
+        }
+        `
+        );
+        unregWs = ctx.wsBus.on("actions_updated", () => syncMenu());
+        return () => {
+          clearLock();
+          unregWs?.();
+          unregWs = null;
+          unregStyle?.();
+          unregStyle = null;
+          document.querySelectorAll(`button[${NEXT_ATTR}]`).forEach((b) => b.remove());
+        };
+      },
+      onDom() {
+        syncMenu();
+      }
+    };
+  }
+
+  // src/features/planner/task-board.ts
+  var TASK_SORT_PREF_KEY = "task_board_sort_pref_v1";
+  var TASK_LIST_SEL = '[class*="TasksPanel_taskList"]';
+  var TASK_CARD_SEL = '[class*="RandomTask_randomTask"]';
+  var TASK_NAME_SEL = '[class*="RandomTask_name"]';
+  var SLOT_COUNT_SEL = '[class*="TasksPanel_taskSlotCount"]';
+  var SKILL_ORDER = {
+    Milking: 1,
+    "挤奶": 1,
+    Foraging: 2,
+    "采摘": 2,
+    "采集": 2,
+    Woodcutting: 3,
+    "伐木": 3,
+    Cheesesmithing: 4,
+    "奶酪锻造": 4,
+    Crafting: 5,
+    "制作": 5,
+    "锻造": 5,
+    Tailoring: 6,
+    "缝纫": 6,
+    "裁缝": 6,
+    Cooking: 7,
+    "烹饪": 7,
+    Brewing: 8,
+    "冲泡": 8,
+    "酿造": 8,
+    Alchemy: 9,
+    "炼金": 9,
+    Enhancing: 10,
+    "强化": 10,
+    Defeat: 99,
+    "击败": 99
+  };
+  function createTaskBoardModule() {
+    let ctx = null;
+    let unregStyle = null;
+    let unregQuests = null;
+    let sortMode = "skill";
+    let autoSort = true;
+    let lastPointerDownTs = 0;
+    let lastTaskListRef = null;
+    let timers = [];
+    const spriteUrls = {};
+    let manifestFetching = null;
+    let actionNameToHrid = null;
+    let monsterNameToHrid = null;
+    let lookupBuilt = false;
+    const savePref = () => {
+      ctx?.storage.set(TASK_SORT_PREF_KEY, { mode: sortMode, autoSort });
+    };
+    const ensureLookupMaps = () => {
+      if (lookupBuilt || !ctx) return;
+      const clientData = ctx.gameData.getClientData();
+      if (!clientData) return;
+      actionNameToHrid = /* @__PURE__ */ new Map();
+      monsterNameToHrid = /* @__PURE__ */ new Map();
+      const core = ctx.gameData.getReactGameCore();
+      const resources = core?.props?.i18n?.options?.resources;
+      if (resources) {
+        for (const lang of Object.keys(resources)) {
+          const trans = resources[lang]?.translation;
+          if (trans?.actionNames) {
+            for (const [hrid, name] of Object.entries(trans.actionNames)) {
+              if (typeof name === "string" && name.trim()) {
+                actionNameToHrid.set(name.trim().toLowerCase(), hrid);
+              }
+            }
+          }
+          if (trans?.monsterNames) {
+            for (const [hrid, name] of Object.entries(trans.monsterNames)) {
+              if (typeof name === "string" && name.trim()) {
+                monsterNameToHrid.set(name.trim().toLowerCase(), hrid);
+              }
+            }
+          }
+        }
+      }
+      if (clientData.actionDetailMap) {
+        for (const [hrid, detail] of Object.entries(clientData.actionDetailMap)) {
+          if (typeof detail?.name === "string" && detail.name.trim()) {
+            actionNameToHrid.set(detail.name.trim().toLowerCase(), hrid);
+          }
+        }
+      }
+      const monsterMap = clientData.combatMonsterDetailMap || clientData.monsterDetailMap;
+      if (monsterMap) {
+        for (const [hrid, detail] of Object.entries(monsterMap)) {
+          if (typeof detail?.name === "string" && detail.name.trim()) {
+            monsterNameToHrid.set(detail.name.trim().toLowerCase(), hrid);
+          }
+        }
+      }
+      lookupBuilt = true;
+    };
+    const detectDomSprites = () => {
+      const patterns = [
+        ["items", "items_sprite"],
+        ["actions", "actions_sprite"],
+        ["monsters", "combat_monsters_sprite"]
+      ];
+      for (const [key, token] of patterns) {
+        if (spriteUrls[key]) continue;
+        const useEl = document.querySelector(`use[href*="${token}"]`);
+        const href = useEl?.getAttribute("href") || useEl?.href?.baseVal || "";
+        const base = href.split("#")[0];
+        if (base) spriteUrls[key] = base;
+      }
+    };
+    const ensureManifestSprites = () => {
+      detectDomSprites();
+      if (spriteUrls.items && spriteUrls.actions && spriteUrls.monsters) return;
+      if (manifestFetching) return;
+      manifestFetching = (async () => {
+        try {
+          const res = await fetch("/asset-manifest.json");
+          if (!res.ok) return;
+          const manifest = await res.json();
+          const files = manifest?.files || manifest || {};
+          for (const [key, val] of Object.entries(files)) {
+            if (typeof val !== "string" || !val.endsWith(".svg")) continue;
+            if (!spriteUrls.items && key.includes("items_sprite")) spriteUrls.items = val;
+            else if (!spriteUrls.actions && key.includes("actions_sprite")) spriteUrls.actions = val;
+            else if (!spriteUrls.monsters && key.includes("combat_monsters_sprite")) spriteUrls.monsters = val;
+          }
+        } catch {
+        }
+      })();
+    };
+    const parseCard = (card) => {
+      const nameEl = card.querySelector(TASK_NAME_SEL);
+      if (!nameEl) return null;
+      const fullText = (nameEl.textContent || "").trim();
+      const match = fullText.match(/^(.+?)\s*-\s*(.+)$/);
+      if (!match) return null;
+      const skillType = match[1].trim();
+      const taskTarget = match[2].trim();
+      const isCombat = skillType === "Defeat" || skillType === "击败";
+      const claimBtn = card.querySelector('button[class*="Button_buy"]');
+      const isCompleted = Boolean(claimBtn && /领取奖励|Claim Reward/i.test(claimBtn.textContent || ""));
+      return { nameEl, fullText, skillType, taskTarget, isCombat, isCompleted };
+    };
+    const resolveIconForCard = (parsed) => {
+      if (!ctx) return null;
+      ensureLookupMaps();
+      const clientData = ctx.gameData.getClientData();
+      if (!clientData) return null;
+      if (parsed.isCombat) {
+        const cleanName = parsed.taskTarget.replace(/Z\d+$/i, "").trim().toLowerCase();
+        let monsterHrid = monsterNameToHrid?.get(cleanName) || null;
+        if (!monsterHrid) {
+          const quests = ctx.gameData.getCharacterQuests();
+          const q = quests.find((item) => item?.monsterHrid && parsed.taskTarget.includes(ctx.i18n.getMonsterName(item.monsterHrid)));
+          if (q) monsterHrid = q.monsterHrid;
+        }
+        if (!monsterHrid) return null;
+        const monsterMap = clientData.combatMonsterDetailMap || clientData.monsterDetailMap;
+        const sortIndex = monsterMap?.[monsterHrid]?.sortIndex ?? 999;
+        return {
+          spriteType: "monsters",
+          symbolId: monsterHrid.split("/").pop() || "",
+          monsterSortIndex: sortIndex
+        };
+      }
+      const actionHrid = actionNameToHrid?.get(parsed.taskTarget.toLowerCase()) || null;
+      if (!actionHrid) return null;
+      const action = clientData.actionDetailMap?.[actionHrid];
+      const outHrid = action?.outputItems?.[0]?.itemHrid;
+      if (outHrid && clientData.itemDetailMap?.[outHrid]) {
+        return {
+          spriteType: "items",
+          symbolId: outHrid.split("/").pop() || "",
+          monsterSortIndex: 0
+        };
+      }
+      const actionKey = actionHrid.split("/").pop() || "";
+      if (clientData.itemDetailMap?.[`/items/${actionKey}`]) {
+        return { spriteType: "items", symbolId: actionKey, monsterSortIndex: 0 };
+      }
+      return { spriteType: "actions", symbolId: actionKey, monsterSortIndex: 0 };
+    };
+    const renderTaskIcons = (cards) => {
+      detectDomSprites();
+      let needManifest = false;
+      for (const card of cards) {
+        const parsed = parseCard(card);
+        if (!parsed) continue;
+        if (card.getAttribute("data-mwi-task-icon") === parsed.fullText && card.querySelector(".mwi-lite-task-icon")) {
+          continue;
+        }
+        card.querySelector(".mwi-lite-task-icon")?.remove();
+        const resolved = resolveIconForCard(parsed);
+        if (!resolved || !resolved.symbolId) {
+          card.setAttribute("data-mwi-task-icon", parsed.fullText);
+          continue;
+        }
+        const spriteUrl = spriteUrls[resolved.spriteType];
+        if (!spriteUrl) {
+          needManifest = true;
+          continue;
+        }
+        const wrap = document.createElement("span");
+        wrap.className = "mwi-lite-task-icon";
+        wrap.setAttribute("data-mwi-lite", "1");
+        wrap.innerHTML = `<svg width="20" height="20" aria-hidden="true"><use href="${spriteUrl}#${resolved.symbolId}"></use></svg>`;
+        parsed.nameEl.insertBefore(wrap, parsed.nameEl.firstChild);
+        card.setAttribute("data-mwi-task-icon", parsed.fullText);
+      }
+      if (needManifest) {
+        ensureManifestSprites();
+        if (manifestFetching) {
+          void manifestFetching.then(() => {
+            ctx?.domScheduler.scheduleRun(false);
+          });
+        }
+      }
+    };
+    const sortTaskCards = (force = false) => {
+      if (!ctx) return;
+      if (!force && !autoSort) return;
+      if (!force && Date.now() - lastPointerDownTs < 250) {
+        const id = window.setTimeout(() => sortTaskCards(false), 260);
+        timers.push(id);
+        return;
+      }
+      const taskList = document.querySelector(TASK_LIST_SEL);
+      if (!taskList) return;
+      const cards = Array.from(taskList.children).filter(
+        (el) => el.matches(TASK_CARD_SEL)
+      );
+      if (cards.length < 2) return;
+      const keyed = cards.map((card, idx) => {
+        const parsed = parseCard(card);
+        const resolved = parsed ? resolveIconForCard(parsed) : null;
+        return {
+          card,
+          idx,
+          isCompleted: parsed?.isCompleted ?? false,
+          skillOrder: parsed ? SKILL_ORDER[parsed.skillType] ?? 999 : 999,
+          isCombat: parsed?.isCombat ?? false,
+          monsterSortIndex: resolved?.monsterSortIndex ?? 999,
+          targetName: parsed?.taskTarget || ""
+        };
+      });
+      keyed.sort((a, b) => {
+        if (a.isCompleted !== b.isCompleted) return a.isCompleted ? -1 : 1;
+        if (sortMode === "skill") {
+          if (a.skillOrder !== b.skillOrder) return a.skillOrder - b.skillOrder;
+          if (a.isCombat && b.isCombat && a.monsterSortIndex !== b.monsterSortIndex) {
+            return a.monsterSortIndex - b.monsterSortIndex;
+          }
+        }
+        const cmp = a.targetName.localeCompare(b.targetName, "zh-CN");
+        return cmp !== 0 ? cmp : a.idx - b.idx;
+      });
+      let alreadyOrdered = true;
+      for (let i = 0; i < keyed.length; i++) {
+        if (keyed[i].card !== cards[i]) {
+          alreadyOrdered = false;
+          break;
+        }
+      }
+      if (alreadyOrdered) return;
+      for (let i = keyed.length - 1; i >= 0; i--) {
+        const card = keyed[i].card;
+        const nextSibling = i + 1 < keyed.length ? keyed[i + 1].card : null;
+        if (card.nextSibling !== nextSibling) {
+          taskList.insertBefore(card, nextSibling);
+        }
+      }
+    };
+    const injectToolbar = () => {
+      if (!ctx) return;
+      const slotCount = document.querySelector(SLOT_COUNT_SEL);
+      if (!slotCount || slotCount.querySelector(".mwi-lite-task-toolbar")) return;
+      const bar = document.createElement("span");
+      bar.className = "mwi-lite-task-toolbar";
+      bar.setAttribute("data-mwi-lite", "1");
+      const sortBtn = document.createElement("button");
+      sortBtn.type = "button";
+      sortBtn.className = "Button_button__1Fe9z Button_small__3fqC7 mwi-lite-task-btn";
+      const syncLabels = () => {
+        const modeLbl = sortMode === "skill" ? ctx.i18n.t("按类型", "Skill") : ctx.i18n.t("按名称", "Name");
+        sortBtn.textContent = `${ctx.i18n.t("排序", "Sort")}: ${modeLbl}`;
+      };
+      syncLabels();
+      sortBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        sortMode = sortMode === "skill" ? "name" : "skill";
+        syncLabels();
+        savePref();
+        sortTaskCards(true);
+      });
+      const autoBtn = document.createElement("button");
+      autoBtn.type = "button";
+      autoBtn.className = "Button_button__1Fe9z Button_small__3fqC7 mwi-lite-task-btn mwi-lite-task-auto";
+      const syncAuto = () => {
+        autoBtn.textContent = autoSort ? ctx.i18n.t("自动排序: 开", "Auto: ON") : ctx.i18n.t("自动排序: 关", "Auto: OFF");
+        autoBtn.dataset.active = autoSort ? "1" : "0";
+      };
+      syncAuto();
+      autoBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        autoSort = !autoSort;
+        syncAuto();
+        savePref();
+        if (autoSort) sortTaskCards(true);
+      });
+      bar.append(sortBtn, autoBtn);
+      slotCount.appendChild(bar);
+    };
+    const syncDom = () => {
+      const taskList = document.querySelector(TASK_LIST_SEL);
+      if (!taskList) return;
+      injectToolbar();
+      if (lastTaskListRef !== taskList) {
+        lastTaskListRef = taskList;
+        taskList.addEventListener(
+          "pointerdown",
+          () => {
+            lastPointerDownTs = Date.now();
+          },
+          true
+        );
+      }
+      const cards = Array.from(taskList.children).filter(
+        (el) => el.matches(TASK_CARD_SEL)
+      );
+      if (!cards.length) return;
+      renderTaskIcons(cards);
+      sortTaskCards(false);
+    };
+    return {
+      id: "planner-task-board",
+      nameZh: "任务图标与任务排序",
+      nameEn: "Task Icons & Task Sorter",
+      descriptionZh: "为任务卡片显示技能/怪物图标，并支持按类型/名称自动与手动排序（已完成置顶）",
+      descriptionEn: "Show item/action/monster icons on task cards and sort tasks cleanly",
+      category: "planner",
+      defaultEnabled: true,
+      routes: ["tasks"],
+      init(context) {
+        ctx = context;
+        const saved = ctx.storage.get(TASK_SORT_PREF_KEY, null);
+        if (saved) {
+          if (saved.mode === "skill" || saved.mode === "name") sortMode = saved.mode;
+          if (typeof saved.autoSort === "boolean") autoSort = saved.autoSort;
+        }
+        unregStyle = ctx.addStyle(
+          "planner-task-board",
+          `
+        .mwi-lite-task-toolbar {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          margin-left: 10px;
+          vertical-align: middle;
+        }
+        .mwi-lite-task-btn {
+          padding: 2px 8px !important;
+          font-size: 11.5px !important;
+          background: #1e73be !important;
+          color: #fff !important;
+          border: none !important;
+          border-radius: 4px !important;
+          cursor: pointer;
+        }
+        .mwi-lite-task-auto[data-active="1"] { background: #2e8b57 !important; }
+        .mwi-lite-task-auto[data-active="0"] { background: #4b5563 !important; }
+        .mwi-lite-task-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 22px;
+          height: 22px;
+          margin-right: 6px;
+          border-radius: 4px;
+          background: rgba(15, 23, 42, 0.55);
+          border: 1px solid rgba(148, 163, 184, 0.25);
+          vertical-align: middle;
+          pointer-events: none;
+          flex-shrink: 0;
+        }
+        .mwi-lite-task-icon svg {
+          display: block;
+        }
+        `
+        );
+        unregQuests = ctx.gameData.on("quests_updated", () => {
+          if (ctx?.domScheduler.getActiveRoute() === "tasks") {
+            const id = window.setTimeout(() => {
+              ctx?.domScheduler.scheduleRun(false);
+            }, 120);
+            timers.push(id);
+          }
+        });
+        return () => {
+          unregStyle?.();
+          unregStyle = null;
+          unregQuests?.();
+          unregQuests = null;
+          timers.forEach((t) => clearTimeout(t));
+          timers = [];
+          lastTaskListRef = null;
+          document.querySelectorAll(".mwi-lite-task-toolbar, .mwi-lite-task-icon").forEach((el) => el.remove());
+          document.querySelectorAll("[data-mwi-task-icon]").forEach((el) => el.removeAttribute("data-mwi-task-icon"));
+        };
+      },
+      onDom() {
+        syncDom();
+      }
+    };
+  }
+
+  // src/features/planner/index.ts
+  var plannerModules = [
+    createActionTimerModule(),
+    createQueueNextModule(),
+    createItemCalculatorModule(),
+    createTaskBoardModule()
+  ];
+
+  // src/index.ts
+  var VERSION = "1.1.0";
+  function bootstrap() {
+    const pageWin = getPageWindow();
+    if (pageWin.__MWI_LITE_BOOTSTRAPPED__ || window.__MWI_LITE_BOOTSTRAPPED__) {
+      return;
+    }
+    pageWin.__MWI_LITE_BOOTSTRAPPED__ = true;
+    window.__MWI_LITE_BOOTSTRAPPED__ = true;
+    wsBus.install();
+    gameData.init();
+    marketStore.init();
+    registry.registerAll([...marketModules, ...plannerModules, ...combatModules]);
+    registry.initAll();
+    mountSettingsUI(isLabyrinthWorkerActive);
+    domScheduler.start();
+    const diag = Object.freeze({
+      name: "MWI · Hugunn",
+      version: VERSION,
+      getActiveRoute: () => domScheduler.getActiveRoute(),
+      getModules: () => registry.list().map(({ module, enabled }) => ({
+        id: module.id,
+        category: module.category,
+        enabled
+      })),
+      isWorkerActive: () => isLabyrinthWorkerActive(),
+      getWsMessageCount: () => wsBus.getMessageCount()
+    });
+    try {
+      window.__MWI_HUGUNN__ = diag;
+      window.__MWI_LITE_SUITE__ = diag;
+      if (pageWin !== window) {
+        pageWin.__MWI_HUGUNN__ = diag;
+        pageWin.__MWI_LITE_SUITE__ = diag;
+      }
+    } catch {
+    }
+  }
+  bootstrap();
+})();
