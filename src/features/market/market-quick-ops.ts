@@ -416,15 +416,19 @@ export function createMarketQuickOpsModule(): FeatureModule {
     const ob = ctx.marketStore.getOrderBook(current.itemHrid, current.enhancementLevel);
     if (!ob) return;
 
-    // 1) Queue Length Estimator on newListingButtonsContainer
+    // 1) Queue Length Estimator right below newListingButtonsContainer (never squeeze Buy/Sell flex buttons)
     const btnContainer = document.querySelector('[class*="MarketplacePanel_newListingButtonsContainer"]');
     if (btnContainer) {
-      let badgeWrap = btnContainer.querySelector<HTMLElement>(".mwi-lite-queue-depth");
+      let badgeWrap =
+        btnContainer.nextElementSibling?.classList.contains("mwi-lite-queue-depth")
+          ? (btnContainer.nextElementSibling as HTMLElement)
+          : null;
       if (!badgeWrap) {
+        document.querySelectorAll(".mwi-lite-queue-depth").forEach((el) => el.remove());
         badgeWrap = document.createElement("div");
         badgeWrap.className = "mwi-lite-queue-depth";
         badgeWrap.setAttribute("data-mwi-lite", "1");
-        btnContainer.appendChild(badgeWrap);
+        btnContainer.insertAdjacentElement("afterend", badgeWrap);
       }
 
       const calcDepth = (listings: any[]) => {
@@ -667,9 +671,11 @@ export function createMarketQuickOpsModule(): FeatureModule {
         .mwi-lite-qops-btn:hover { background: #3b527e !important; }
         .mwi-lite-queue-depth {
           display: flex;
-          gap: 10px;
+          justify-content: space-between;
+          gap: 12px;
           font-size: 11.5px;
-          margin-top: 4px;
+          margin: 3px 0 4px;
+          padding: 0 2px;
           color: #cbd5e1;
         }
         .mwi-lite-queue-depth .ask { color: #fca5a5; }

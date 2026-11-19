@@ -15268,12 +15268,13 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       if (!ob) return;
       const btnContainer = document.querySelector('[class*="MarketplacePanel_newListingButtonsContainer"]');
       if (btnContainer) {
-        let badgeWrap = btnContainer.querySelector(".mwi-lite-queue-depth");
+        let badgeWrap = btnContainer.nextElementSibling?.classList.contains("mwi-lite-queue-depth") ? btnContainer.nextElementSibling : null;
         if (!badgeWrap) {
+          document.querySelectorAll(".mwi-lite-queue-depth").forEach((el) => el.remove());
           badgeWrap = document.createElement("div");
           badgeWrap.className = "mwi-lite-queue-depth";
           badgeWrap.setAttribute("data-mwi-lite", "1");
-          btnContainer.appendChild(badgeWrap);
+          btnContainer.insertAdjacentElement("afterend", badgeWrap);
         }
         const calcDepth = (listings) => {
           if (!listings.length) return { qty: 0, est: false };
@@ -15478,9 +15479,11 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         .mwi-lite-qops-btn:hover { background: #3b527e !important; }
         .mwi-lite-queue-depth {
           display: flex;
-          gap: 10px;
+          justify-content: space-between;
+          gap: 12px;
           font-size: 11.5px;
-          margin-top: 4px;
+          margin: 3px 0 4px;
+          padding: 0 2px;
           color: #cbd5e1;
         }
         .mwi-lite-queue-depth .ask { color: #fca5a5; }
@@ -16621,9 +16624,9 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
           `
         #${PANEL_ID} {
           position: absolute;
-          left: 100%;
-          top: -8px;
-          margin-left: 36px;
+          left: calc(100% + 42px);
+          top: auto;
+          bottom: 0;
           z-index: 40;
           background: rgba(10, 12, 16, 0.88);
           border-radius: 8px;

@@ -366,9 +366,9 @@ export function createVolumeDisplayModule(): FeatureModule {
         `
         #${PANEL_ID} {
           position: absolute;
-          left: 100%;
-          top: -8px;
-          margin-left: 36px;
+          left: calc(100% + 42px);
+          top: auto;
+          bottom: 0;
           z-index: 40;
           background: rgba(10, 12, 16, 0.88);
           border-radius: 8px;
