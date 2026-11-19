@@ -18097,6 +18097,39 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
   var TASK_CARD_SEL = '[class*="RandomTask_randomTask"]';
   var TASK_NAME_SEL = '[class*="RandomTask_name"]';
   var SLOT_COUNT_SEL = '[class*="TasksPanel_taskSlotCount"]';
+  var TASK_N1_ID = "mwi-lite-task-n1";
+  function parseActionCount(raw) {
+    if (raw == null) return null;
+    const cleaned = String(raw).trim().toLowerCase().replace(/[\s,]/g, "");
+    if (!cleaned || cleaned === "∞") return null;
+    let mul = 1;
+    let numStr = cleaned;
+    if (numStr.endsWith("k")) {
+      mul = 1e3;
+      numStr = numStr.slice(0, -1);
+    } else if (numStr.endsWith("m")) {
+      mul = 1e6;
+      numStr = numStr.slice(0, -1);
+    } else if (numStr.endsWith("b")) {
+      mul = 1e9;
+      numStr = numStr.slice(0, -1);
+    }
+    const n = Number(numStr);
+    return Number.isFinite(n) ? Math.floor(n * mul) : null;
+  }
+  function formatActionCount(n) {
+    if (n >= 1e9) return `${(n / 1e9).toFixed(1).replace(/\.0$/, "")}B`;
+    if (n >= 1e6) return `${(n / 1e6).toFixed(1).replace(/\.0$/, "")}M`;
+    if (n >= 1e3) return `${(n / 1e3).toFixed(1).replace(/\.0$/, "")}K`;
+    return String(n);
+  }
+  function setReactInputValue2(input, value) {
+    const proto = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+    proto?.set?.call(input, String(value));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    input.focus();
+  }
   var SKILL_ORDER = {
     Milking: 1,
     "挤奶": 1,
@@ -18404,7 +18437,65 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       bar.append(sortBtn, autoBtn);
       slotCount.appendChild(bar);
     };
-    const syncDom = () => {
+    const injectTaskMinusOneButton = () => {
+      if (!ctx) return;
+      const panel = document.querySelector('[class*="SkillActionDetail_skillActionDetail"]');
+      if (!panel || panel.querySelector(`#${TASK_N1_ID}`)) return;
+      const inputSections = panel.querySelectorAll('[class*="maxActionCountInput"]');
+      if (!inputSections.length) return;
+      const firstSection = inputSections[0];
+      const mainInput = firstSection.querySelector('input[class*="Input_input"]');
+      if (!mainInput) return;
+      const wrap = document.createElement("div");
+      wrap.id = TASK_N1_ID;
+      wrap.setAttribute("data-mwi-lite", "1");
+      const prefix = document.createElement("span");
+      prefix.textContent = ctx.i18n.t("任务次数 ", "Task count ");
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "Button_button__1Fe9z Button_small__3fqC7 mwi-lite-task-n1-btn";
+      const suffix = document.createElement("span");
+      suffix.textContent = " (N-1)";
+      wrap.append(prefix, btn, suffix);
+      const siblingBtns = firstSection.querySelectorAll(":scope > button");
+      const lastBtn = siblingBtns.length > 0 ? siblingBtns[siblingBtns.length - 1] : null;
+      if (lastBtn) {
+        lastBtn.insertAdjacentElement("afterend", wrap);
+      } else {
+        firstSection.appendChild(wrap);
+      }
+      const updateBtn = () => {
+        const base = parseActionCount(mainInput.value);
+        if (base === null || base <= 0) {
+          btn.textContent = "-";
+          btn.disabled = true;
+          return;
+        }
+        const nextVal = Math.max(base - 1, 0);
+        btn.textContent = formatActionCount(nextVal);
+        btn.disabled = base <= 1;
+      };
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const base = parseActionCount(mainInput.value);
+        if (base === null || base <= 1) return;
+        setReactInputValue2(mainInput, Math.max(base - 1, 0));
+        updateBtn();
+      });
+      mainInput.addEventListener("input", updateBtn);
+      mainInput.addEventListener("change", updateBtn);
+      if (inputSections.length > 1) {
+        const itemInput = inputSections[1].querySelector('input[class*="Input_input"]');
+        itemInput?.addEventListener("input", updateBtn);
+      }
+      updateBtn();
+      const tId = window.setTimeout(updateBtn, 150);
+      timers.push(tId);
+    };
+    const syncDom = (route) => {
+      injectTaskMinusOneButton();
+      if (route !== "tasks" && !document.querySelector(TASK_LIST_SEL)) return;
       const taskList = document.querySelector(TASK_LIST_SEL);
       if (!taskList) return;
       injectToolbar();
@@ -18427,13 +18518,12 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     };
     return {
       id: "planner-task-board",
-      nameZh: "任务图标与任务排序",
-      nameEn: "Task Icons & Task Sorter",
-      descriptionZh: "为任务卡片显示技能/怪物图标，并支持按类型/名称自动与手动排序（已完成置顶）",
-      descriptionEn: "Show item/action/monster icons on task cards and sort tasks cleanly",
+      nameZh: "任务图标、排序与跳转 N-1",
+      nameEn: "Task Icons, Sorter & (N-1)",
+      descriptionZh: "显示任务图标与自动排序，并在任务跳转后的行动弹窗提供快捷 (N-1) 次数按钮",
+      descriptionEn: "Task icons, smart sorter, and (N-1) action count helper on task navigation",
       category: "planner",
       defaultEnabled: true,
-      routes: ["tasks"],
       init(context) {
         ctx = context;
         const saved = ctx.storage.get(TASK_SORT_PREF_KEY, null);
@@ -18479,6 +18569,27 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         .mwi-lite-task-icon svg {
           display: block;
         }
+        #${TASK_N1_ID} {
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          margin-left: 6px;
+          color: #f59e0b;
+          font-size: 12px;
+        }
+        #${TASK_N1_ID} .mwi-lite-task-n1-btn {
+          background: #f8fafc !important;
+          color: #0f172a !important;
+          padding: 1px 6px !important;
+          font-weight: 700 !important;
+          border: 1px solid #cbd5e1 !important;
+          border-radius: 4px !important;
+          cursor: pointer;
+        }
+        #${TASK_N1_ID} .mwi-lite-task-n1-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
         `
         );
         unregQuests = ctx.gameData.on("quests_updated", () => {
@@ -18497,12 +18608,12 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
           timers.forEach((t) => clearTimeout(t));
           timers = [];
           lastTaskListRef = null;
-          document.querySelectorAll(".mwi-lite-task-toolbar, .mwi-lite-task-icon").forEach((el) => el.remove());
+          document.querySelectorAll(`.mwi-lite-task-toolbar, .mwi-lite-task-icon, #${TASK_N1_ID}`).forEach((el) => el.remove());
           document.querySelectorAll("[data-mwi-task-icon]").forEach((el) => el.removeAttribute("data-mwi-task-icon"));
         };
       },
-      onDom() {
-        syncDom();
+      onDom(_doc, route) {
+        syncDom(route);
       }
     };
   }
