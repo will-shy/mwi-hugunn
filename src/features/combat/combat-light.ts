@@ -4,14 +4,22 @@ import {
   CombatLuckEngine,
   formatBattleDuration,
   formatChatSummary,
-  formatCombatPrice,
-  formatLuckPercent,
-  getRarityColor,
   type BattlePlayerSnapshot,
   type CombatPriceMode,
   type CountedLootItem,
   type PlayerBattleAnalysis,
 } from "./combat-luck-engine";
+import {
+  escapeHtml,
+  getCombatPixelStyles,
+  PIXEL_BAR_ICON_SVG,
+  PIXEL_SWORD_SVG,
+  renderLootBarState,
+  renderModalDetailsHtml,
+  renderModalHistoryHtml,
+  renderModalOverviewHtml,
+  type CombatHistoryViewEntry,
+} from "./combat-pixel-ui";
 
 const COUNTER_ID = "mwi-lite-combat-counter";
 const LOOT_BAR_ID = "mwi-lite-combat-loot-bar";
@@ -22,23 +30,7 @@ const MAX_HISTORY_ENTRIES = 30;
 const LOADOUT_BADGE_CLASS = "mwi-lite-loadout-enh";
 const SCORE_BADGE_CLASS = "mwi-lite-combat-score";
 
-interface CombatHistoryEntry {
-  key: string;
-  characterId: number | string;
-  playerName: string;
-  mapHrid: string;
-  mapName: string;
-  difficultyTier: number;
-  startTime: number;
-  durationSec: number;
-  runCount: number;
-  eph: number;
-  income: number;
-  dailyIncome: number;
-  dailyProfit: number;
-  luck: number | null;
-  priceMode: CombatPriceMode;
-}
+type CombatHistoryEntry = CombatHistoryViewEntry;
 
 interface ActiveBattleSession {
   startTimeSec: number;
@@ -47,15 +39,6 @@ interface ActiveBattleSession {
   wave: number;
   players: BattlePlayerSnapshot[];
   fromNewBattle: boolean;
-}
-
-function escapeHtml(str: string): string {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 function parsePlayerFromNewBattle(rawPlayer: any, currentCharId: number | string | null): BattlePlayerSnapshot | null {
@@ -461,6 +444,7 @@ export function createCombatLightTrackerModule(): FeatureModule {
 
     const isZh = ctx.i18n.isZh();
     const { analyses, primary, mapName, difficultyTier } = computeSessionAnalyses();
+    const cardEl = modal.querySelector(".mwi-combat-card");
     const titleWrap = modal.querySelector(".mwi-combat-title-wrap");
     const priceBtn = modal.querySelector('[data-action="toggle-price"]');
     const copyBtn = modal.querySelector('[data-action="copy"]');
@@ -468,13 +452,19 @@ export function createCombatLightTrackerModule(): FeatureModule {
     const bodyEl = modal.querySelector(".mwi-combat-body");
     if (!titleWrap || !tabsEl || !bodyEl) return;
 
+    if (cardEl) {
+      cardEl.classList.toggle("is-solo", modalTab === "overview" && analyses.length === 1);
+      cardEl.classList.toggle("is-party", modalTab === "overview" && analyses.length > 1);
+    }
+
     const durStr = primary ? formatBattleDuration(primary.durationSec) : "--";
     const ephStr = primary && primary.completedRuns > 0 ? `${primary.eph.toFixed(1)} EPH` : `#${session?.runCount || 0}`;
     const tierBadge = `<span class="mwi-combat-badge">T${difficultyTier}</span>`;
 
-    titleWrap.innerHTML = session && primary
-      ? `<span class="mwi-combat-map-name">${escapeHtml(mapName)}</span> ${tierBadge} <span class="mwi-combat-meta">${escapeHtml(ephStr)} · ${escapeHtml(durStr)} · #${primary.runCount}</span>`
-      : `<span class="mwi-combat-map-name">${escapeHtml(isZh ? "康康战斗统计" : "Combat Luck Stats")}</span>`;
+    titleWrap.innerHTML =
+      session && primary
+        ? `${PIXEL_SWORD_SVG}<span class="mwi-combat-map-name">${escapeHtml(mapName)}</span> ${tierBadge} <span class="mwi-combat-meta">${escapeHtml(ephStr)} · ${escapeHtml(durStr)} · #${primary.runCount}</span>`
+        : `${PIXEL_SWORD_SVG}<span class="mwi-combat-map-name">${escapeHtml(isZh ? "康康战斗统计" : "Combat Luck Stats")}</span>`;
 
     if (priceBtn) {
       priceBtn.textContent =
@@ -484,7 +474,7 @@ export function createCombatLightTrackerModule(): FeatureModule {
     }
     if (copyBtn) {
       (copyBtn as HTMLElement).style.display = primary ? "" : "none";
-      copyBtn.textContent = isZh ? "📋 复制战报" : "📋 Copy";
+      copyBtn.textContent = isZh ? "复制战报" : "Copy";
     }
 
     const tabs: Array<{ id: "overview" | "details" | "history"; label: string }> = [
@@ -500,259 +490,24 @@ export function createCombatLightTrackerModule(): FeatureModule {
       .join("");
 
     if (modalTab === "overview") {
-      if (analyses.length === 0) {
-        bodyEl.innerHTML = `<div class="mwi-combat-empty">${escapeHtml(isZh ? "暂无进行中的战斗数据，请切换至“历史记录”查看过往场次。" : "No active battle data yet. Switch to History tab to view saved runs.")}</div>`;
-        return;
-      }
-
-      const ordered = [...analyses].sort((a, b) => {
-        if (primary && a.characterId === primary.characterId) return -1;
-        if (primary && b.characterId === primary.characterId) return 1;
-        return 0;
-      });
-
-      const cardsHtml = ordered
-        .map((stat) => {
-          const avgZ = stat.stddev > 0 ? (stat.currentIncome - stat.expectation) / stat.stddev : 0;
-          const luckStr = formatLuckPercent(stat.luck);
-          const avgColor = stat.hasMapModel ? (avgZ >= 0 ? "#86efac" : "#fca5a5") : "#94a3b8";
-          const skillName = stat.topSkillHrid ? ctx!.i18n.getSkillName(stat.topSkillHrid) : isZh ? "战斗" : "Combat";
-          const auraBadge = stat.aura
-            ? `<span class="mwi-combat-aura">${escapeHtml(ctx!.i18n.getName(stat.aura, "abilityNames") || stat.aura.replace("/abilities/", ""))}</span>`
-            : "";
-
-          const topDrops = [...stat.lootItems]
-            .sort((a, b) => b.unitPrice - a.unitPrice || b.totalPrice - a.totalPrice)
-            .slice(0, 10);
-
-          const dropsHtml =
-            topDrops.length > 0
-              ? topDrops
-                  .map((d) => {
-                    const name = ctx!.i18n.getItemName(d.itemHrid);
-                    const enh = d.enhancementLevel > 0 ? ` +${d.enhancementLevel}` : "";
-                    const color = getRarityColor(d.rarity);
-                    return `
-                      <div class="mwi-combat-drop-row">
-                        <span class="mwi-combat-drop-cnt">${escapeHtml(formatCombatPrice(d.count))}</span>
-                        <span class="mwi-combat-drop-name" style="color:${color}">${escapeHtml(name + enh)}</span>
-                        <span class="mwi-combat-drop-val">${escapeHtml(formatCombatPrice(d.totalPrice))}</span>
-                      </div>
-                    `;
-                  })
-                  .join("")
-              : `<div class="mwi-combat-empty-sm">${escapeHtml(isZh ? "尚无掉落" : "No loot yet")}</div>`;
-
-          return `
-            <div class="mwi-combat-player-card">
-              <div class="mwi-combat-player-title">
-                <span>${escapeHtml(stat.name)}</span>
-                <span>${auraBadge}${stat.deathCount > 0 ? `<span class="mwi-combat-death">💀${stat.deathCount}</span>` : ""}</span>
-              </div>
-              <table class="mwi-combat-table">
-                <tbody>
-                  <tr style="color:${stat.luckColor};font-weight:700">
-                    <td>${escapeHtml(isZh ? "当前运气" : "Luck")}</td>
-                    <td>${escapeHtml(luckStr)}</td>
-                  </tr>
-                  <tr class="mwi-combat-row-gap"><td colspan="2"></td></tr>
-                  <tr style="color:${stat.luckColor};font-weight:700">
-                    <td>${escapeHtml(isZh ? "当前收入" : "Income")}</td>
-                    <td>${escapeHtml(formatCombatPrice(stat.currentIncome))}</td>
-                  </tr>
-                  <tr style="color:${avgColor}">
-                    <td>├ ${escapeHtml(isZh ? "期望" : "Mean")}</td>
-                    <td>${escapeHtml(stat.hasMapModel ? formatCombatPrice(stat.expectation) : "--")}</td>
-                  </tr>
-                  <tr style="color:${avgColor}">
-                    <td>└ ${escapeHtml(isZh ? "标准差" : "StdDev")}</td>
-                    <td>${escapeHtml(stat.hasMapModel ? formatCombatPrice(stat.stddev) : "--")}</td>
-                  </tr>
-                  <tr class="mwi-combat-row-gap"><td colspan="2"></td></tr>
-                  <tr style="color:${stat.luckColor};font-weight:700">
-                    <td>${escapeHtml(isZh ? "每日收入" : "Daily Income")}</td>
-                    <td>${escapeHtml(formatCombatPrice(stat.dailyIncome))}/d</td>
-                  </tr>
-                  <tr style="color:${avgColor}">
-                    <td>├ ${escapeHtml(isZh ? "期望" : "Mean")}</td>
-                    <td>${escapeHtml(stat.hasMapModel ? `${formatCombatPrice(stat.dailyExpectation)}/d` : "--")}</td>
-                  </tr>
-                  <tr style="color:${avgColor}">
-                    <td>└ ${escapeHtml(isZh ? "标准差" : "StdDev")}</td>
-                    <td>${escapeHtml(stat.hasMapModel ? `${formatCombatPrice(stat.dailyStddev)}/d` : "--")}</td>
-                  </tr>
-                  <tr class="mwi-combat-row-gap"><td colspan="2"></td></tr>
-                  <tr style="color:${stat.luckColor};font-weight:700">
-                    <td>${escapeHtml(isZh ? "每日净利" : "Daily Profit")}</td>
-                    <td>≥${escapeHtml(formatCombatPrice(stat.dailyProfit))}/d</td>
-                  </tr>
-                  <tr style="color:${avgColor}">
-                    <td>└ ${escapeHtml(isZh ? "期望" : "Mean")}</td>
-                    <td>${escapeHtml(stat.hasMapModel ? `≥${formatCombatPrice(stat.dailyProfitExpectation)}/d` : "--")}</td>
-                  </tr>
-                  <tr><td colspan="2"><div class="mwi-combat-sep"></div></td></tr>
-                  <tr style="color:#fbbf24;font-weight:700">
-                    <td>${escapeHtml(skillName + (isZh ? "经验" : " XP"))}</td>
-                    <td>${escapeHtml(formatCombatPrice(stat.topSkillXpPerHour))}/h</td>
-                  </tr>
-                  <tr style="color:#cbd5e1">
-                    <td>${escapeHtml(isZh ? "总经验 / 时" : "Total XP/h")}</td>
-                    <td>${escapeHtml(formatCombatPrice(stat.totalXpPerHour))}/h</td>
-                  </tr>
-                  <tr style="color:#94a3b8">
-                    <td>${escapeHtml(isZh ? "日均消耗估" : "Daily Cost")}</td>
-                    <td>${escapeHtml(formatCombatPrice(stat.foodDailyCost))}/d</td>
-                  </tr>
-                </tbody>
-              </table>
-              <div class="mwi-combat-drops-list">${dropsHtml}</div>
-            </div>
-          `;
-        })
-        .join("");
-
-      bodyEl.innerHTML = `<div class="mwi-combat-cards-grid">${cardsHtml}</div>`;
+      bodyEl.innerHTML = renderModalOverviewHtml({ analyses, primary, i18n: ctx.i18n });
       return;
     }
 
     if (modalTab === "details") {
-      if (analyses.length === 0) {
-        bodyEl.innerHTML = `<div class="mwi-combat-empty">${escapeHtml(isZh ? "暂无战斗明细数据。" : "No battle details available.")}</div>`;
-        return;
-      }
-
       const activeStat =
-        analyses.find((a) => String(a.characterId) === selectedPlayerKey) || primary || analyses[0];
-      selectedPlayerKey = String(activeStat.characterId);
-
-      const playerSwitch =
-        analyses.length > 1
-          ? `<div class="mwi-combat-player-pills">${analyses
-              .map(
-                (a) =>
-                  `<button type="button" class="mwi-combat-pill ${
-                    String(a.characterId) === selectedPlayerKey ? "active" : ""
-                  }" data-player="${escapeHtml(String(a.characterId))}">${escapeHtml(a.name)}</button>`
-              )
-              .join("")}</div>`
-          : "";
-
-      const sortedDrops = [...activeStat.lootItems].sort((a, b) => b.totalPrice - a.totalPrice);
-      const totalVal = Math.max(1, activeStat.currentIncome);
-      const dropRows = sortedDrops
-        .map((d) => {
-          const itemName = ctx!.i18n.getItemName(d.itemHrid) + (d.enhancementLevel > 0 ? ` +${d.enhancementLevel}` : "");
-          const pct = ((d.totalPrice / totalVal) * 100).toFixed(1);
-          return `
-            <tr>
-              <td style="color:${getRarityColor(d.rarity)}">${escapeHtml(itemName)}</td>
-              <td>${escapeHtml(formatCombatPrice(d.count))}</td>
-              <td>${escapeHtml(d.expectedCount > 0 ? d.expectedCount.toFixed(1) : "--")}</td>
-              <td>${escapeHtml(formatCombatPrice(d.unitPrice))}</td>
-              <td>${escapeHtml(formatCombatPrice(d.totalPrice))}</td>
-              <td>${pct}%</td>
-            </tr>
-          `;
-        })
-        .join("");
-
-      const consRows = activeStat.consumables
-        .map((c) => {
-          const name = ctx!.i18n.getItemName(c.itemHrid);
-          return `
-            <tr>
-              <td>${escapeHtml(name)}</td>
-              <td>${escapeHtml(String(c.remainingCount))}</td>
-              <td>${escapeHtml(formatCombatPrice(c.askPrice))}</td>
-              <td>${escapeHtml(c.dailyCount.toFixed(1))}/d</td>
-              <td>${escapeHtml(formatCombatPrice(c.dailyCost))}/d</td>
-            </tr>
-          `;
-        })
-        .join("");
-
-      bodyEl.innerHTML = `
-        ${playerSwitch}
-        <div class="mwi-combat-section-title">${escapeHtml(isZh ? "掉落明细" : "Loot Breakdown")}</div>
-        <div class="mwi-combat-table-wrap">
-          <table class="mwi-combat-detail-table">
-            <thead>
-              <tr>
-                <th>${escapeHtml(isZh ? "物品" : "Item")}</th>
-                <th>${escapeHtml(isZh ? "实得" : "Actual")}</th>
-                <th>${escapeHtml(isZh ? "期望" : "Expected")}</th>
-                <th>${escapeHtml(isZh ? "单价" : "Unit")}</th>
-                <th>${escapeHtml(isZh ? "总价" : "Total")}</th>
-                <th>${escapeHtml(isZh ? "占比" : "Share")}</th>
-              </tr>
-            </thead>
-            <tbody>${dropRows || `<tr><td colspan="6">${escapeHtml(isZh ? "暂无掉落" : "No loot")}</td></tr>`}</tbody>
-          </table>
-        </div>
-        <div class="mwi-combat-section-title">${escapeHtml(isZh ? "消耗品估算" : "Consumables Estimate")}</div>
-        <div class="mwi-combat-table-wrap">
-          <table class="mwi-combat-detail-table">
-            <thead>
-              <tr>
-                <th>${escapeHtml(isZh ? "消耗品" : "Consumable")}</th>
-                <th>${escapeHtml(isZh ? "剩余" : "Left")}</th>
-                <th>${escapeHtml(isZh ? "Ask单价" : "Ask")}</th>
-                <th>${escapeHtml(isZh ? "日耗量" : "Per Day")}</th>
-                <th>${escapeHtml(isZh ? "日成本" : "Cost/d")}</th>
-              </tr>
-            </thead>
-            <tbody>${consRows || `<tr><td colspan="5">${escapeHtml(isZh ? "无战斗消耗品" : "No consumables")}</td></tr>`}</tbody>
-          </table>
-        </div>
-      `;
+        analyses.find((a) => String(a.characterId) === selectedPlayerKey) || primary || analyses[0] || null;
+      if (activeStat) selectedPlayerKey = String(activeStat.characterId);
+      bodyEl.innerHTML = renderModalDetailsHtml({
+        analyses,
+        activeStat,
+        selectedPlayerKey,
+        i18n: ctx.i18n,
+      });
       return;
     }
 
-    // History tab
-    const history = loadHistory();
-    const rows = history
-      .map((h) => {
-        const dt = new Date(h.startTime * 1000).toLocaleString();
-        const luckCell =
-          h.luck !== null
-            ? `<span style="color:${getRarityColor(h.luck >= 0.9 ? 1 : 0)}">${escapeHtml(formatLuckPercent(h.luck))}</span>`
-            : "--";
-        return `
-          <tr>
-            <td>${escapeHtml(dt)}</td>
-            <td>${escapeHtml(h.mapName)} T${h.difficultyTier}</td>
-            <td>${escapeHtml(formatBattleDuration(h.durationSec))}</td>
-            <td>#${h.runCount} (${h.eph.toFixed(1)}/h)</td>
-            <td>${escapeHtml(formatCombatPrice(h.income))}</td>
-            <td>${escapeHtml(formatCombatPrice(h.dailyProfit))}/d</td>
-            <td>${luckCell}</td>
-          </tr>
-        `;
-      })
-      .join("");
-
-    bodyEl.innerHTML = `
-      <div class="mwi-combat-history-toolbar">
-        <span>${escapeHtml(isZh ? `共保存 ${history.length} 条记录` : `${history.length} saved runs`)}</span>
-        <button type="button" class="mwi-combat-hbtn" data-history-action="clear">${escapeHtml(isZh ? "清空历史" : "Clear History")}</button>
-      </div>
-      <div class="mwi-combat-table-wrap">
-        <table class="mwi-combat-detail-table">
-          <thead>
-            <tr>
-              <th>${escapeHtml(isZh ? "开始时间" : "Start Time")}</th>
-              <th>${escapeHtml(isZh ? "地图" : "Zone")}</th>
-              <th>${escapeHtml(isZh ? "时长" : "Duration")}</th>
-              <th>${escapeHtml(isZh ? "场次 / EPH" : "Runs / EPH")}</th>
-              <th>${escapeHtml(isZh ? "总收入" : "Income")}</th>
-              <th>${escapeHtml(isZh ? "日净利" : "Profit/d")}</th>
-              <th>${escapeHtml(isZh ? "运气" : "Luck")}</th>
-            </tr>
-          </thead>
-          <tbody>${rows || `<tr><td colspan="7">${escapeHtml(isZh ? "暂无历史记录" : "No history yet")}</td></tr>`}</tbody>
-        </table>
-      </div>
-    `;
+    bodyEl.innerHTML = renderModalHistoryHtml({ history: loadHistory(), i18n: ctx.i18n });
   };
 
   const renderAll = (): void => {
@@ -843,58 +598,20 @@ export function createCombatLightTrackerModule(): FeatureModule {
         lastBarSignature = sig;
         metricsEl.innerHTML = "";
         priceBtnEl.style.display = "none";
-        detailsBtnEl.textContent = isZh ? `📊 战斗历史 (${historyCount})` : `📊 History (${historyCount})`;
+        detailsBtnEl.innerHTML = `${PIXEL_BAR_ICON_SVG}<span>${escapeHtml(
+          isZh ? `战斗历史 (${historyCount})` : `History (${historyCount})`
+        )}</span>`;
       }
       return;
     }
 
     priceBtnEl.style.display = "";
-    const priceLabel = priceMode === "bid_net" ? (isZh ? "Bid净" : "Bid Net") : "Ask";
-    const dur = formatBattleDuration(primary.durationSec);
-    const ephSegment =
-      primary.completedRuns > 0
-        ? `⚔ ${primary.eph.toFixed(1)} ${isZh ? "场/h" : "EPH"} (${dur})`
-        : `⚔ #${primary.runCount} (${dur})`;
-    const incSegment = `${isZh ? "收益" : "Loot"} ${formatCombatPrice(primary.currentIncome)} (${formatCombatPrice(primary.hourlyIncome)}/h · ${formatCombatPrice(primary.dailyIncome)}/d)`;
-    const expSegment =
-      primary.hasMapModel && primary.completedRuns > 0
-        ? `${isZh ? "期望" : "Exp"} ${formatCombatPrice(primary.dailyExpectation)}/d`
-        : "";
-    const profitSegment = `${isZh ? "净利" : "Profit"} ≥${formatCombatPrice(primary.dailyProfit)}/d`;
-    const luckSegment = primary.luck !== null ? `${isZh ? "运气" : "Luck"} ${formatLuckPercent(primary.luck)}` : "";
-    const topSkillName = primary.topSkillHrid ? ctx.i18n.getSkillName(primary.topSkillHrid) : isZh ? "经验" : "XP";
-    const xpSegment = `${topSkillName} ${formatCombatPrice(primary.topSkillXpPerHour)}/h`;
-    const xpTooltip = primary.skillExpEntries
-      .map((e) => `${ctx!.i18n.getSkillName(e.skillHrid)}: ${formatCombatPrice(e.xp)} (${formatCombatPrice(e.xpPerHour)}/h)`)
-      .join("\n");
-
-    const sig = [
-      ephSegment,
-      incSegment,
-      expSegment,
-      profitSegment,
-      luckSegment,
-      xpSegment,
-      priceLabel,
-      isZh,
-    ].join("|");
-
-    if (sig !== lastBarSignature) {
-      lastBarSignature = sig;
-      const parts: string[] = [
-        `<span>${escapeHtml(ephSegment)}</span>`,
-        `<span style="color:${primary.luckColor}">${escapeHtml(incSegment)}</span>`,
-      ];
-      if (expSegment) parts.push(`<span>${escapeHtml(expSegment)}</span>`);
-      parts.push(`<span>${escapeHtml(profitSegment)}</span>`);
-      if (luckSegment) {
-        parts.push(`<span style="color:${primary.luckColor};font-weight:700">${escapeHtml(luckSegment)}</span>`);
-      }
-      parts.push(`<span title="${escapeHtml(xpTooltip)}" style="color:#fbbf24">${escapeHtml(xpSegment)}</span>`);
-
-      metricsEl.innerHTML = parts.join(`<span class="mwi-combat-dot"> · </span>`);
-      priceBtnEl.textContent = priceLabel;
-      detailsBtnEl.textContent = isZh ? "📊 详情" : "📊 Details";
+    const barState = renderLootBarState({ primary, priceMode, i18n: ctx.i18n });
+    if (barState.signature !== lastBarSignature) {
+      lastBarSignature = barState.signature;
+      metricsEl.innerHTML = barState.metricsHtml;
+      priceBtnEl.textContent = barState.priceLabel;
+      detailsBtnEl.innerHTML = `${PIXEL_BAR_ICON_SVG}<span>${escapeHtml(barState.detailsLabel)}</span>`;
     }
   };
 
@@ -902,8 +619,8 @@ export function createCombatLightTrackerModule(): FeatureModule {
     id: "combat-light-tracker",
     nameZh: "康康战斗掉落与运气统计",
     nameEn: "Kangkang Combat & Luck Tracker",
-    descriptionZh: "采用康康运气统计路线：基于 new_battle 权威全队快照、FFT 特征函数运气%、日均期望净利与详细弹窗",
-    descriptionEn: "Kangkang Luck route: authoritative new_battle party snapshot, FFT CDF luck %, expected/net profit & detail modal",
+    descriptionZh: "采用康康运气统计路线：16-bit 像素风 HUD 状态栏与紧凑战报弹窗，提供运气%、日均净利与明细统计",
+    descriptionEn: "Kangkang Luck route with 16-bit pixel HUD & compact modal: FFT luck %, daily net profit and breakdown",
     category: "combat",
     defaultEnabled: true,
 
@@ -915,192 +632,7 @@ export function createCombatLightTrackerModule(): FeatureModule {
 
       unregStyle = ctx.addStyle(
         "combat-light-tracker",
-        `
-        #${COUNTER_ID} { color: rgba(255,255,255,0.72); margin-left: 5px; font-size: 12px; white-space: nowrap; }
-        #${LOOT_BAR_ID} {
-          display: flex;
-          flex-wrap: wrap;
-          align-items: center;
-          justify-content: space-between;
-          gap: 6px 10px;
-          padding: 5px 10px;
-          margin: 4px 0 6px;
-          border-radius: 6px;
-          background: rgba(19, 24, 38, 0.88);
-          border: 1px solid rgba(71, 85, 105, 0.55);
-          color: #cbd5e1;
-          font-size: 12px;
-          line-height: 1.4;
-        }
-        #${LOOT_BAR_ID} .mwi-combat-bar-metrics { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; }
-        #${LOOT_BAR_ID} .mwi-combat-dot { color: rgba(148, 163, 184, 0.55); }
-        #${LOOT_BAR_ID} .mwi-combat-bar-actions { display: inline-flex; align-items: center; gap: 6px; }
-        #${LOOT_BAR_ID} .mwi-combat-bar-btn {
-          padding: 2px 8px;
-          border-radius: 4px;
-          border: 1px solid rgba(114, 179, 255, 0.35);
-          background: rgba(30, 41, 59, 0.9);
-          color: #a8d4ff;
-          font-size: 11px;
-          cursor: pointer;
-        }
-        #${LOOT_BAR_ID} .mwi-combat-bar-btn:hover { background: rgba(45, 62, 92, 0.95); }
-        #${MODAL_ID} {
-          position: fixed;
-          inset: 0;
-          z-index: 9910;
-          background: rgba(7, 10, 18, 0.74);
-          display: none;
-          align-items: center;
-          justify-content: center;
-          font-family: system-ui, -apple-system, sans-serif;
-        }
-        #${MODAL_ID}.open { display: flex; }
-        #${MODAL_ID} .mwi-combat-card {
-          width: min(880px, 94vw);
-          max-height: 86vh;
-          display: flex;
-          flex-direction: column;
-          background: #131826;
-          color: #e6ecf7;
-          border: 1px solid #2b3856;
-          border-radius: 12px;
-          box-shadow: 0 20px 52px rgba(0, 0, 0, 0.68);
-          overflow: hidden;
-        }
-        #${MODAL_ID} .mwi-combat-modal-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-          padding: 12px 16px;
-          border-bottom: 1px solid #232d45;
-          background: #171e30;
-        }
-        #${MODAL_ID} .mwi-combat-title-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; }
-        #${MODAL_ID} .mwi-combat-badge {
-          padding: 1px 6px;
-          border-radius: 4px;
-          background: rgba(96, 165, 250, 0.18);
-          border: 1px solid rgba(96, 165, 250, 0.4);
-          color: #93c5fd;
-          font-size: 11px;
-        }
-        #${MODAL_ID} .mwi-combat-meta { font-weight: 500; font-size: 12px; color: #94a3b8; }
-        #${MODAL_ID} .mwi-combat-header-actions { display: flex; align-items: center; gap: 6px; }
-        #${MODAL_ID} .mwi-combat-hbtn {
-          padding: 4px 9px;
-          border-radius: 5px;
-          border: 1px solid #334155;
-          background: #1e293b;
-          color: #cbd5e1;
-          font-size: 12px;
-          cursor: pointer;
-        }
-        #${MODAL_ID} .mwi-combat-hbtn:hover { background: #2b3a52; color: #fff; }
-        #${MODAL_ID} .mwi-combat-close {
-          width: 28px;
-          height: 28px;
-          border-radius: 6px;
-          border: 1px solid #3b2d3b;
-          background: rgba(187, 94, 94, 0.2);
-          color: #fda4af;
-          font-size: 16px;
-          cursor: pointer;
-        }
-        #${MODAL_ID} .mwi-combat-tabs {
-          display: flex;
-          gap: 6px;
-          padding: 8px 16px;
-          border-bottom: 1px solid #232d45;
-          background: #101522;
-        }
-        #${MODAL_ID} .mwi-combat-tab {
-          padding: 5px 12px;
-          border-radius: 6px;
-          border: 1px solid transparent;
-          background: transparent;
-          color: #94a3b8;
-          font-size: 12px;
-          font-weight: 600;
-          cursor: pointer;
-        }
-        #${MODAL_ID} .mwi-combat-tab.active {
-          background: #23304c;
-          border-color: rgba(114, 179, 255, 0.45);
-          color: #e6ecf7;
-        }
-        #${MODAL_ID} .mwi-combat-body {
-          padding: 14px 16px;
-          overflow-y: auto;
-          font-size: 12px;
-        }
-        #${MODAL_ID} .mwi-combat-cards-grid {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 12px;
-          justify-content: flex-start;
-        }
-        #${MODAL_ID} .mwi-combat-player-card {
-          flex: 1 1 250px;
-          max-width: 340px;
-          background: #1a2134;
-          border: 1px solid #2c3858;
-          border-radius: 8px;
-          padding: 10px 12px;
-        }
-        #${MODAL_ID} .mwi-combat-player-title {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding-bottom: 6px;
-          margin-bottom: 8px;
-          border-bottom: 1px solid #2a3450;
-          font-size: 14px;
-          font-weight: 700;
-          color: #edf0f9;
-        }
-        #${MODAL_ID} .mwi-combat-aura {
-          font-size: 11px;
-          font-weight: 500;
-          padding: 1px 6px;
-          border-radius: 4px;
-          background: rgba(168, 85, 247, 0.2);
-          color: #d8b4fe;
-          margin-right: 4px;
-        }
-        #${MODAL_ID} .mwi-combat-death { font-size: 11px; color: #f87171; }
-        #${MODAL_ID} .mwi-combat-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        #${MODAL_ID} .mwi-combat-table td { padding: 1.5px 0; }
-        #${MODAL_ID} .mwi-combat-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
-        #${MODAL_ID} .mwi-combat-row-gap td { height: 5px; }
-        #${MODAL_ID} .mwi-combat-sep { height: 1px; background: #2c3858; margin: 6px 0; }
-        #${MODAL_ID} .mwi-combat-drops-list { margin-top: 8px; padding-top: 6px; border-top: 1px solid #2c3858; display: flex; flex-direction: column; gap: 3px; }
-        #${MODAL_ID} .mwi-combat-drop-row { display: flex; justify-content: space-between; gap: 6px; font-size: 12px; }
-        #${MODAL_ID} .mwi-combat-drop-cnt { color: #e2e8f0; min-width: 36px; font-variant-numeric: tabular-nums; }
-        #${MODAL_ID} .mwi-combat-drop-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        #${MODAL_ID} .mwi-combat-drop-val { color: #94a3b8; font-variant-numeric: tabular-nums; }
-        #${MODAL_ID} .mwi-combat-player-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-        #${MODAL_ID} .mwi-combat-pill {
-          padding: 4px 10px;
-          border-radius: 999px;
-          border: 1px solid #334155;
-          background: #1e293b;
-          color: #cbd5e1;
-          font-size: 12px;
-          cursor: pointer;
-        }
-        #${MODAL_ID} .mwi-combat-pill.active { background: #2563eb; border-color: #60a5fa; color: #fff; }
-        #${MODAL_ID} .mwi-combat-section-title { font-size: 13px; font-weight: 700; margin: 10px 0 6px; color: #cbd5e1; }
-        #${MODAL_ID} .mwi-combat-table-wrap { overflow-x: auto; border: 1px solid #25304a; border-radius: 6px; }
-        #${MODAL_ID} .mwi-combat-detail-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        #${MODAL_ID} .mwi-combat-detail-table th,
-        #${MODAL_ID} .mwi-combat-detail-table td { padding: 5px 8px; border-bottom: 1px solid #1e273d; text-align: left; white-space: nowrap; }
-        #${MODAL_ID} .mwi-combat-detail-table th { background: #192136; color: #94a3b8; font-weight: 600; }
-        #${MODAL_ID} .mwi-combat-history-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; color: #94a3b8; }
-        #${MODAL_ID} .mwi-combat-empty, #${MODAL_ID} .mwi-combat-empty-sm { color: #94a3b8; text-align: center; padding: 16px 8px; }
-        #${MODAL_ID} .mwi-combat-empty-sm { padding: 6px 0; }
-        `
+        getCombatPixelStyles({ counterId: COUNTER_ID, lootBarId: LOOT_BAR_ID, modalId: MODAL_ID })
       );
 
       unregPrice = ctx.marketStore.onPriceUpdate(() => {
