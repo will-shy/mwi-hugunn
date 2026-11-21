@@ -218,16 +218,31 @@ export function createActionTimerModule(): FeatureModule {
         "planner-action-timer",
         `
         #${HEADER_TIMER_ID} {
+          display: inline-flex;
+          align-items: center;
           margin-left: 8px;
-          font-size: 12px;
-          color: #93c5fd;
-          font-weight: 500;
+          padding: 1px 7px;
+          border-radius: 0;
+          border: 1px solid var(--mwi-px-border-inner, #4f6fc4);
+          background: var(--mwi-px-card-bg, linear-gradient(180deg, #17244d 0%, #0e1634 100%));
+          box-shadow: 0 0 0 1px #070b16, inset 1px 1px 0 #293e7a;
+          font-size: 11.5px;
+          font-family: var(--mwi-px-mono, monospace);
+          font-variant-numeric: tabular-nums;
+          color: var(--mwi-px-accent, #93c5fd);
+          font-weight: 700;
           white-space: nowrap;
         }
         .${QUEUE_TAG_CLASS} {
           margin-left: 6px;
-          font-size: 11px;
-          color: #a5b4fc;
+          padding: 0 4px;
+          border-radius: 0;
+          border: 1px solid #354c8c;
+          background: #101938;
+          font-size: 10.5px;
+          font-family: var(--mwi-px-mono, monospace);
+          font-variant-numeric: tabular-nums;
+          color: #bfdbfe;
           white-space: nowrap;
         }
         `

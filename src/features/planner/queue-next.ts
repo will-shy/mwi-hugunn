@@ -189,6 +189,13 @@ export function createQueueNextModule(): FeatureModule {
         [${NEXT_ATTR}] {
           position: relative;
           min-width: 26px;
+          border-radius: 0 !important;
+          border: 1px solid var(--mwi-px-border, #8eb1ff) !important;
+          background: var(--mwi-px-btn-bg, linear-gradient(180deg, #324a8f 0%, #22356b 100%)) !important;
+          box-shadow: var(--mwi-px-shadow-btn, 0 0 0 1px #080d1a) !important;
+          color: #f8fafc !important;
+          font-family: var(--mwi-px-mono, monospace) !important;
+          font-weight: 700 !important;
         }
         [${NEXT_ATTR}]:disabled {
           cursor: default;

@@ -7,6 +7,7 @@ import {
   registry,
   wsBus,
 } from "./core";
+import { mountPixelTheme } from "./core/pixel-theme";
 import { combatModules, isLabyrinthWorkerActive } from "./features/combat";
 import { marketModules } from "./features/market";
 import { plannerModules } from "./features/planner";
@@ -32,7 +33,8 @@ function bootstrap(): void {
   registry.registerAll([...marketModules, ...plannerModules, ...combatModules]);
   registry.initAll();
 
-  // 4. Start global single rAF-batched MutationObserver + route gate & settings drawer
+  // 4. Start global single rAF-batched MutationObserver + route gate, pixel theme & settings drawer
+  mountPixelTheme();
   mountSettingsUI(isLabyrinthWorkerActive);
   domScheduler.start();
 

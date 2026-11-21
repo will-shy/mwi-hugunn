@@ -979,22 +979,30 @@ export function createItemCalculatorModule(): FeatureModule {
         "planner-item-calculator",
         `
         .${IMPORT_BTN_CLASS} {
-          background: #1770b3;
-          color: #fff;
-          border: none;
-          border-radius: 4px;
-          padding: 4px 10px;
+          background: var(--mwi-px-btn-bg, linear-gradient(180deg, #324a8f 0%, #22356b 100%));
+          color: #f8fafc;
+          border: 1px solid var(--mwi-px-border, #8eb1ff);
+          border-radius: 0;
+          box-shadow: var(--mwi-px-shadow-btn, 0 0 0 1px #080d1a);
+          padding: 3px 9px;
           margin-left: 8px;
           cursor: pointer;
-          font-size: 12px;
-          font-weight: 600;
+          font-family: var(--mwi-px-mono, monospace);
+          font-size: 11.5px;
+          font-weight: 700;
         }
         .mwi-lite-calc-root {
           display: flex;
           flex-direction: column;
           gap: 8px;
-          font-size: 12.5px;
-          color: #e5e7eb;
+          padding: 8px;
+          background: var(--mwi-px-panel-bg, linear-gradient(180deg, #121c3b 0%, #0c1228 100%));
+          border: 2px solid var(--mwi-px-border, #9dbbff);
+          box-shadow: var(--mwi-px-shadow-card, 0 0 0 2px #070b16);
+          font-family: var(--mwi-px-mono, monospace);
+          font-variant-numeric: tabular-nums;
+          font-size: 12px;
+          color: var(--mwi-px-text, #e2e8f0);
         }
         .mwi-lite-calc-topbar {
           display: flex;
@@ -1005,9 +1013,10 @@ export function createItemCalculatorModule(): FeatureModule {
           display: flex;
           align-items: center;
           gap: 4px;
-          background: #2c2e45;
+          background: #141f46;
+          border: 1px solid var(--mwi-px-border-inner, #4f6fc4);
           padding: 4px;
-          border-radius: 5px;
+          border-radius: 0;
           position: relative;
         }
         .mwi-lite-calc-searchbox { flex: 1.4; min-width: 240px; }
@@ -1015,48 +1024,66 @@ export function createItemCalculatorModule(): FeatureModule {
         .mwi-lite-calc-searchbox input[type="text"],
         .mwi-lite-calc-housebox select,
         .mwi-lite-calc-housebox input {
-          background: #dde2f8;
-          color: #0f172a;
-          border: none;
-          border-radius: 4px;
-          padding: 4px 6px;
-          font-size: 12px;
+          background: #0b1124;
+          color: #f8fafc;
+          border: 1px solid #5c7cd4;
+          border-radius: 0;
+          padding: 3px 6px;
+          font-size: 11.5px;
+          font-family: inherit;
         }
         .mwi-lite-calc-searchbox > input:first-child,
         .mwi-lite-calc-housebox select { flex: 1; min-width: 60px; }
         .mwi-lite-calc-qty { width: 52px; }
         .mwi-lite-calc-lv { width: 42px; }
         .mwi-lite-calc-add {
-          background: #2e8b57; color: #fff; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer;
+          background: var(--mwi-px-btn-green, linear-gradient(180deg, #1f6d43 0%, #165132 100%));
+          color: #fff;
+          border: 1px solid var(--mwi-px-green-soft, #86efac);
+          border-radius: 0;
+          box-shadow: 0 0 0 1px #06140c;
+          padding: 3px 8px;
+          font-weight: 700;
+          cursor: pointer;
         }
         .mwi-lite-calc-clear, .mwi-lite-calc-del {
-          background: #dc2626; color: #fff; border: none; border-radius: 4px; padding: 3px 7px; cursor: pointer;
+          background: linear-gradient(180deg, #7f1d1d 0%, #581313 100%);
+          color: #fff;
+          border: 1px solid #fca5a5;
+          border-radius: 0;
+          padding: 3px 7px;
+          font-weight: 700;
+          cursor: pointer;
         }
         .mwi-lite-calc-dropdown {
-          position: absolute; left: 4px; top: 34px; width: 220px; max-height: 280px; overflow-y: auto;
-          background: #1e2438; border: 1px solid #3f4b70; border-radius: 5px; z-index: 1200; padding: 3px;
+          position: absolute; left: 4px; top: 34px; width: 224px; max-height: 280px; overflow-y: auto;
+          background: #0e1634; border: 2px solid var(--mwi-px-border, #9dbbff);
+          box-shadow: 0 0 0 2px #070b16; border-radius: 0; z-index: 1200; padding: 3px;
         }
         .mwi-lite-calc-opt {
-          display: flex; align-items: center; gap: 6px; padding: 4px 6px; cursor: pointer; border-radius: 4px;
+          display: flex; align-items: center; gap: 6px; padding: 4px 6px; cursor: pointer; border-radius: 0;
         }
-        .mwi-lite-calc-opt:hover { background: #3b4668; }
+        .mwi-lite-calc-opt:hover { background: #22356b; }
         .mwi-lite-calc-columns {
           display: grid; grid-template-columns: 1.3fr 1fr; gap: 8px; align-items: start;
         }
         .mwi-lite-calc-cat, .mwi-lite-calc-shortages, .mwi-lite-calc-required {
-          background: #23273d; border-radius: 5px; margin-bottom: 6px; padding: 3px;
+          background: var(--mwi-px-card-bg, linear-gradient(180deg, #17244d 0%, #0e1634 100%));
+          border: 1px solid var(--mwi-px-border-inner, #4f6fc4);
+          box-shadow: 0 0 0 1px #070b16;
+          border-radius: 0; margin-bottom: 6px; padding: 3px;
         }
-        .mwi-lite-calc-cat.active > summary { background: #147147; }
-        .mwi-lite-calc-cat.muted > summary { background: #393a5b; }
-        .mwi-lite-calc-shortages > summary { background: #af3914; }
-        .mwi-lite-calc-required > summary { background: #1770b3; }
+        .mwi-lite-calc-cat.active > summary { background: #165132; border-bottom: 1px solid #4ade80; }
+        .mwi-lite-calc-cat.muted > summary { background: #1c284f; }
+        .mwi-lite-calc-shortages > summary { background: #6b2416; border-bottom: 1px solid #f87171; }
+        .mwi-lite-calc-required > summary { background: #22356b; border-bottom: 1px solid #8eb1ff; }
         .mwi-lite-calc-root summary {
-          display: flex; align-items: center; gap: 5px; padding: 3px 6px; border-radius: 4px; cursor: pointer; font-weight: 600;
+          display: flex; align-items: center; gap: 5px; padding: 3px 6px; border-radius: 0; cursor: pointer; font-weight: 700;
         }
         .mwi-lite-calc-x { margin-left: auto; color: #fca5a5; padding: 0 4px; cursor: pointer; }
         .mwi-lite-calc-row {
           display: flex; align-items: center; justify-content: space-between; gap: 6px;
-          padding: 3px 5px; border-bottom: 1px solid rgba(255,255,255,0.06);
+          padding: 3px 5px; border-bottom: 1px dashed #223468;
         }
         .mwi-lite-calc-row.off { opacity: 0.55; }
         .mwi-lite-calc-itemname {
@@ -1065,10 +1092,10 @@ export function createItemCalculatorModule(): FeatureModule {
         .mwi-lite-calc-itemname span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .mwi-lite-calc-rightctrl { display: flex; align-items: center; gap: 4px; }
         .mwi-lite-calc-num {
-          width: 56px; background: #dde2f8; color: #111827; border: none; border-radius: 3px; padding: 2px 4px; text-align: right;
+          width: 56px; background: #0b1124; color: #f8fafc; border: 1px solid #5c7cd4; border-radius: 0; padding: 2px 4px; text-align: right;
         }
         .mwi-lite-calc-short-badge {
-          background: #393a5b; color: #fde68a; border-radius: 4px; padding: 1px 6px; font-weight: 600;
+          background: #141f46; border: 1px solid var(--mwi-px-gold, #fde047); color: var(--mwi-px-gold, #fde047); border-radius: 0; padding: 1px 6px; font-weight: 700;
         }
         `
       );

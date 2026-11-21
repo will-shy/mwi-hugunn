@@ -643,30 +643,33 @@ export function createMarketShortcutsModule(): FeatureModule {
           flex: 0 0 30px;
           padding: 2px;
           position: relative;
-          border: 1px solid rgba(144, 166, 235, 0.55);
-          border-radius: 5px;
-          background: #282844;
-          color: #e8e8ef;
+          border: 1px solid var(--mwi-px-border, #9dbbff);
+          border-radius: 0;
+          background: var(--mwi-px-card-bg, linear-gradient(180deg, #17244d 0%, #0e1634 100%));
+          box-shadow: 0 0 0 1px #070b16, inset 1px 1px 0 #293e7a;
+          color: #f1f5f9;
           cursor: pointer;
           box-sizing: border-box;
         }
         #${BAR_ID} .mwi-lite-ms-item.is-pinned {
-          border-color: rgba(251, 181, 75, 0.7);
+          border-color: var(--mwi-px-gold, #fde047);
+          box-shadow: 0 0 0 1px #070b16, inset 0 0 0 1px rgba(250, 204, 21, 0.45);
         }
         #${BAR_ID} .mwi-lite-ms-item.is-active {
-          background: #404064;
+          background: var(--mwi-px-btn-bg, linear-gradient(180deg, #324a8f 0%, #22356b 100%));
+          border-color: var(--mwi-px-border-bright, #d5e5ff);
         }
         #${BAR_ID} .mwi-lite-ms-badge {
           position: absolute;
           top: 0;
           left: 1px;
           z-index: 1;
-          color: #fbb54b;
-          font-size: 12px;
-          font-weight: 500;
-          line-height: 14px;
+          color: #fde047;
+          font-size: 11px;
+          font-weight: 800;
+          line-height: 13px;
           pointer-events: none;
-          text-shadow: -1px 0 #131419, 0 1px #131419, 1px 0 #131419, 0 -1px #131419;
+          text-shadow: 1px 1px 0 #070b16;
         }
         .mwi-lite-current-item-host {
           display: flex;
@@ -695,20 +698,21 @@ export function createMarketShortcutsModule(): FeatureModule {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          background: #282844;
-          border: 1px solid rgba(144, 166, 235, 0.55);
-          border-radius: 4px;
-          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
-          color: #e8e8ef;
-          font-size: 12px;
-          font-weight: 600;
+          background: var(--mwi-px-btn-bg, linear-gradient(180deg, #324a8f 0%, #22356b 100%));
+          border: 1px solid var(--mwi-px-border, #8eb1ff);
+          border-radius: 0;
+          box-shadow: var(--mwi-px-shadow-btn, 0 0 0 1px #080d1a);
+          color: #f8fafc;
+          font-family: var(--mwi-px-mono, monospace);
+          font-size: 11.5px;
+          font-weight: 800;
           cursor: pointer;
           box-sizing: border-box;
         }
         #${JUMP_BAR_ID} .mwi-lite-enh-btn.is-active {
-          background: #404064;
-          border-color: rgba(251, 181, 75, 0.85);
-          color: #fbb54b;
+          background: var(--mwi-px-btn-gold, linear-gradient(180deg, #7c580c 0%, #523907 100%));
+          border-color: var(--mwi-px-gold, #fde047);
+          color: #fef08a;
         }
         #${PIN_BTN_ID} {
           position: absolute;
@@ -722,34 +726,36 @@ export function createMarketShortcutsModule(): FeatureModule {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          border: 1px solid rgba(144, 166, 235, 0.55);
-          border-radius: 5px;
-          background: #282844;
-          color: #e8e8ef;
+          border: 1px solid var(--mwi-px-border, #8eb1ff);
+          border-radius: 0;
+          background: var(--mwi-px-btn-bg, linear-gradient(180deg, #324a8f 0%, #22356b 100%));
+          box-shadow: var(--mwi-px-shadow-btn, 0 0 0 1px #080d1a);
+          color: #f8fafc;
           cursor: pointer;
           z-index: 8;
           box-sizing: border-box;
         }
         #${PIN_BTN_ID}.is-pinned {
-          background: #68502d;
-          border-color: rgba(251, 181, 75, 0.75);
-          color: #fbb54b;
+          background: var(--mwi-px-btn-gold, linear-gradient(180deg, #7c580c 0%, #523907 100%));
+          border-color: var(--mwi-px-gold, #fde047);
+          color: #fef08a;
         }
         #${SETTINGS_POPOVER_ID} {
           position: fixed;
           z-index: 10002;
-          width: 232px;
+          width: 240px;
           max-width: calc(100vw - 16px);
           display: flex;
           flex-direction: column;
           gap: 10px;
           padding: 12px;
           box-sizing: border-box;
-          border: 1px solid rgba(144, 166, 235, 0.55);
-          border-radius: 8px;
-          background: #1b1c2c;
-          color: #e8e8ef;
-          box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+          border: 2px solid var(--mwi-px-border-bright, #d5e5ff);
+          border-radius: 0;
+          background: var(--mwi-px-panel-bg, linear-gradient(180deg, #121c3b 0%, #0c1228 100%));
+          color: #f1f5f9;
+          box-shadow: var(--mwi-px-shadow-panel, 0 0 0 2px #060913);
+          font-family: var(--mwi-px-mono, monospace);
           font-size: 12px;
         }
         #${SETTINGS_POPOVER_ID} .mwi-lite-ms-pop-row {
@@ -761,14 +767,14 @@ export function createMarketShortcutsModule(): FeatureModule {
         #${SETTINGS_POPOVER_ID} input[type="number"] {
           width: 60px;
           padding: 4px 5px;
-          border: 1px solid #666a89;
-          border-radius: 4px;
-          background: #131419;
-          color: #e8e8ef;
+          border: 1px solid #5c7cd4;
+          border-radius: 0;
+          background: #0b1124;
+          color: #f8fafc;
           font: inherit;
         }
         #${SETTINGS_POPOVER_ID} .mwi-lite-ms-pop-hint {
-          color: #a3a6bd;
+          color: var(--mwi-px-sub, #9dbbff);
           line-height: 1.45;
         }
         #${SETTINGS_POPOVER_ID} .mwi-lite-ms-pop-actions {
@@ -778,16 +784,18 @@ export function createMarketShortcutsModule(): FeatureModule {
         }
         #${SETTINGS_POPOVER_ID} button {
           padding: 4px 9px;
-          border-radius: 4px;
-          border: 1px solid #4d5478;
-          background: #282844;
-          color: #e8e8ef;
+          border-radius: 0;
+          border: 1px solid var(--mwi-px-border, #8eb1ff);
+          background: var(--mwi-px-btn-bg, linear-gradient(180deg, #324a8f 0%, #22356b 100%));
+          box-shadow: var(--mwi-px-shadow-btn, 0 0 0 1px #080d1a);
+          color: #f8fafc;
           cursor: pointer;
-          font-size: 12px;
+          font-size: 11.5px;
+          font-weight: 700;
         }
         #${SETTINGS_POPOVER_ID} button.primary {
-          background: #2563eb;
-          border-color: #3b82f6;
+          background: var(--mwi-px-btn-green, linear-gradient(180deg, #1f6d43 0%, #165132 100%));
+          border-color: var(--mwi-px-green-soft, #86efac);
           color: #fff;
         }
         @media (max-width: 760px) {

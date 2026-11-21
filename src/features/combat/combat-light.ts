@@ -833,13 +833,16 @@ export function createLoadoutBadgeModule(): FeatureModule {
           left: 2px;
           z-index: 5;
           font-size: 10px;
-          font-weight: 700;
-          color: #fde047;
-          background: rgba(15, 23, 42, 0.85);
+          font-weight: 800;
+          font-family: var(--mwi-px-mono, monospace);
+          color: var(--mwi-px-gold, #fde047);
+          background: #0e1634;
+          border: 1px solid var(--mwi-px-border-inner, #4f6fc4);
           padding: 0 3px;
-          border-radius: 3px;
+          border-radius: 0;
           pointer-events: none;
           line-height: 1.2;
+          text-shadow: 1px 1px 0 #070b16;
         }
         `
       );
@@ -965,12 +968,15 @@ export function createCombatScoreModule(): FeatureModule {
           display: inline-block;
           margin: 4px 0;
           padding: 3px 9px;
-          border-radius: 5px;
-          background: rgba(59, 130, 246, 0.16);
-          border: 1px solid rgba(96, 165, 250, 0.35);
-          color: #93c5fd;
+          border-radius: 0;
+          background: var(--mwi-px-card-bg, linear-gradient(180deg, #17244d 0%, #0e1634 100%));
+          border: 2px solid var(--mwi-px-border, #9dbbff);
+          box-shadow: 0 0 0 1px #070b16, inset 1px 1px 0 #293e7a;
+          color: var(--mwi-px-accent, #93c5fd);
+          font-family: var(--mwi-px-mono, monospace);
+          font-variant-numeric: tabular-nums;
           font-size: 12px;
-          font-weight: 600;
+          font-weight: 700;
         }
         `
       );

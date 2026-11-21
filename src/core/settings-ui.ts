@@ -25,37 +25,41 @@ export function mountSettingsUI(isWorkerActiveFn: () => boolean): void {
       gap: 4px;
       margin-left: 8px;
       padding: 3px 9px;
-      border-radius: 6px;
-      border: 1px solid rgba(114, 179, 255, 0.35);
-      background: rgba(24, 34, 56, 0.9);
-      color: #a8d4ff;
-      font-size: 12px;
-      font-weight: 600;
+      border-radius: 0;
+      border: 1px solid var(--mwi-px-border, #9dbbff);
+      background: var(--mwi-px-btn-bg, linear-gradient(180deg, #324a8f 0%, #22356b 100%));
+      box-shadow: var(--mwi-px-shadow-btn, 0 0 0 1px #080d1a);
+      color: #f8fafc;
+      font-size: 11.5px;
+      font-weight: 700;
+      font-family: var(--mwi-px-mono, monospace);
       cursor: pointer;
       user-select: none;
-      line-height: 1.4;
-      transition: background 0.15s ease, border-color 0.15s ease;
+      line-height: 1.3;
     }
     #${SETTINGS_BTN_ID}:hover {
-      background: rgba(38, 56, 92, 0.95);
-      border-color: rgba(114, 179, 255, 0.7);
+      background: var(--mwi-px-btn-hover, linear-gradient(180deg, #405eb3 0%, #2b4385 100%));
+      color: #ffffff;
+    }
+    #${SETTINGS_BTN_ID}:active {
+      transform: translateY(1px);
     }
     #${SETTINGS_BTN_ID}.mwi-lite-floating {
       position: fixed;
       right: 14px;
       bottom: 14px;
       z-index: 9500;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+      box-shadow: 0 0 0 2px #070b16, 0 4px 12px rgba(0, 0, 0, 0.6);
     }
     #${SETTINGS_MODAL_ID} {
       position: fixed;
       inset: 0;
       z-index: 9900;
-      background: rgba(7, 10, 18, 0.72);
+      background: rgba(5, 8, 18, 0.78);
       display: none;
       align-items: center;
       justify-content: center;
-      font-family: system-ui, -apple-system, sans-serif;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     }
     #${SETTINGS_MODAL_ID}.open {
       display: flex;
@@ -65,80 +69,86 @@ export function mountSettingsUI(isWorkerActiveFn: () => boolean): void {
       max-height: 82vh;
       display: flex;
       flex-direction: column;
-      background: #131826;
-      color: #e6ecf7;
-      border: 1px solid #2b3856;
-      border-radius: 12px;
-      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.65);
+      background: var(--mwi-px-panel-bg, linear-gradient(180deg, #121c3b 0%, #0c1228 100%));
+      color: #edf2ff;
+      border: 2px solid var(--mwi-px-border-bright, #d5e5ff);
+      border-radius: 0;
+      box-shadow: var(--mwi-px-shadow-panel, 0 0 0 2px #060913);
       overflow: hidden;
     }
     #${SETTINGS_MODAL_ID} .mwi-lite-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 14px 18px;
-      border-bottom: 1px solid #232d45;
-      background: #171e30;
+      padding: 12px 16px;
+      border-bottom: 2px solid var(--mwi-px-border-inner, #4f6fc4);
+      background: var(--mwi-px-head-bg, linear-gradient(180deg, #1d2c5e 0%, #141f46 100%));
     }
     #${SETTINGS_MODAL_ID} .mwi-lite-title {
-      font-size: 16px;
-      font-weight: 700;
+      font-size: 15px;
+      font-weight: 800;
       color: #ffffff;
+      text-shadow: 2px 2px 0 #070b16;
     }
     #${SETTINGS_MODAL_ID} .mwi-lite-status {
-      font-size: 12px;
-      color: #93a7cb;
+      font-size: 11.5px;
+      color: var(--mwi-px-sub, #9dbbff);
       margin-top: 2px;
+      font-family: var(--mwi-px-mono, monospace);
     }
     #${SETTINGS_MODAL_ID} .mwi-lite-close {
-      background: transparent;
-      border: 1px solid #334263;
-      color: #c2cee5;
-      border-radius: 6px;
-      padding: 4px 10px;
+      background: linear-gradient(180deg, #7f1d1d 0%, #581313 100%);
+      border: 1px solid #fca5a5;
+      box-shadow: 0 0 0 1px #080d1a, inset 1px 1px 0 #f87171;
+      color: #ffffff;
+      border-radius: 0;
+      padding: 3px 9px;
       cursor: pointer;
-      font-size: 13px;
+      font-size: 12px;
+      font-weight: 700;
     }
     #${SETTINGS_MODAL_ID} .mwi-lite-body {
-      padding: 14px 18px;
+      padding: 12px 16px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: 12px;
     }
     #${SETTINGS_MODAL_ID} .mwi-lite-group-title {
-      font-size: 13px;
-      font-weight: 700;
-      color: #7cc0ff;
-      margin-bottom: 8px;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--mwi-px-gold, #fde047);
+      margin-bottom: 6px;
       text-transform: uppercase;
       letter-spacing: 0.4px;
+      text-shadow: 1px 1px 0 #070b16;
     }
     #${SETTINGS_MODAL_ID} .mwi-lite-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 9px 12px;
-      border-radius: 8px;
-      background: #1a2235;
-      border: 1px solid #25304a;
+      padding: 8px 11px;
+      border-radius: 0;
+      background: var(--mwi-px-card-bg, linear-gradient(180deg, #17244d 0%, #0e1634 100%));
+      border: 1px solid var(--mwi-px-border-inner, #4f6fc4);
+      box-shadow: 0 0 0 1px #070b16, inset 1px 1px 0 #293e7a;
       margin-bottom: 6px;
     }
     #${SETTINGS_MODAL_ID} .mwi-lite-row-name {
-      font-size: 13px;
-      font-weight: 600;
-      color: #eef3fc;
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #f1f5f9;
     }
     #${SETTINGS_MODAL_ID} .mwi-lite-row-desc {
-      font-size: 11.5px;
-      color: #93a5c7;
+      font-size: 11px;
+      color: var(--mwi-px-sub, #9dbbff);
       margin-top: 2px;
     }
     #${SETTINGS_MODAL_ID} input[type="checkbox"] {
-      width: 17px;
-      height: 17px;
-      accent-color: #4f9cff;
+      width: 16px;
+      height: 16px;
+      accent-color: #4ade80;
       cursor: pointer;
       flex-shrink: 0;
     }

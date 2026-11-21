@@ -215,15 +215,18 @@ export function createTooltipEvModule(): FeatureModule {
         `
         .mwi-lite-tooltip-box {
           margin-top: 6px;
-          padding-top: 5px;
-          border-top: 1px solid rgba(148, 163, 184, 0.25);
+          padding: 5px 6px;
+          border-top: 2px solid var(--mwi-px-border-inner, #4f6fc4);
+          background: rgba(12, 18, 40, 0.72);
           font-size: 11.5px;
+          font-family: var(--mwi-px-mono, monospace);
+          font-variant-numeric: tabular-nums;
           line-height: 1.45;
-          color: #cbd5e1;
+          color: var(--mwi-px-text, #e2e8f0);
         }
-        .mwi-lite-tooltip-box b { color: #fde68a; }
-        .mwi-lite-tooltip-box .ev b { color: #6ee7b7; }
-        .mwi-lite-tooltip-box .token b { color: #93c5fd; }
+        .mwi-lite-tooltip-box b { color: var(--mwi-px-gold, #fde047); }
+        .mwi-lite-tooltip-box .ev b { color: var(--mwi-px-green, #4ade80); }
+        .mwi-lite-tooltip-box .token b { color: var(--mwi-px-accent, #93c5fd); }
         `
       );
 
@@ -429,12 +432,15 @@ export function createNetworthModule(): FeatureModule {
           align-items: center;
           margin-left: 8px;
           padding: 2px 8px;
-          border-radius: 5px;
-          background: rgba(234, 179, 8, 0.14);
-          border: 1px solid rgba(250, 204, 21, 0.35);
-          color: #fde047;
+          border-radius: 0;
+          background: var(--mwi-px-card-bg, linear-gradient(180deg, #17244d 0%, #0e1634 100%));
+          border: 2px solid var(--mwi-px-gold, #fde047);
+          box-shadow: 0 0 0 1px #070b16, inset 1px 1px 0 #7c580c;
+          color: var(--mwi-px-gold, #fde047);
+          font-family: var(--mwi-px-mono, monospace);
+          font-variant-numeric: tabular-nums;
           font-size: 12px;
-          font-weight: 600;
+          font-weight: 800;
           cursor: pointer;
           user-select: none;
         }
@@ -443,25 +449,30 @@ export function createNetworthModule(): FeatureModule {
           top: 48px;
           right: 20px;
           z-index: 9600;
-          min-width: 270px;
-          background: #141927;
-          border: 1px solid #303d5c;
-          border-radius: 8px;
+          min-width: 280px;
+          background: var(--mwi-px-panel-bg, linear-gradient(180deg, #121c3b 0%, #0c1228 100%));
+          border: 2px solid var(--mwi-px-border-bright, #d5e5ff);
+          border-radius: 0;
           padding: 10px 12px;
-          color: #e2e8f0;
+          color: var(--mwi-px-text, #e2e8f0);
+          font-family: var(--mwi-px-mono, monospace);
+          font-variant-numeric: tabular-nums;
           font-size: 12px;
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+          box-shadow: var(--mwi-px-shadow-panel, 0 0 0 2px #060913);
         }
         #${NW_POPOVER_ID} .mwi-lite-nw-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: 10px;
+          padding-bottom: 6px;
+          border-bottom: 2px solid var(--mwi-px-border-inner, #4f6fc4);
           margin-bottom: 8px;
         }
         #${NW_POPOVER_ID} .mwi-lite-nw-title {
-          font-weight: 700;
-          color: #fde047;
+          font-weight: 800;
+          color: var(--mwi-px-gold, #fde047);
+          text-shadow: 1px 1px 0 #070b16;
         }
         #${NW_POPOVER_ID} .mwi-lite-nw-actions {
           display: inline-flex;
@@ -469,34 +480,38 @@ export function createNetworthModule(): FeatureModule {
           gap: 6px;
         }
         #${NW_POPOVER_ID} .mwi-lite-nw-mode {
-          background: rgba(59, 130, 246, 0.18);
-          border: 1px solid rgba(96, 165, 250, 0.4);
-          color: #93c5fd;
-          border-radius: 4px;
+          background: var(--mwi-px-btn-bg, linear-gradient(180deg, #324a8f 0%, #22356b 100%));
+          border: 1px solid var(--mwi-px-border, #8eb1ff);
+          box-shadow: var(--mwi-px-shadow-btn, 0 0 0 1px #080d1a);
+          color: #f8fafc;
+          border-radius: 0;
+          font-family: inherit;
           font-size: 11px;
-          padding: 1px 6px;
+          font-weight: 700;
+          padding: 2px 7px;
           cursor: pointer;
         }
         #${NW_POPOVER_ID} .mwi-lite-nw-close {
-          background: transparent;
-          border: none;
-          color: #94a3b8;
-          font-size: 13px;
+          background: linear-gradient(180deg, #7f1d1d 0%, #581313 100%);
+          border: 1px solid #fca5a5;
+          color: #ffffff;
+          font-size: 11.5px;
+          font-weight: 700;
           line-height: 1;
-          padding: 2px 4px;
+          padding: 2px 6px;
           cursor: pointer;
-          border-radius: 4px;
+          border-radius: 0;
         }
         #${NW_POPOVER_ID} .mwi-lite-nw-close:hover {
-          color: #f8fafc;
-          background: rgba(148, 163, 184, 0.18);
+          color: #ffffff;
+          filter: brightness(1.1);
         }
         #${NW_POPOVER_ID} .mwi-lite-nw-section {
           margin-top: 6px;
           margin-bottom: 2px;
           font-size: 11px;
-          font-weight: 600;
-          color: #94a3b8;
+          font-weight: 800;
+          color: var(--mwi-px-sub, #9dbbff);
         }
         #${NW_POPOVER_ID} .mwi-lite-nw-row,
         #${NW_POPOVER_ID} .mwi-lite-nw-subtotal,
@@ -508,14 +523,15 @@ export function createNetworthModule(): FeatureModule {
         #${NW_POPOVER_ID} .mwi-lite-nw-subtotal {
           margin-top: 2px;
           padding-top: 3px;
-          border-top: 1px dashed #2b3652;
+          border-top: 1px dashed #2b3f7d;
           color: #cbd5e1;
         }
         #${NW_POPOVER_ID} .mwi-lite-nw-total {
           margin-top: 6px;
           padding-top: 6px;
-          border-top: 1px solid #3b4b72;
-          color: #fde047;
+          border-top: 2px solid var(--mwi-px-border-inner, #4f6fc4);
+          color: var(--mwi-px-gold, #fde047);
+          font-weight: 800;
           font-size: 13px;
         }
         `

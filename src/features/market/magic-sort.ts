@@ -362,17 +362,26 @@ export function createMagicSortModule(): FeatureModule {
           align-items: center;
         }
         .mwi-lite-ms-btn {
-          border: none !important;
-          color: #fff !important;
-          font-size: 12px !important;
+          border: 1px solid var(--mwi-px-border, #8eb1ff) !important;
+          color: #f8fafc !important;
+          font-size: 11.5px !important;
+          font-weight: 700 !important;
+          font-family: var(--mwi-px-mono, monospace) !important;
           padding: 3px 9px !important;
-          border-radius: 4px !important;
+          border-radius: 0 !important;
           cursor: pointer;
-          background: #4b5563;
+          background: var(--mwi-px-btn-bg, linear-gradient(180deg, #324a8f 0%, #22356b 100%)) !important;
+          box-shadow: var(--mwi-px-shadow-btn, 0 0 0 1px #080d1a) !important;
+          line-height: 1.25 !important;
         }
-        .mwi-lite-ms-refresh { background: #2e8b57 !important; }
-        .mwi-lite-ms-btn[data-active="1"] { background: #2e8b57 !important; }
-        .mwi-lite-ms-sort { background: #1e73be !important; min-width: 90px; }
+        .mwi-lite-ms-btn:active { transform: translateY(1px); }
+        .mwi-lite-ms-refresh,
+        .mwi-lite-ms-btn[data-active="1"] {
+          border-color: var(--mwi-px-green-soft, #86efac) !important;
+          background: var(--mwi-px-btn-green, linear-gradient(180deg, #1f6d43 0%, #165132 100%)) !important;
+          box-shadow: 0 0 0 1px #06140c, inset 1px 1px 0 #4ade80, inset -1px -1px 0 #0e3821 !important;
+        }
+        .mwi-lite-ms-sort { min-width: 96px; }
         `
       );
 

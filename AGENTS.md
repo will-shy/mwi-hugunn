@@ -15,6 +15,7 @@ Single-file, zero-`@require`, micro-kernel Tampermonkey userscript for Milky Way
 - **Lazy Worker (`new Worker <= 1`)**: allocate heavy simulation workers on demand for active panels and `terminate()` them after leaving the panel.
 - **Zero-thrash rendering**: update DOM on WS/user events or `onDom()` with content-signature short-circuiting so unchanged states skip DOM writes; tag every injected root node with `data-mwi-lite="1"` to avoid observer self-trigger loops.
 - **Cache non-trivial computations**: memoize FFT CDFs, drop expectations/variances, valuation sweeps, recipe expansions, and simulations by input/epoch keys; keep `onDom()` hot paths O(1).
+- **Unified 16-bit SNES Pixel UI Theme**: mount shared CSS variables via [pixel-theme.ts](src/core/pixel-theme.ts) (`--mwi-px-*`); all new and existing UIs must use sharp `0px` pixel corners, stepped Starlight RPG borders/shadows, beveled pixel buttons, `tabular-nums` monospace numeric columns, and `data-mwi-lite="1"` on injected roots.
 
 ## 3. High Cohesion
 

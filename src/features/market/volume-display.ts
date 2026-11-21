@@ -370,13 +370,15 @@ export function createVolumeDisplayModule(): FeatureModule {
           top: auto;
           bottom: 0;
           z-index: 40;
-          background: rgba(10, 12, 16, 0.88);
-          border-radius: 8px;
-          padding: 5px 10px;
-          color: #EEEEEE;
-          font-size: 13px;
+          background: var(--mwi-px-panel-bg, linear-gradient(180deg, #121c3b 0%, #0c1228 100%));
+          border: 2px solid var(--mwi-px-border, #9dbbff);
+          border-radius: 0;
+          padding: 6px 10px;
+          color: var(--mwi-px-text, #e2e8f0);
+          font-size: 12.5px;
+          font-family: var(--mwi-px-mono, monospace);
           line-height: 1.35;
-          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+          box-shadow: var(--mwi-px-shadow-card, 0 0 0 2px #070b16);
           cursor: grab;
           user-select: none;
           white-space: nowrap;
@@ -387,30 +389,31 @@ export function createVolumeDisplayModule(): FeatureModule {
           left: 6px;
           background: none;
           border: none;
-          color: #AAAAAA;
+          color: var(--mwi-px-sub, #9dbbff);
           cursor: pointer;
           font-size: 13px;
           padding: 1px 2px;
           line-height: 1;
         }
         #${PANEL_ID} .mwi-lite-vol-gear:hover {
-          color: #FFFFFF;
+          color: #ffffff;
         }
         #${PANEL_ID} .mwi-lite-vol-status {
           display: block;
-          color: #AAAAAA;
+          color: var(--mwi-px-sub, #9dbbff);
           font-size: 11px;
           padding: 18px 8px 4px 18px;
         }
         #${PANEL_ID} .mwi-lite-vol-tbl {
           border-collapse: collapse;
-          font-size: 13px;
+          font-size: 12.5px;
         }
         #${PANEL_ID} .mwi-lite-vol-tbl th {
-          color: #AAAAAA;
+          color: var(--mwi-px-sub, #9dbbff);
           font-size: 11px;
-          font-weight: 400;
+          font-weight: 700;
           text-align: center;
+          border-bottom: 1px solid #293e7a;
         }
         #${PANEL_ID} .mwi-lite-vol-corner {
           width: 24px;
@@ -424,20 +427,22 @@ export function createVolumeDisplayModule(): FeatureModule {
         #${PANEL_ID} .mwi-lite-vol-day {
           padding: 1px 8px 1px 0 !important;
           text-align: left !important;
-          font-weight: 700;
+          font-weight: 800;
+          color: var(--mwi-px-gold, #fde047);
         }
         #${PANEL_ID} .mwi-lite-vol-menu {
           position: absolute;
-          top: 24px;
-          left: 4px;
+          top: 26px;
+          left: 2px;
           z-index: 10001;
-          min-width: 118px;
+          min-width: 122px;
           padding: 6px 8px;
-          background: #171822;
-          border: 1px solid #555;
-          border-radius: 4px;
-          color: #EEEEEE;
-          font-size: 12px;
+          background: var(--mwi-px-panel-bg, #0e1634);
+          border: 2px solid var(--mwi-px-border-bright, #d5e5ff);
+          border-radius: 0;
+          box-shadow: var(--mwi-px-shadow-card, 0 0 0 2px #070b16);
+          color: #f1f5f9;
+          font-size: 11.5px;
           line-height: 1.35;
           text-align: left;
           cursor: default;
@@ -452,6 +457,7 @@ export function createVolumeDisplayModule(): FeatureModule {
         }
         #${PANEL_ID} .mwi-lite-vol-opt input {
           margin: 0;
+          accent-color: #4ade80;
         }
         `
       );

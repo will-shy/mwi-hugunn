@@ -527,14 +527,23 @@ export function createTaskBoardModule(): FeatureModule {
         .mwi-lite-task-btn {
           padding: 2px 8px !important;
           font-size: 11.5px !important;
-          background: #1e73be !important;
-          color: #fff !important;
-          border: none !important;
-          border-radius: 4px !important;
+          font-weight: 700 !important;
+          font-family: var(--mwi-px-mono, monospace) !important;
+          background: var(--mwi-px-btn-bg, linear-gradient(180deg, #324a8f 0%, #22356b 100%)) !important;
+          color: #f8fafc !important;
+          border: 1px solid var(--mwi-px-border, #8eb1ff) !important;
+          border-radius: 0 !important;
+          box-shadow: var(--mwi-px-shadow-btn, 0 0 0 1px #080d1a) !important;
           cursor: pointer;
         }
-        .mwi-lite-task-auto[data-active="1"] { background: #2e8b57 !important; }
-        .mwi-lite-task-auto[data-active="0"] { background: #4b5563 !important; }
+        .mwi-lite-task-auto[data-active="1"] {
+          border-color: var(--mwi-px-green-soft, #86efac) !important;
+          background: var(--mwi-px-btn-green, linear-gradient(180deg, #1f6d43 0%, #165132 100%)) !important;
+        }
+        .mwi-lite-task-auto[data-active="0"] {
+          background: linear-gradient(180deg, #27324a 0%, #1a2235 100%) !important;
+          border-color: #64748b !important;
+        }
         .mwi-lite-task-icon {
           display: inline-flex;
           align-items: center;
@@ -542,9 +551,10 @@ export function createTaskBoardModule(): FeatureModule {
           width: 22px;
           height: 22px;
           margin-right: 6px;
-          border-radius: 4px;
-          background: rgba(15, 23, 42, 0.55);
-          border: 1px solid rgba(148, 163, 184, 0.25);
+          border-radius: 0;
+          background: #0e1634;
+          border: 1px solid var(--mwi-px-border-inner, #4f6fc4);
+          box-shadow: 0 0 0 1px #070b16;
           vertical-align: middle;
           pointer-events: none;
           flex-shrink: 0;
@@ -555,18 +565,21 @@ export function createTaskBoardModule(): FeatureModule {
         #${TASK_N1_ID} {
           display: inline-flex;
           align-items: center;
-          gap: 3px;
+          gap: 4px;
           margin-left: 6px;
-          color: #f59e0b;
-          font-size: 12px;
+          color: var(--mwi-px-gold, #fde047);
+          font-family: var(--mwi-px-mono, monospace);
+          font-size: 11.5px;
         }
         #${TASK_N1_ID} .mwi-lite-task-n1-btn {
-          background: #f8fafc !important;
-          color: #0f172a !important;
-          padding: 1px 6px !important;
-          font-weight: 700 !important;
-          border: 1px solid #cbd5e1 !important;
-          border-radius: 4px !important;
+          background: var(--mwi-px-btn-gold, linear-gradient(180deg, #7c580c 0%, #523907 100%)) !important;
+          color: #fef08a !important;
+          padding: 2px 7px !important;
+          font-weight: 800 !important;
+          font-family: var(--mwi-px-mono, monospace) !important;
+          border: 1px solid var(--mwi-px-gold, #fde047) !important;
+          border-radius: 0 !important;
+          box-shadow: 0 0 0 1px #080d1a, inset 1px 1px 0 #eab308 !important;
           cursor: pointer;
         }
         #${TASK_N1_ID} .mwi-lite-task-n1-btn:disabled {

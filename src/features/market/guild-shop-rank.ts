@@ -705,12 +705,15 @@ export function createGuildShopRankModule(): FeatureModule {
         STYLE_ID,
         `
         #${MAIN_PANEL_ID} {
-          margin: 10px 0 14px;
-          padding: 10px 12px;
-          border-radius: 8px;
-          border: 1px solid #303d5c;
-          background: rgba(16, 22, 36, 0.92);
-          color: #e2e8f0;
+          margin: 12px 2px 16px;
+          padding: 0;
+          border-radius: 0;
+          border: 2px solid var(--mwi-px-border-bright, #d5e5ff);
+          background: var(--mwi-px-panel-bg, linear-gradient(180deg, #121c3b 0%, #0c1228 100%));
+          box-shadow: var(--mwi-px-shadow-panel, 0 0 0 2px #060913);
+          color: var(--mwi-px-text, #e2e8f0);
+          font-family: var(--mwi-px-mono, monospace);
+          font-variant-numeric: tabular-nums;
           font-size: 12px;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-head {
@@ -719,7 +722,9 @@ export function createGuildShopRankModule(): FeatureModule {
           align-items: center;
           justify-content: space-between;
           gap: 8px;
-          margin-bottom: 8px;
+          padding: 9px 12px;
+          background: var(--mwi-px-head-bg, linear-gradient(180deg, #1d2c5e 0%, #141f46 100%));
+          border-bottom: 2px solid var(--mwi-px-border-inner, #4f6fc4);
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-title-wrap {
           display: inline-flex;
@@ -728,18 +733,20 @@ export function createGuildShopRankModule(): FeatureModule {
           gap: 8px;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-title {
-          font-size: 13px;
-          font-weight: 700;
-          color: #93c5fd;
+          font-size: 13.5px;
+          font-weight: 800;
+          color: #ffffff;
+          text-shadow: 2px 2px 0 #070b16;
+          letter-spacing: 0.3px;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-sub {
           font-size: 11px;
-          color: #94a3b8;
+          color: var(--mwi-px-sub, #9dbbff);
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-status {
           font-size: 11px;
-          color: #4ade80;
-          font-weight: 600;
+          color: var(--mwi-px-green, #4ade80);
+          font-weight: 700;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-actions {
           display: inline-flex;
@@ -752,87 +759,115 @@ export function createGuildShopRankModule(): FeatureModule {
           align-items: center;
           gap: 4px;
           font-size: 11px;
-          color: #cbd5e1;
+          color: #dbeafe;
           cursor: pointer;
           user-select: none;
         }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-chk input {
+          accent-color: #4ade80;
+          margin: 0;
+        }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-search {
-          width: 118px;
+          width: 120px;
           padding: 3px 7px;
-          border-radius: 4px;
-          border: 1px solid #3b4b72;
-          background: #0f1624;
+          border-radius: 0;
+          border: 1px solid #5c7cd4;
+          background: #0b1124;
+          box-shadow: inset 1px 1px 0 #050814;
           color: #f8fafc;
+          font-family: inherit;
           font-size: 11px;
           outline: none;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-search:focus {
-          border-color: #60a5fa;
+          border-color: var(--mwi-px-border-bright, #d5e5ff);
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-btn {
-          padding: 3px 8px;
-          border-radius: 4px;
-          border: 1px solid #3b4b72;
-          background: #1e293b;
-          color: #dbeafe;
+          padding: 3px 9px;
+          border-radius: 0;
+          border: 1px solid var(--mwi-px-border, #8eb1ff);
+          background: var(--mwi-px-btn-bg, linear-gradient(180deg, #324a8f 0%, #22356b 100%));
+          box-shadow: var(--mwi-px-shadow-btn, 0 0 0 1px #080d1a);
+          color: #f8fafc;
+          font-family: inherit;
           font-size: 11px;
+          font-weight: 700;
           cursor: pointer;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-btn:hover {
-          background: #2b3b55;
+          background: var(--mwi-px-btn-hover, linear-gradient(180deg, #405eb3 0%, #2b4385 100%));
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-btn:active {
+          transform: translateY(1px);
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-btn[data-gcr-act="sort-mode"] {
+          border-color: var(--mwi-px-green-soft, #86efac);
+          background: var(--mwi-px-btn-green, linear-gradient(180deg, #1f6d43 0%, #165132 100%));
+          box-shadow: 0 0 0 1px #06140c, inset 1px 1px 0 #4ade80, inset -1px -1px 0 #0e3821;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-tabs {
           display: flex;
           flex-wrap: wrap;
-          gap: 5px;
-          margin-bottom: 8px;
+          gap: 6px;
+          padding: 8px 12px;
+          background: #0e1634;
+          border-bottom: 1px solid #263970;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-tab {
           display: inline-flex;
           align-items: center;
           gap: 4px;
           padding: 3px 8px;
-          border-radius: 5px;
-          border: 1px solid #2b3652;
-          background: #141c2e;
-          color: #cbd5e1;
+          border-radius: 0;
+          border: 1px solid #354c8c;
+          background: #141f46;
+          box-shadow: 0 0 0 1px #070b16, inset 1px 1px 0 #263970;
+          color: #b4c6ef;
+          font-family: inherit;
           font-size: 11px;
+          font-weight: 700;
           cursor: pointer;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-tab.active {
-          border-color: var(--gcr-accent, #60a5fa);
-          background: rgba(59, 130, 246, 0.2);
+          border-color: var(--gcr-accent, #d5e5ff);
+          background: var(--mwi-px-btn-bg, linear-gradient(180deg, #324a8f 0%, #22356b 100%));
+          box-shadow: 0 0 0 1px #070b16, inset 1px 1px 0 #7ca1ff, inset 0 -2px 0 var(--gcr-accent, #facc15);
           color: #ffffff;
-          font-weight: 600;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-tab-cnt {
-          color: #94a3b8;
+          color: #8fa6dc;
           font-size: 10px;
         }
         .mwi-lite-gcr-ico {
           vertical-align: middle;
           flex-shrink: 0;
         }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-body {
+          padding: 10px 12px 12px;
+        }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-grid {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(295px, 1fr));
-          gap: 8px;
+          gap: 10px;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-card {
-          border: 1px solid #27324a;
-          border-left: 3px solid var(--gcr-accent, #60a5fa);
-          border-radius: 6px;
-          padding: 7px 8px;
-          background: rgba(11, 16, 28, 0.72);
+          border: 2px solid #5c7cd4;
+          border-radius: 0;
+          padding: 7px 9px;
+          background: var(--mwi-px-card-bg, linear-gradient(180deg, #17244d 0%, #0e1634 100%));
+          box-shadow: 0 0 0 2px #070b16, inset 0 0 0 1px #24376d, inset 0 2px 0 0 var(--gcr-accent, #9dbbff);
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-card-hd {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-bottom: 5px;
+          padding-bottom: 4px;
+          margin-bottom: 4px;
+          border-bottom: 1px solid #2b3f7d;
           cursor: pointer;
-          font-weight: 600;
+          font-weight: 800;
           color: var(--gcr-accent, #93c5fd);
+          text-shadow: 1px 1px 0 #070b16;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-card-hd:hover {
           text-decoration: underline;
@@ -844,8 +879,8 @@ export function createGuildShopRankModule(): FeatureModule {
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-card-own {
           font-size: 11px;
-          font-weight: 400;
-          color: #94a3b8;
+          font-weight: 600;
+          color: #b4c6ef;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-card-cols,
         #${MAIN_PANEL_ID} .mwi-lite-gcr-card-row {
@@ -854,11 +889,11 @@ export function createGuildShopRankModule(): FeatureModule {
           gap: 4px;
           align-items: center;
           font-size: 11px;
-          padding: 2px 0;
+          padding: 2px 3px;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-card-cols {
-          color: #64748b;
-          border-bottom: 1px solid #1e293b;
+          color: var(--mwi-px-muted, #7f95cc);
+          border-bottom: 1px dashed #293d78;
           margin-bottom: 2px;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-card-cols span:nth-child(n+3),
@@ -867,11 +902,12 @@ export function createGuildShopRankModule(): FeatureModule {
           text-align: right;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-card-row.has-own {
-          background: rgba(34, 197, 94, 0.08);
-          border-radius: 3px;
+          background: rgba(74, 222, 128, 0.11);
+          border-left: 2px solid #4ade80;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-rank {
-          color: #94a3b8;
+          color: var(--mwi-px-gold, #fde047);
+          font-weight: 800;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-item {
           display: inline-flex;
@@ -884,30 +920,34 @@ export function createGuildShopRankModule(): FeatureModule {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+          font-weight: 600;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-item:hover .mwi-lite-gcr-name {
-          color: #93c5fd;
+          color: var(--mwi-px-accent, #93c5fd);
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-own {
           padding: 0 4px;
-          border-radius: 3px;
-          background: rgba(34, 197, 94, 0.22);
-          color: #86efac;
+          border-radius: 0;
+          background: #14492c;
+          border: 1px solid #4ade80;
+          color: #bbf7d0;
           font-size: 10px;
+          font-weight: 700;
           flex-shrink: 0;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-rate {
           color: #94a3b8;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-cost.hi {
-          color: #4ade80;
-          font-weight: 600;
+          color: var(--mwi-px-green, #4ade80);
+          font-weight: 800;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-table-wrap {
           max-height: 360px;
           overflow-y: auto;
-          border: 1px solid #24304a;
-          border-radius: 6px;
+          border: 1px solid var(--mwi-px-border-inner, #4f6fc4);
+          background: #0e1634;
+          border-radius: 0;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-table,
         #${BUFF_COST_ID} .mwi-lite-gcr-buff-tbl {
@@ -920,15 +960,16 @@ export function createGuildShopRankModule(): FeatureModule {
         #${BUFF_COST_ID} .mwi-lite-gcr-buff-tbl th,
         #${BUFF_COST_ID} .mwi-lite-gcr-buff-tbl td {
           padding: 4px 7px;
-          border-bottom: 1px solid rgba(51, 65, 85, 0.45);
+          border-bottom: 1px solid #1f2f60;
           text-align: left;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-table th {
           position: sticky;
           top: 0;
-          background: #131b2e;
-          color: #94a3b8;
-          font-weight: 600;
+          background: #141f46;
+          border-bottom: 2px solid var(--mwi-px-border-inner, #4f6fc4);
+          color: var(--mwi-px-sub, #9dbbff);
+          font-weight: 700;
           z-index: 1;
         }
         #${MAIN_PANEL_ID} .sortable,
@@ -938,7 +979,7 @@ export function createGuildShopRankModule(): FeatureModule {
         }
         #${MAIN_PANEL_ID} .sortable.active,
         #${BUFF_COST_ID} .sortable.active {
-          color: #60a5fa;
+          color: var(--mwi-px-gold, #fde047);
           text-decoration: underline;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-table .num,
@@ -953,50 +994,57 @@ export function createGuildShopRankModule(): FeatureModule {
           cursor: pointer;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-table td.item-cell:hover {
-          color: #93c5fd;
+          color: var(--mwi-px-accent, #93c5fd);
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-table tr.has-own {
-          background: rgba(34, 197, 94, 0.08);
+          background: rgba(74, 222, 128, 0.09);
         }
         #${MAIN_PANEL_ID} .own-hi {
-          color: #86efac;
-          font-weight: 600;
+          color: var(--mwi-px-green-soft, #86efac);
+          font-weight: 700;
         }
         #${MAIN_PANEL_ID} .cost-hi,
         #${BUFF_COST_ID} .cost-hi {
-          color: #4ade80;
-          font-weight: 600;
+          color: var(--mwi-px-green, #4ade80);
+          font-weight: 800;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-more {
-          margin-top: 6px;
+          margin-top: 8px;
           text-align: center;
         }
         #${MAIN_PANEL_ID} .mwi-lite-gcr-empty,
         #${MAIN_PANEL_ID} .mwi-lite-gcr-card-empty {
           padding: 10px;
           text-align: center;
-          color: #94a3b8;
+          color: var(--mwi-px-sub, #9dbbff);
         }
         #${EXCHANGE_HINT_ID},
         #${BUFF_COST_ID} {
           margin-top: 10px;
           padding: 8px 10px;
-          border-radius: 6px;
-          border: 1px solid #2e3b59;
-          background: rgba(15, 22, 36, 0.9);
-          color: #e2e8f0;
+          border-radius: 0;
+          border: 2px solid var(--mwi-px-border, #9dbbff);
+          background: var(--mwi-px-panel-bg, linear-gradient(180deg, #121c3b 0%, #0c1228 100%));
+          box-shadow: var(--mwi-px-shadow-card, 0 0 0 2px #070b16);
+          color: var(--mwi-px-text, #e2e8f0);
+          font-family: var(--mwi-px-mono, monospace);
+          font-variant-numeric: tabular-nums;
           font-size: 11px;
         }
         #${EXCHANGE_HINT_ID} .mwi-lite-gcr-mini-hd,
         #${BUFF_COST_ID} .mwi-lite-gcr-buff-hd {
-          font-weight: 600;
-          color: #93c5fd;
+          font-weight: 800;
+          color: var(--mwi-px-gold, #fde047);
+          text-shadow: 1px 1px 0 #070b16;
+          padding-bottom: 4px;
+          border-bottom: 1px solid var(--mwi-px-border-inner, #4f6fc4);
           margin-bottom: 5px;
         }
         #${EXCHANGE_HINT_ID} .mwi-lite-gcr-mini-sec {
-          color: #94a3b8;
-          margin: 4px 0 2px;
+          color: var(--mwi-px-sub, #9dbbff);
+          margin: 5px 0 2px;
           font-size: 10.5px;
+          font-weight: 700;
         }
         #${EXCHANGE_HINT_ID} .mwi-lite-gcr-mini-row {
           display: flex;
@@ -1015,25 +1063,30 @@ export function createGuildShopRankModule(): FeatureModule {
           white-space: nowrap;
         }
         #${EXCHANGE_HINT_ID} .mwi-lite-gcr-mini-row .own {
-          color: #86efac;
+          color: var(--mwi-px-green-soft, #86efac);
+          font-weight: 700;
         }
         #${EXCHANGE_HINT_ID} .mwi-lite-gcr-mini-row .cost {
-          color: #4ade80;
-          font-weight: 600;
+          color: var(--mwi-px-green, #4ade80);
+          font-weight: 800;
         }
         #${BUFF_COST_ID} .credit-summary {
           cursor: pointer;
-          background: rgba(30, 41, 59, 0.45);
+          background: #141f46;
         }
         #${BUFF_COST_ID} .credit-opt.best td.sub {
-          color: #86efac;
+          color: var(--mwi-px-green-soft, #86efac);
         }
         #${BUFF_COST_ID} td.sub {
           padding-left: 16px;
         }
         #${BUFF_COST_ID} .muted {
-          color: #94a3b8;
+          color: var(--mwi-px-muted, #7f95cc);
           font-size: 10.5px;
+        }
+        #${BUFF_COST_ID} tfoot td {
+          border-top: 2px solid var(--mwi-px-border-inner, #4f6fc4);
+          color: var(--mwi-px-gold, #fde047);
         }
         `
       );

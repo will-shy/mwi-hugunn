@@ -661,21 +661,28 @@ export function createMarketQuickOpsModule(): FeatureModule {
         .mwi-lite-qops-btn {
           padding: 2px 7px !important;
           font-size: 11px !important;
+          font-weight: 700 !important;
+          font-family: var(--mwi-px-mono, monospace) !important;
           min-width: 34px !important;
-          background: #2b3b5a !important;
-          color: #dbeafe !important;
-          border: 1px solid #486291 !important;
-          border-radius: 4px !important;
+          background: var(--mwi-px-btn-bg, linear-gradient(180deg, #324a8f 0%, #22356b 100%)) !important;
+          color: #f8fafc !important;
+          border: 1px solid var(--mwi-px-border, #8eb1ff) !important;
+          border-radius: 0 !important;
+          box-shadow: var(--mwi-px-shadow-btn, 0 0 0 1px #080d1a) !important;
           cursor: pointer;
         }
-        .mwi-lite-qops-btn:hover { background: #3b527e !important; }
+        .mwi-lite-qops-btn:hover { background: var(--mwi-px-btn-hover, linear-gradient(180deg, #405eb3 0%, #2b4385 100%)) !important; }
         .mwi-lite-queue-depth {
           display: flex;
           justify-content: space-between;
           gap: 12px;
           font-size: 11.5px;
+          font-family: var(--mwi-px-mono, monospace);
+          font-variant-numeric: tabular-nums;
           margin: 3px 0 4px;
-          padding: 0 2px;
+          padding: 2px 6px;
+          border: 1px solid #2b3f7d;
+          background: #0e1634;
           color: #cbd5e1;
         }
         .mwi-lite-queue-depth .ask { color: #fca5a5; }
@@ -688,14 +695,17 @@ export function createMarketQuickOpsModule(): FeatureModule {
           white-space: nowrap;
           padding: 4px 8px !important;
           text-align: center !important;
-          font-size: 12px;
+          font-size: 11.5px;
+          font-family: var(--mwi-px-mono, monospace);
+          color: var(--mwi-px-sub, #9dbbff);
         }
         .mwi-lite-ob-cell {
           white-space: nowrap;
           padding: 4px 8px !important;
           text-align: center !important;
+          font-family: var(--mwi-px-mono, monospace);
           font-variant-numeric: tabular-nums;
-          font-size: 12px;
+          font-size: 11.5px;
         }
         .mwi-lite-ob-hourly-btn {
           background: none;
@@ -709,38 +719,45 @@ export function createMarketQuickOpsModule(): FeatureModule {
         #${ENH_POPUP_ID} {
           position: fixed;
           z-index: 9800;
-          width: 310px;
-          background: #141927;
-          border: 1px solid #38496e;
-          border-radius: 8px;
+          width: 318px;
+          background: var(--mwi-px-panel-bg, linear-gradient(180deg, #121c3b 0%, #0c1228 100%));
+          border: 2px solid var(--mwi-px-border-bright, #d5e5ff);
+          border-radius: 0;
           padding: 10px 12px;
-          color: #e2e8f0;
-          font-size: 12px;
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+          color: var(--mwi-px-text, #e2e8f0);
+          font-family: var(--mwi-px-mono, monospace);
+          font-variant-numeric: tabular-nums;
+          font-size: 11.5px;
+          box-shadow: var(--mwi-px-shadow-panel, 0 0 0 2px #060913);
         }
         #${ENH_POPUP_ID} .mwi-lite-enh-pop-hdr {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          font-weight: 700;
-          color: #fde047;
+          font-weight: 800;
+          color: var(--mwi-px-gold, #fde047);
+          text-shadow: 1px 1px 0 #070b16;
+          padding-bottom: 5px;
+          border-bottom: 2px solid var(--mwi-px-border-inner, #4f6fc4);
           margin-bottom: 6px;
         }
         #${ENH_POPUP_ID} .mwi-lite-enh-pop-close {
-          background: transparent;
-          border: none;
-          color: #94a3b8;
-          font-size: 13px;
+          background: linear-gradient(180deg, #7f1d1d 0%, #581313 100%);
+          border: 1px solid #fca5a5;
+          border-radius: 0;
+          color: #ffffff;
+          font-size: 11.5px;
+          font-weight: 700;
           cursor: pointer;
-          padding: 1px 4px;
+          padding: 1px 6px;
         }
         #${ENH_POPUP_ID} .mwi-lite-enh-pop-sec {
           margin-top: 6px;
           margin-bottom: 2px;
           font-size: 11px;
-          font-weight: 600;
-          color: #94a3b8;
-          border-top: 1px dashed #2b3652;
+          font-weight: 800;
+          color: var(--mwi-px-sub, #9dbbff);
+          border-top: 1px dashed #2b3f7d;
           padding-top: 4px;
         }
         #${ENH_POPUP_ID} .mwi-lite-enh-pop-line {
@@ -760,7 +777,7 @@ export function createMarketQuickOpsModule(): FeatureModule {
         #${ENH_POPUP_ID} .mwi-lite-enh-pop-res {
           margin-top: 4px;
           padding-top: 4px;
-          border-top: 1px solid #3b4b72;
+          border-top: 2px solid var(--mwi-px-border-inner, #4f6fc4);
         }
         `
       );
