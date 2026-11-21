@@ -372,9 +372,10 @@ export class ToolashaNetworthEvaluator {
       }
     }
 
-    const result = targetCosts[targetLevel];
-    this.enhancementCostCache.set(cacheKey, result);
-    return result;
+    for (let lvl = 1; lvl <= targetLevel; lvl++) {
+      this.enhancementCostCache.set(`${itemHrid}:${lvl}`, targetCosts[lvl]);
+    }
+    return targetCosts[targetLevel];
   }
 
   getUnitValue(

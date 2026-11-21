@@ -15872,7 +15872,13 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     }
     return aug.map((row) => row.slice(n));
   }
+  var MARKOV_CACHE_LIMIT = 4096;
+  var markovCache = /* @__PURE__ */ new Map();
   function solveEnhancementMarkov(enhancingLevel, toolBonus, itemLevel, targetLevel, protectFrom, blessedTea, guzzlingBonus) {
+    const cacheKey = `${enhancingLevel}|${toolBonus}|${itemLevel}|${targetLevel}|${protectFrom}|${blessedTea ? 1 : 0}|${guzzlingBonus}`;
+    if (markovCache.has(cacheKey)) {
+      return markovCache.get(cacheKey);
+    }
     const totalBonus = enhancingLevel >= itemLevel ? 1 + (toolBonus + 0.05 * (enhancingLevel - itemLevel)) / 100 : 1 - 0.5 * (1 - enhancingLevel / itemLevel) + toolBonus / 100;
     const Q = Array.from({ length: targetLevel }, () => new Array(targetLevel).fill(0));
     const iMinusQ = Array.from({ length: targetLevel }, () => new Array(targetLevel).fill(0));
@@ -15896,7 +15902,11 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       }
     }
     const M = invertMatrix(iMinusQ);
-    if (!M) return null;
+    if (!M) {
+      if (markovCache.size >= MARKOV_CACHE_LIMIT) markovCache.clear();
+      markovCache.set(cacheKey, null);
+      return null;
+    }
     let attempts = 0;
     for (let i = 0; i < targetLevel; i++) {
       attempts += M[0][i];
@@ -15908,7 +15918,10 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         protectionCount += M[0][i] * failChance;
       }
     }
-    return { attempts, protectionCount };
+    const res = { attempts, protectionCount };
+    if (markovCache.size >= MARKOV_CACHE_LIMIT) markovCache.clear();
+    markovCache.set(cacheKey, res);
+    return res;
   }
   function calculateEnhancingActionTime(enhancingLevel, itemLevel, speedBonus) {
     const speedMultiplier = enhancingLevel > itemLevel ? 1 + (enhancingLevel - itemLevel + speedBonus) / 100 : 1 + speedBonus / 100;
@@ -16470,9 +16483,10 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
           }
         }
       }
-      const result = targetCosts[targetLevel];
-      this.enhancementCostCache.set(cacheKey, result);
-      return result;
+      for (let lvl = 1; lvl <= targetLevel; lvl++) {
+        this.enhancementCostCache.set(`${itemHrid}:${lvl}`, targetCosts[lvl]);
+      }
+      return targetCosts[targetLevel];
     }
     getUnitValue(itemHrid, enhancementLevel, clientData, marketStore2, mode) {
       const currencyVal = this.getCurrencyValue(itemHrid, clientData, marketStore2, mode);
@@ -16884,15 +16898,13 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       return lastBreakdown;
     };
     const scheduleCompute = () => {
+      if (throttleTimer !== null) return;
       const elapsed = Date.now() - lastComputeTs;
-      if (elapsed >= 2e3) {
+      const delay = elapsed >= 2e3 ? 160 : Math.max(160, 2e3 - elapsed);
+      throttleTimer = window.setTimeout(() => {
+        throttleTimer = null;
         computeNetWorth();
-      } else if (throttleTimer === null) {
-        throttleTimer = window.setTimeout(() => {
-          throttleTimer = null;
-          computeNetWorth();
-        }, 2e3 - elapsed);
-      }
+      }, delay);
     };
     const renderBadge = () => {
       if (!ctx || !document.body) return;
@@ -17122,6 +17134,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
   var TBODY_SEL = '[class*="MarketplacePanel_myListingsTable__"] tbody';
   var BTN_CONT_SEL = '[class*="MarketplacePanel_buttonContainer__"]';
   var MODAL_SEL = '[class*="MarketplacePanel_modalContent__"]';
+  var CLAIM_BTN_RE = /收集|收取|领取|Claim|Collect/i;
   var SORT_MODES = [
     { key: "time-asc", zh: "时间↑", en: "Time↑" },
     { key: "time-desc", zh: "时间↓", en: "Time↓" },
@@ -17150,7 +17163,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     const claims = row.querySelector('[class*="MarketplacePanel_claims__"]');
     if (!claimsContainer || !claims || claims.children.length === 0) return false;
     const button = claimsContainer.querySelector('[class*="Button_button__"]');
-    return !!(button?.textContent && /收集|Claim/i.test(button.textContent));
+    return !!(button?.textContent && CLAIM_BTN_RE.test(button.textContent));
   }
   function getTableRows(tbody) {
     if (!tbody) return [];
@@ -17172,6 +17185,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     let lastStateSignature = "";
     let lastPointerDownTs = 0;
     let batchFreezeUntil = 0;
+    let claimBurstPending = false;
     let debounceTimer = null;
     const zhCollator = new Intl.Collator("zh-CN");
     const getRowMeta = (row) => {
@@ -17210,6 +17224,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       debounceTimer = window.setTimeout(() => {
         debounceTimer = null;
         batchFreezeUntil = 0;
+        claimBurstPending = false;
         sortRows(false);
       }, ms);
     };
@@ -17360,10 +17375,16 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
           "click",
           (ev) => {
             const btn = ev.target?.closest?.("button");
-            if (btn && /收集|Claim/i.test(btn.textContent || "")) {
+            if (btn && CLAIM_BTN_RE.test(btn.textContent || "")) {
               const isAll = /全部|All/i.test(btn.textContent || "");
-              batchFreezeUntil = Date.now() + (isAll ? 650 : 280);
-              scheduleSortDebounced(isAll ? 680 : 320);
+              if (isAll) {
+                claimBurstPending = true;
+                batchFreezeUntil = Math.max(batchFreezeUntil, Date.now() + 1400);
+                scheduleSortDebounced(1450);
+              } else {
+                batchFreezeUntil = Math.max(batchFreezeUntil, Date.now() + 320);
+                scheduleSortDebounced(340);
+              }
             }
           },
           true
@@ -17442,8 +17463,14 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         );
         unregWs = ctx.wsBus.on("market_listings_updated", () => {
           if (ctx?.domScheduler.getActiveRoute() !== "market") return;
-          batchFreezeUntil = Date.now() + 260;
-          scheduleSortDebounced(300);
+          const now = Date.now();
+          if (claimBurstPending) {
+            claimBurstPending = false;
+            batchFreezeUntil = now + 300;
+          } else {
+            batchFreezeUntil = Math.max(batchFreezeUntil, now + 300);
+          }
+          scheduleSortDebounced(320);
         });
         return () => {
           unregWs?.();
@@ -17454,6 +17481,8 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
             clearTimeout(debounceTimer);
             debounceTimer = null;
           }
+          batchFreezeUntil = 0;
+          claimBurstPending = false;
           lastPanelRef = null;
           lastTbodyRef = null;
           document.querySelectorAll(".mwi-lite-magic-sort-bar").forEach((el) => el.remove());
@@ -18115,33 +18144,46 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         `
         );
         recordAnchors(ctx.gameData.getMarketListings());
-        const scheduleObRefresh = () => {
-          invalidateEnhPlan();
+        let obRefreshTimer = null;
+        const scheduleObRefresh = (invalidatePlan = true) => {
+          if (invalidatePlan) invalidateEnhPlan();
           if (ctx?.domScheduler.getActiveRoute() !== "market") return;
-          const obEl = document.querySelector('[class*="MarketplacePanel_orderBooksContainer"]');
-          if (obEl && obEl.offsetParent !== null) {
-            ctx.domScheduler.scheduleRun(false);
-          }
+          if (obRefreshTimer !== null) return;
+          obRefreshTimer = window.setTimeout(() => {
+            obRefreshTimer = null;
+            if (ctx?.domScheduler.getActiveRoute() !== "market") return;
+            const obEl = document.querySelector('[class*="MarketplacePanel_orderBooksContainer"]');
+            if (obEl && obEl.offsetParent !== null) {
+              ctx.domScheduler.scheduleRun(false);
+            }
+          }, 80);
+        };
+        const onItemsUpdated = (data) => {
+          const hasEquipChange = Array.isArray(data?.endCharacterItems) ? data.endCharacterItems.some(
+            (it) => it?.itemLocationHrid && it.itemLocationHrid !== "/item_locations/inventory"
+          ) : true;
+          scheduleObRefresh(hasEquipChange);
         };
         unsubs = [
           ctx.gameData.on("character_initialized", () => {
             recordAnchors(ctx?.gameData.getMarketListings() || []);
-            scheduleObRefresh();
+            scheduleObRefresh(true);
           }),
-          ctx.gameData.on("items_updated", scheduleObRefresh),
-          ctx.gameData.on("skills_updated", scheduleObRefresh),
-          ctx.gameData.on("house_rooms_updated", scheduleObRefresh),
-          ctx.gameData.on("consumables_updated", scheduleObRefresh),
-          ctx.marketStore.onPriceUpdate(scheduleObRefresh),
+          ctx.gameData.on("items_updated", onItemsUpdated),
+          ctx.gameData.on("skills_updated", () => scheduleObRefresh(true)),
+          ctx.gameData.on("house_rooms_updated", () => scheduleObRefresh(true)),
+          ctx.gameData.on("consumables_updated", () => scheduleObRefresh(true)),
+          ctx.marketStore.onPriceUpdate(() => scheduleObRefresh(true)),
           ctx.wsBus.on("market_listings_updated", (data) => {
             recordAnchors(data?.endMarketListings || []);
-            scheduleObRefresh();
+            scheduleObRefresh(false);
           }),
-          ctx.wsBus.on("market_item_order_books_updated", () => {
-            if (ctx?.domScheduler.getActiveRoute() === "market") {
-              ctx.domScheduler.scheduleRun(false);
+          () => {
+            if (obRefreshTimer !== null) {
+              clearTimeout(obRefreshTimer);
+              obRefreshTimer = null;
             }
-          })
+          }
         ];
         return () => {
           closeEnhPopup();

@@ -76,6 +76,15 @@ export function invertMatrix(matrix: number[][]): number[][] | null {
   return aug.map((row) => row.slice(n));
 }
 
+interface MarkovResult {
+  readonly attempts: number;
+  readonly protectionCount: number;
+}
+
+const MARKOV_CACHE_LIMIT = 4096;
+const markovCache = new Map<string, MarkovResult | null>();
+
+/** Pure Markov expected attempts/protections, memoized across market price invalidations. */
 export function solveEnhancementMarkov(
   enhancingLevel: number,
   toolBonus: number,
@@ -84,7 +93,12 @@ export function solveEnhancementMarkov(
   protectFrom: number,
   blessedTea: boolean,
   guzzlingBonus: number
-): { attempts: number; protectionCount: number } | null {
+): MarkovResult | null {
+  const cacheKey = `${enhancingLevel}|${toolBonus}|${itemLevel}|${targetLevel}|${protectFrom}|${blessedTea ? 1 : 0}|${guzzlingBonus}`;
+  if (markovCache.has(cacheKey)) {
+    return markovCache.get(cacheKey)!;
+  }
+
   const totalBonus =
     enhancingLevel >= itemLevel
       ? 1 + (toolBonus + 0.05 * (enhancingLevel - itemLevel)) / 100
@@ -116,7 +130,11 @@ export function solveEnhancementMarkov(
   }
 
   const M = invertMatrix(iMinusQ);
-  if (!M) return null;
+  if (!M) {
+    if (markovCache.size >= MARKOV_CACHE_LIMIT) markovCache.clear();
+    markovCache.set(cacheKey, null);
+    return null;
+  }
 
   let attempts = 0;
   for (let i = 0; i < targetLevel; i++) {
@@ -131,7 +149,10 @@ export function solveEnhancementMarkov(
     }
   }
 
-  return { attempts, protectionCount };
+  const res: MarkovResult = { attempts, protectionCount };
+  if (markovCache.size >= MARKOV_CACHE_LIMIT) markovCache.clear();
+  markovCache.set(cacheKey, res);
+  return res;
 }
 
 export function calculateEnhancingActionTime(

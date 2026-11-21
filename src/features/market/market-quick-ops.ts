@@ -766,34 +766,51 @@ export function createMarketQuickOpsModule(): FeatureModule {
       );
 
       recordAnchors(ctx.gameData.getMarketListings());
-      const scheduleObRefresh = () => {
-        invalidateEnhPlan();
+      let obRefreshTimer: number | null = null;
+      const scheduleObRefresh = (invalidatePlan = true) => {
+        if (invalidatePlan) invalidateEnhPlan();
         if (ctx?.domScheduler.getActiveRoute() !== "market") return;
-        const obEl = document.querySelector<HTMLElement>('[class*="MarketplacePanel_orderBooksContainer"]');
-        if (obEl && obEl.offsetParent !== null) {
-          ctx.domScheduler.scheduleRun(false);
-        }
+        if (obRefreshTimer !== null) return;
+        obRefreshTimer = window.setTimeout(() => {
+          obRefreshTimer = null;
+          if (ctx?.domScheduler.getActiveRoute() !== "market") return;
+          const obEl = document.querySelector<HTMLElement>('[class*="MarketplacePanel_orderBooksContainer"]');
+          if (obEl && obEl.offsetParent !== null) {
+            ctx.domScheduler.scheduleRun(false);
+          }
+        }, 80);
+      };
+
+      const onItemsUpdated = (data: any) => {
+        // Inventory item gains (e.g. Claim All) do not alter equipped enhancing setup
+        const hasEquipChange = Array.isArray(data?.endCharacterItems)
+          ? data.endCharacterItems.some(
+              (it: any) => it?.itemLocationHrid && it.itemLocationHrid !== "/item_locations/inventory"
+            )
+          : true;
+        scheduleObRefresh(hasEquipChange);
       };
 
       unsubs = [
         ctx.gameData.on("character_initialized", () => {
           recordAnchors(ctx?.gameData.getMarketListings() || []);
-          scheduleObRefresh();
+          scheduleObRefresh(true);
         }),
-        ctx.gameData.on("items_updated", scheduleObRefresh),
-        ctx.gameData.on("skills_updated", scheduleObRefresh),
-        ctx.gameData.on("house_rooms_updated", scheduleObRefresh),
-        ctx.gameData.on("consumables_updated", scheduleObRefresh),
-        ctx.marketStore.onPriceUpdate(scheduleObRefresh),
+        ctx.gameData.on("items_updated", onItemsUpdated),
+        ctx.gameData.on("skills_updated", () => scheduleObRefresh(true)),
+        ctx.gameData.on("house_rooms_updated", () => scheduleObRefresh(true)),
+        ctx.gameData.on("consumables_updated", () => scheduleObRefresh(true)),
+        ctx.marketStore.onPriceUpdate(() => scheduleObRefresh(true)),
         ctx.wsBus.on("market_listings_updated", (data) => {
           recordAnchors(data?.endMarketListings || []);
-          scheduleObRefresh();
+          scheduleObRefresh(false);
         }),
-        ctx.wsBus.on("market_item_order_books_updated", () => {
-          if (ctx?.domScheduler.getActiveRoute() === "market") {
-            ctx.domScheduler.scheduleRun(false);
+        () => {
+          if (obRefreshTimer !== null) {
+            clearTimeout(obRefreshTimer);
+            obRefreshTimer = null;
           }
-        }),
+        },
       ];
 
       return () => {

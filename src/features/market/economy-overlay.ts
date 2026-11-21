@@ -313,15 +313,14 @@ export function createNetworthModule(): FeatureModule {
   };
 
   const scheduleCompute = () => {
+    if (throttleTimer !== null) return;
     const elapsed = Date.now() - lastComputeTs;
-    if (elapsed >= 2000) {
+    // Defer computation so burst WS frames (e.g. Claim All) coalesce without blocking WS handlers
+    const delay = elapsed >= 2000 ? 160 : Math.max(160, 2000 - elapsed);
+    throttleTimer = window.setTimeout(() => {
+      throttleTimer = null;
       computeNetWorth();
-    } else if (throttleTimer === null) {
-      throttleTimer = window.setTimeout(() => {
-        throttleTimer = null;
-        computeNetWorth();
-      }, 2000 - elapsed);
-    }
+    }, delay);
   };
 
   const renderBadge = () => {

@@ -5,6 +5,7 @@ const PANEL_SEL = '[class*="MarketplacePanel_myListings__"]:not([class*="myListi
 const TBODY_SEL = '[class*="MarketplacePanel_myListingsTable__"] tbody';
 const BTN_CONT_SEL = '[class*="MarketplacePanel_buttonContainer__"]';
 const MODAL_SEL = '[class*="MarketplacePanel_modalContent__"]';
+const CLAIM_BTN_RE = /收集|收取|领取|Claim|Collect/i;
 
 const SORT_MODES = [
   { key: "time-asc", zh: "时间↑", en: "Time↑" },
@@ -42,7 +43,7 @@ function isRowCollectable(row: Element): boolean {
   const claims = row.querySelector('[class*="MarketplacePanel_claims__"]');
   if (!claimsContainer || !claims || claims.children.length === 0) return false;
   const button = claimsContainer.querySelector('[class*="Button_button__"]');
-  return !!(button?.textContent && /收集|Claim/i.test(button.textContent));
+  return !!(button?.textContent && CLAIM_BTN_RE.test(button.textContent));
 }
 
 function getTableRows(tbody: Element | null): HTMLTableRowElement[] {
@@ -66,6 +67,7 @@ export function createMagicSortModule(): FeatureModule {
   let lastStateSignature = "";
   let lastPointerDownTs = 0;
   let batchFreezeUntil = 0;
+  let claimBurstPending = false;
   let debounceTimer: number | null = null;
   const zhCollator = new Intl.Collator("zh-CN");
 
@@ -108,6 +110,7 @@ export function createMagicSortModule(): FeatureModule {
     debounceTimer = window.setTimeout(() => {
       debounceTimer = null;
       batchFreezeUntil = 0;
+      claimBurstPending = false;
       sortRows(false);
     }, ms);
   };
@@ -273,15 +276,21 @@ export function createMagicSortModule(): FeatureModule {
 
     if (lastPanelRef !== panel) {
       lastPanelRef = panel;
-      // Clicking "全部收集 / Claim All" pauses sorting while React batch-removes dozens of rows
+      // Clicking "全部收集 / Collect All" pauses sorting until React finishes batch row updates
       panel.addEventListener(
         "click",
         (ev) => {
           const btn = (ev.target as Element | null)?.closest?.("button");
-          if (btn && /收集|Claim/i.test(btn.textContent || "")) {
+          if (btn && CLAIM_BTN_RE.test(btn.textContent || "")) {
             const isAll = /全部|All/i.test(btn.textContent || "");
-            batchFreezeUntil = Date.now() + (isAll ? 650 : 280);
-            scheduleSortDebounced(isAll ? 680 : 320);
+            if (isAll) {
+              claimBurstPending = true;
+              batchFreezeUntil = Math.max(batchFreezeUntil, Date.now() + 1400);
+              scheduleSortDebounced(1450);
+            } else {
+              batchFreezeUntil = Math.max(batchFreezeUntil, Date.now() + 320);
+              scheduleSortDebounced(340);
+            }
           }
         },
         true
@@ -369,9 +378,15 @@ export function createMagicSortModule(): FeatureModule {
 
       unregWs = ctx.wsBus.on("market_listings_updated", () => {
         if (ctx?.domScheduler.getActiveRoute() !== "market") return;
-        // Single debounced sort collapses burst Claim-All updates into 1 pass
-        batchFreezeUntil = Date.now() + 260;
-        scheduleSortDebounced(300);
+        // Collapse Claim-All WS bursts into a single post-reconciliation sort without shrinking freeze
+        const now = Date.now();
+        if (claimBurstPending) {
+          claimBurstPending = false;
+          batchFreezeUntil = now + 300;
+        } else {
+          batchFreezeUntil = Math.max(batchFreezeUntil, now + 300);
+        }
+        scheduleSortDebounced(320);
       });
 
       return () => {
@@ -383,6 +398,8 @@ export function createMagicSortModule(): FeatureModule {
           clearTimeout(debounceTimer);
           debounceTimer = null;
         }
+        batchFreezeUntil = 0;
+        claimBurstPending = false;
         lastPanelRef = null;
         lastTbodyRef = null;
         document.querySelectorAll(".mwi-lite-magic-sort-bar").forEach((el) => el.remove());
