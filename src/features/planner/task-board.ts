@@ -78,6 +78,97 @@ const SKILL_ORDER: Record<string, number> = {
   "击败": 99,
 };
 
+/**
+ * Build monster sort keys grouped by combat zone category order, then zone action sortIndex,
+ * keeping zone bosses right behind their zone's regular monsters and dungeon-exclusive monsters
+ * ordered cleanly under Dungeons.
+ */
+function buildMonsterZoneOrderMap(clientData: any): Map<string, number> {
+  const orderMap = new Map<string, number>();
+  const catMap = clientData?.actionCategoryDetailMap || {};
+  const actionMap = clientData?.actionDetailMap || {};
+  const monsterMap = clientData?.combatMonsterDetailMap || clientData?.monsterDetailMap || {};
+
+  const combatActions = Object.values<any>(actionMap)
+    .filter((d) => d?.type === "/action_types/combat" && d?.combatZoneInfo)
+    .sort((a, b) => (a.sortIndex ?? 999) - (b.sortIndex ?? 999));
+
+  const register = (monsterHrid: string | undefined, zoneOrder: number, actionOrder: number, subOrder: number) => {
+    if (!monsterHrid || orderMap.has(monsterHrid)) return;
+    orderMap.set(monsterHrid, zoneOrder * 1_000_000 + actionOrder * 1_000 + subOrder);
+  };
+
+  // 1) Single-monster combat spots in non-dungeon zones give each monster its exact zone placement
+  for (const detail of combatActions) {
+    const zi = detail.combatZoneInfo;
+    if (zi.isDungeon) continue;
+    const fi = zi.fightInfo || {};
+    const spawns = [
+      ...(fi.randomSpawnInfo?.spawns || []),
+      ...(fi.fixedSpawns || []),
+      ...(fi.bossSpawns || []),
+    ]
+      .map((s: any) => s?.combatMonsterHrid)
+      .filter((h): h is string => typeof h === "string" && h.length > 0);
+    const uniq = Array.from(new Set(spawns));
+    if (uniq.length !== 1) continue;
+    const zoneOrder = catMap[detail.category]?.sortIndex ?? 999;
+    register(uniq[0], zoneOrder, detail.sortIndex ?? 999, 0);
+  }
+
+  // 2) Multi-monster non-dungeon zone encounters assign zone bosses & zone-only monsters to their zone
+  for (const detail of combatActions) {
+    const zi = detail.combatZoneInfo;
+    if (zi.isDungeon) continue;
+    const fi = zi.fightInfo || {};
+    const zoneOrder = catMap[detail.category]?.sortIndex ?? 999;
+    const actionOrder = detail.sortIndex ?? 999;
+    let sub = 0;
+    for (const s of fi.randomSpawnInfo?.spawns || []) {
+      register(s?.combatMonsterHrid, zoneOrder, actionOrder, sub++);
+    }
+    for (const s of fi.fixedSpawns || []) {
+      register(s?.combatMonsterHrid, zoneOrder, actionOrder, sub++);
+    }
+    for (const s of fi.bossSpawns || []) {
+      register(s?.combatMonsterHrid, zoneOrder, actionOrder, 500 + sub++);
+    }
+  }
+
+  // 3) Dungeon encounters assign remaining dungeon-exclusive monsters by dungeon & wave order
+  for (const detail of combatActions) {
+    const zi = detail.combatZoneInfo;
+    if (!zi.isDungeon) continue;
+    const di = zi.dungeonInfo || {};
+    const zoneOrder = catMap[detail.category]?.sortIndex ?? 999;
+    const actionOrder = detail.sortIndex ?? 999;
+    let sub = 0;
+    const randomWaves = Object.entries<any>(di.randomSpawnInfoMap || {}).sort(
+      (a, b) => Number(a[0]) - Number(b[0])
+    );
+    for (const [, waveInfo] of randomWaves) {
+      for (const s of waveInfo?.spawns || []) {
+        register(s?.combatMonsterHrid, zoneOrder, actionOrder, sub++);
+      }
+    }
+    const fixedWaves = Object.entries<any>(di.fixedSpawnsMap || {}).sort((a, b) => Number(a[0]) - Number(b[0]));
+    for (const [, spawns] of fixedWaves) {
+      for (const s of spawns || []) {
+        register(s?.combatMonsterHrid, zoneOrder, actionOrder, 500 + sub++);
+      }
+    }
+  }
+
+  // 4) Fallback by combat level for any unmapped special/trial monster
+  for (const [hrid, monster] of Object.entries<any>(monsterMap)) {
+    if (orderMap.has(hrid)) continue;
+    const lvl = Number(monster?.combatDetails?.combatLevel);
+    orderMap.set(hrid, 900_000_000 + (Number.isFinite(lvl) ? Math.round(lvl * 100) : 999_999));
+  }
+
+  return orderMap;
+}
+
 type SpriteType = "items" | "actions" | "monsters";
 
 export function createTaskBoardModule(): FeatureModule {
@@ -95,59 +186,66 @@ export function createTaskBoardModule(): FeatureModule {
   let manifestFetching: Promise<void> | null = null;
   let actionNameToHrid: Map<string, string> | null = null;
   let monsterNameToHrid: Map<string, string> | null = null;
-  let lookupBuilt = false;
+  let monsterZoneOrder: Map<string, number> | null = null;
+  let clientLookupBuilt = false;
+  let i18nLookupBuilt = false;
 
   const savePref = () => {
     ctx?.storage.set<TaskSortPref>(TASK_SORT_PREF_KEY, { mode: sortMode, autoSort });
   };
 
   const ensureLookupMaps = () => {
-    if (lookupBuilt || !ctx) return;
+    if ((clientLookupBuilt && i18nLookupBuilt) || !ctx) return;
     const clientData = ctx.gameData.getClientData();
     if (!clientData) return;
 
-    actionNameToHrid = new Map();
-    monsterNameToHrid = new Map();
+    if (!actionNameToHrid) actionNameToHrid = new Map();
+    if (!monsterNameToHrid) monsterNameToHrid = new Map();
 
-    const core = ctx.gameData.getReactGameCore();
-    const resources = core?.props?.i18n?.options?.resources;
-    if (resources) {
-      for (const lang of Object.keys(resources)) {
-        const trans = resources[lang]?.translation;
-        if (trans?.actionNames) {
-          for (const [hrid, name] of Object.entries(trans.actionNames)) {
-            if (typeof name === "string" && name.trim()) {
-              actionNameToHrid.set(name.trim().toLowerCase(), hrid);
+    if (!i18nLookupBuilt) {
+      const core = ctx.gameData.getReactGameCore();
+      const resources = core?.props?.i18n?.options?.resources;
+      if (resources) {
+        for (const lang of Object.keys(resources)) {
+          const trans = resources[lang]?.translation;
+          if (trans?.actionNames) {
+            for (const [hrid, name] of Object.entries(trans.actionNames)) {
+              if (typeof name === "string" && name.trim()) {
+                actionNameToHrid.set(name.trim().toLowerCase(), hrid);
+              }
+            }
+          }
+          if (trans?.monsterNames) {
+            for (const [hrid, name] of Object.entries(trans.monsterNames)) {
+              if (typeof name === "string" && name.trim()) {
+                monsterNameToHrid.set(name.trim().toLowerCase(), hrid);
+              }
             }
           }
         }
-        if (trans?.monsterNames) {
-          for (const [hrid, name] of Object.entries(trans.monsterNames)) {
-            if (typeof name === "string" && name.trim()) {
-              monsterNameToHrid.set(name.trim().toLowerCase(), hrid);
-            }
+        i18nLookupBuilt = true;
+      }
+    }
+
+    if (!clientLookupBuilt) {
+      if (clientData.actionDetailMap) {
+        for (const [hrid, detail] of Object.entries<any>(clientData.actionDetailMap)) {
+          if (typeof detail?.name === "string" && detail.name.trim()) {
+            actionNameToHrid.set(detail.name.trim().toLowerCase(), hrid);
           }
         }
       }
-    }
-
-    if (clientData.actionDetailMap) {
-      for (const [hrid, detail] of Object.entries<any>(clientData.actionDetailMap)) {
-        if (typeof detail?.name === "string" && detail.name.trim()) {
-          actionNameToHrid.set(detail.name.trim().toLowerCase(), hrid);
+      const monsterMap = clientData.combatMonsterDetailMap || clientData.monsterDetailMap;
+      if (monsterMap) {
+        for (const [hrid, detail] of Object.entries<any>(monsterMap)) {
+          if (typeof detail?.name === "string" && detail.name.trim()) {
+            monsterNameToHrid.set(detail.name.trim().toLowerCase(), hrid);
+          }
         }
       }
+      monsterZoneOrder = buildMonsterZoneOrderMap(clientData);
+      clientLookupBuilt = true;
     }
-    const monsterMap = clientData.combatMonsterDetailMap || clientData.monsterDetailMap;
-    if (monsterMap) {
-      for (const [hrid, detail] of Object.entries<any>(monsterMap)) {
-        if (typeof detail?.name === "string" && detail.name.trim()) {
-          monsterNameToHrid.set(detail.name.trim().toLowerCase(), hrid);
-        }
-      }
-    }
-
-    lookupBuilt = true;
   };
 
   const detectDomSprites = () => {
@@ -214,13 +312,23 @@ export function createTaskBoardModule(): FeatureModule {
       const cleanName = parsed.taskTarget.replace(/Z\d+$/i, "").trim().toLowerCase();
       let monsterHrid = monsterNameToHrid?.get(cleanName) || null;
       if (!monsterHrid) {
+        const monsterMap = clientData.combatMonsterDetailMap || clientData.monsterDetailMap || {};
+        for (const hrid of Object.keys(monsterMap)) {
+          const localized = ctx.i18n.getMonsterName(hrid).trim().toLowerCase();
+          if (localized && localized === cleanName) {
+            monsterHrid = hrid;
+            monsterNameToHrid?.set(localized, hrid);
+            break;
+          }
+        }
+      }
+      if (!monsterHrid) {
         const quests = ctx.gameData.getCharacterQuests();
         const q = quests.find((item) => item?.monsterHrid && parsed.taskTarget.includes(ctx!.i18n.getMonsterName(item.monsterHrid)));
         if (q) monsterHrid = q.monsterHrid;
       }
       if (!monsterHrid) return null;
-      const monsterMap = clientData.combatMonsterDetailMap || clientData.monsterDetailMap;
-      const sortIndex = monsterMap?.[monsterHrid]?.sortIndex ?? 999;
+      const sortIndex = monsterZoneOrder?.get(monsterHrid) ?? 999_999_999;
       return {
         spriteType: "monsters",
         symbolId: monsterHrid.split("/").pop() || "",
@@ -315,7 +423,7 @@ export function createTaskBoardModule(): FeatureModule {
         isCompleted: parsed?.isCompleted ?? false,
         skillOrder: parsed ? SKILL_ORDER[parsed.skillType] ?? 999 : 999,
         isCombat: parsed?.isCombat ?? false,
-        monsterSortIndex: resolved?.monsterSortIndex ?? 999,
+        monsterSortIndex: resolved?.monsterSortIndex ?? 999_999_999,
         targetName: parsed?.taskTarget || "",
       };
     });

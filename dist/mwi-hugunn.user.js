@@ -22483,6 +22483,76 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     Defeat: 99,
     "击败": 99
   };
+  function buildMonsterZoneOrderMap(clientData) {
+    const orderMap = /* @__PURE__ */ new Map();
+    const catMap = clientData?.actionCategoryDetailMap || {};
+    const actionMap = clientData?.actionDetailMap || {};
+    const monsterMap = clientData?.combatMonsterDetailMap || clientData?.monsterDetailMap || {};
+    const combatActions = Object.values(actionMap).filter((d) => d?.type === "/action_types/combat" && d?.combatZoneInfo).sort((a, b) => (a.sortIndex ?? 999) - (b.sortIndex ?? 999));
+    const register = (monsterHrid, zoneOrder, actionOrder, subOrder) => {
+      if (!monsterHrid || orderMap.has(monsterHrid)) return;
+      orderMap.set(monsterHrid, zoneOrder * 1e6 + actionOrder * 1e3 + subOrder);
+    };
+    for (const detail of combatActions) {
+      const zi = detail.combatZoneInfo;
+      if (zi.isDungeon) continue;
+      const fi = zi.fightInfo || {};
+      const spawns = [
+        ...fi.randomSpawnInfo?.spawns || [],
+        ...fi.fixedSpawns || [],
+        ...fi.bossSpawns || []
+      ].map((s) => s?.combatMonsterHrid).filter((h) => typeof h === "string" && h.length > 0);
+      const uniq = Array.from(new Set(spawns));
+      if (uniq.length !== 1) continue;
+      const zoneOrder = catMap[detail.category]?.sortIndex ?? 999;
+      register(uniq[0], zoneOrder, detail.sortIndex ?? 999, 0);
+    }
+    for (const detail of combatActions) {
+      const zi = detail.combatZoneInfo;
+      if (zi.isDungeon) continue;
+      const fi = zi.fightInfo || {};
+      const zoneOrder = catMap[detail.category]?.sortIndex ?? 999;
+      const actionOrder = detail.sortIndex ?? 999;
+      let sub = 0;
+      for (const s of fi.randomSpawnInfo?.spawns || []) {
+        register(s?.combatMonsterHrid, zoneOrder, actionOrder, sub++);
+      }
+      for (const s of fi.fixedSpawns || []) {
+        register(s?.combatMonsterHrid, zoneOrder, actionOrder, sub++);
+      }
+      for (const s of fi.bossSpawns || []) {
+        register(s?.combatMonsterHrid, zoneOrder, actionOrder, 500 + sub++);
+      }
+    }
+    for (const detail of combatActions) {
+      const zi = detail.combatZoneInfo;
+      if (!zi.isDungeon) continue;
+      const di = zi.dungeonInfo || {};
+      const zoneOrder = catMap[detail.category]?.sortIndex ?? 999;
+      const actionOrder = detail.sortIndex ?? 999;
+      let sub = 0;
+      const randomWaves = Object.entries(di.randomSpawnInfoMap || {}).sort(
+        (a, b) => Number(a[0]) - Number(b[0])
+      );
+      for (const [, waveInfo] of randomWaves) {
+        for (const s of waveInfo?.spawns || []) {
+          register(s?.combatMonsterHrid, zoneOrder, actionOrder, sub++);
+        }
+      }
+      const fixedWaves = Object.entries(di.fixedSpawnsMap || {}).sort((a, b) => Number(a[0]) - Number(b[0]));
+      for (const [, spawns] of fixedWaves) {
+        for (const s of spawns || []) {
+          register(s?.combatMonsterHrid, zoneOrder, actionOrder, 500 + sub++);
+        }
+      }
+    }
+    for (const [hrid, monster] of Object.entries(monsterMap)) {
+      if (orderMap.has(hrid)) continue;
+      const lvl = Number(monster?.combatDetails?.combatLevel);
+      orderMap.set(hrid, 9e8 + (Number.isFinite(lvl) ? Math.round(lvl * 100) : 999999));
+    }
+    return orderMap;
+  }
   function createTaskBoardModule() {
     let ctx = null;
     let unregStyle = null;
@@ -22496,53 +22566,61 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     let manifestFetching = null;
     let actionNameToHrid = null;
     let monsterNameToHrid = null;
-    let lookupBuilt = false;
+    let monsterZoneOrder = null;
+    let clientLookupBuilt = false;
+    let i18nLookupBuilt = false;
     const savePref = () => {
       ctx?.storage.set(TASK_SORT_PREF_KEY, { mode: sortMode, autoSort });
     };
     const ensureLookupMaps = () => {
-      if (lookupBuilt || !ctx) return;
+      if (clientLookupBuilt && i18nLookupBuilt || !ctx) return;
       const clientData = ctx.gameData.getClientData();
       if (!clientData) return;
-      actionNameToHrid = /* @__PURE__ */ new Map();
-      monsterNameToHrid = /* @__PURE__ */ new Map();
-      const core = ctx.gameData.getReactGameCore();
-      const resources = core?.props?.i18n?.options?.resources;
-      if (resources) {
-        for (const lang of Object.keys(resources)) {
-          const trans = resources[lang]?.translation;
-          if (trans?.actionNames) {
-            for (const [hrid, name] of Object.entries(trans.actionNames)) {
-              if (typeof name === "string" && name.trim()) {
-                actionNameToHrid.set(name.trim().toLowerCase(), hrid);
+      if (!actionNameToHrid) actionNameToHrid = /* @__PURE__ */ new Map();
+      if (!monsterNameToHrid) monsterNameToHrid = /* @__PURE__ */ new Map();
+      if (!i18nLookupBuilt) {
+        const core = ctx.gameData.getReactGameCore();
+        const resources = core?.props?.i18n?.options?.resources;
+        if (resources) {
+          for (const lang of Object.keys(resources)) {
+            const trans = resources[lang]?.translation;
+            if (trans?.actionNames) {
+              for (const [hrid, name] of Object.entries(trans.actionNames)) {
+                if (typeof name === "string" && name.trim()) {
+                  actionNameToHrid.set(name.trim().toLowerCase(), hrid);
+                }
+              }
+            }
+            if (trans?.monsterNames) {
+              for (const [hrid, name] of Object.entries(trans.monsterNames)) {
+                if (typeof name === "string" && name.trim()) {
+                  monsterNameToHrid.set(name.trim().toLowerCase(), hrid);
+                }
               }
             }
           }
-          if (trans?.monsterNames) {
-            for (const [hrid, name] of Object.entries(trans.monsterNames)) {
-              if (typeof name === "string" && name.trim()) {
-                monsterNameToHrid.set(name.trim().toLowerCase(), hrid);
-              }
+          i18nLookupBuilt = true;
+        }
+      }
+      if (!clientLookupBuilt) {
+        if (clientData.actionDetailMap) {
+          for (const [hrid, detail] of Object.entries(clientData.actionDetailMap)) {
+            if (typeof detail?.name === "string" && detail.name.trim()) {
+              actionNameToHrid.set(detail.name.trim().toLowerCase(), hrid);
             }
           }
         }
-      }
-      if (clientData.actionDetailMap) {
-        for (const [hrid, detail] of Object.entries(clientData.actionDetailMap)) {
-          if (typeof detail?.name === "string" && detail.name.trim()) {
-            actionNameToHrid.set(detail.name.trim().toLowerCase(), hrid);
+        const monsterMap = clientData.combatMonsterDetailMap || clientData.monsterDetailMap;
+        if (monsterMap) {
+          for (const [hrid, detail] of Object.entries(monsterMap)) {
+            if (typeof detail?.name === "string" && detail.name.trim()) {
+              monsterNameToHrid.set(detail.name.trim().toLowerCase(), hrid);
+            }
           }
         }
+        monsterZoneOrder = buildMonsterZoneOrderMap(clientData);
+        clientLookupBuilt = true;
       }
-      const monsterMap = clientData.combatMonsterDetailMap || clientData.monsterDetailMap;
-      if (monsterMap) {
-        for (const [hrid, detail] of Object.entries(monsterMap)) {
-          if (typeof detail?.name === "string" && detail.name.trim()) {
-            monsterNameToHrid.set(detail.name.trim().toLowerCase(), hrid);
-          }
-        }
-      }
-      lookupBuilt = true;
     };
     const detectDomSprites = () => {
       const patterns = [
@@ -22600,13 +22678,23 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         const cleanName = parsed.taskTarget.replace(/Z\d+$/i, "").trim().toLowerCase();
         let monsterHrid = monsterNameToHrid?.get(cleanName) || null;
         if (!monsterHrid) {
+          const monsterMap = clientData.combatMonsterDetailMap || clientData.monsterDetailMap || {};
+          for (const hrid of Object.keys(monsterMap)) {
+            const localized = ctx.i18n.getMonsterName(hrid).trim().toLowerCase();
+            if (localized && localized === cleanName) {
+              monsterHrid = hrid;
+              monsterNameToHrid?.set(localized, hrid);
+              break;
+            }
+          }
+        }
+        if (!monsterHrid) {
           const quests = ctx.gameData.getCharacterQuests();
           const q = quests.find((item) => item?.monsterHrid && parsed.taskTarget.includes(ctx.i18n.getMonsterName(item.monsterHrid)));
           if (q) monsterHrid = q.monsterHrid;
         }
         if (!monsterHrid) return null;
-        const monsterMap = clientData.combatMonsterDetailMap || clientData.monsterDetailMap;
-        const sortIndex = monsterMap?.[monsterHrid]?.sortIndex ?? 999;
+        const sortIndex = monsterZoneOrder?.get(monsterHrid) ?? 999999999;
         return {
           spriteType: "monsters",
           symbolId: monsterHrid.split("/").pop() || "",
@@ -22689,7 +22777,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
           isCompleted: parsed?.isCompleted ?? false,
           skillOrder: parsed ? SKILL_ORDER[parsed.skillType] ?? 999 : 999,
           isCombat: parsed?.isCombat ?? false,
-          monsterSortIndex: resolved?.monsterSortIndex ?? 999,
+          monsterSortIndex: resolved?.monsterSortIndex ?? 999999999,
           targetName: parsed?.taskTarget || ""
         };
       });
