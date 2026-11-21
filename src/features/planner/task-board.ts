@@ -6,6 +6,16 @@ const TASK_CARD_SEL = '[class*="RandomTask_randomTask"]';
 const TASK_NAME_SEL = '[class*="RandomTask_name"]';
 const SLOT_COUNT_SEL = '[class*="TasksPanel_taskSlotCount"]';
 const TASK_N1_ID = "mwi-lite-task-n1";
+const CLAIM_REWARD_BTN_RE = /领取奖励|Claim\s*Reward/i;
+
+function findClaimButton(card: Element): HTMLButtonElement | null {
+  const btns = card.querySelectorAll<HTMLButtonElement>("button");
+  for (const btn of btns) {
+    if (btn.disabled || btn.className.includes("Button_disabled")) continue;
+    if (CLAIM_REWARD_BTN_RE.test(btn.textContent || "")) return btn;
+  }
+  return null;
+}
 
 function parseActionCount(raw: string | null | undefined): number | null {
   if (raw == null) return null;
@@ -180,6 +190,9 @@ export function createTaskBoardModule(): FeatureModule {
   let lastPointerDownTs = 0;
   let lastTaskListRef: Element | null = null;
   let timers: number[] = [];
+  let isClaimingAll = false;
+  let claimingFreezeUntil = 0;
+  let destroyed = false;
 
   // Lazy cached sprite URLs & reverse lookup maps
   const spriteUrls: Partial<Record<SpriteType, string>> = {};
@@ -295,8 +308,7 @@ export function createTaskBoardModule(): FeatureModule {
     const skillType = match[1].trim();
     const taskTarget = match[2].trim();
     const isCombat = skillType === "Defeat" || skillType === "击败";
-    const claimBtn = card.querySelector('button[class*="Button_buy"]');
-    const isCompleted = Boolean(claimBtn && /领取奖励|Claim Reward/i.test(claimBtn.textContent || ""));
+    const isCompleted = Boolean(findClaimButton(card));
     return { nameEl, fullText, skillType, taskTarget, isCombat, isCompleted };
   };
 
@@ -400,6 +412,7 @@ export function createTaskBoardModule(): FeatureModule {
   const sortTaskCards = (force = false) => {
     if (!ctx) return;
     if (!force && !autoSort) return;
+    if (!force && (isClaimingAll || Date.now() < claimingFreezeUntil)) return;
     if (!force && Date.now() - lastPointerDownTs < 250) {
       const id = window.setTimeout(() => sortTaskCards(false), 260);
       timers.push(id);
@@ -458,6 +471,95 @@ export function createTaskBoardModule(): FeatureModule {
     }
   };
 
+  const getTaskCards = (): HTMLElement[] => {
+    const taskList = document.querySelector(TASK_LIST_SEL);
+    if (!taskList) return [];
+    return Array.from(taskList.children).filter((el): el is HTMLElement => el.matches(TASK_CARD_SEL));
+  };
+
+  const syncClaimAllButton = (cards?: Element[]) => {
+    if (!ctx) return;
+    const btn = document.querySelector<HTMLButtonElement>(".mwi-lite-task-claim-all");
+    if (!btn || isClaimingAll) return;
+    const list = cards ?? getTaskCards();
+    let claimableCount = 0;
+    for (const c of list) {
+      if (findClaimButton(c)) claimableCount++;
+    }
+    btn.disabled = claimableCount === 0;
+    btn.dataset.ready = claimableCount > 0 ? "1" : "0";
+    btn.textContent =
+      claimableCount > 0
+        ? ctx.i18n.t(`一键领取 (${claimableCount})`, `Claim All (${claimableCount})`)
+        : ctx.i18n.t("一键领取", "Claim All");
+    btn.title = ctx.i18n.t(
+      "依次领取所有已完成任务的积分奖励",
+      "Claim rewards from all completed tasks"
+    );
+  };
+
+  const claimAllCompletedTasks = async () => {
+    if (!ctx || isClaimingAll || destroyed) return;
+    const initialCards = getTaskCards();
+    const total = initialCards.reduce((sum, c) => sum + (findClaimButton(c) ? 1 : 0), 0);
+    if (total === 0) {
+      syncClaimAllButton(initialCards);
+      return;
+    }
+
+    const claimBtn = document.querySelector<HTMLButtonElement>(".mwi-lite-task-claim-all");
+    isClaimingAll = true;
+    const dispatched = new WeakSet<HTMLButtonElement>();
+    let claimed = 0;
+    let idleWaitSteps = 0;
+
+    try {
+      for (let step = 0; step < total * 3 + 30; step++) {
+        if (destroyed || !isClaimingAll) break;
+        const pending = getTaskCards()
+          .map((c) => findClaimButton(c))
+          .filter((b): b is HTMLButtonElement => b !== null);
+        if (pending.length === 0) break;
+
+        const targetBtn = pending.find((b) => !dispatched.has(b));
+        if (!targetBtn) {
+          idleWaitSteps++;
+          if (idleWaitSteps >= 15) break;
+          await new Promise<void>((resolve) => {
+            const t = window.setTimeout(resolve, 80);
+            timers.push(t);
+          });
+          continue;
+        }
+
+        idleWaitSteps = 0;
+        dispatched.add(targetBtn);
+        claimed++;
+        claimingFreezeUntil = Date.now() + 900;
+        if (claimBtn && claimBtn.isConnected) {
+          claimBtn.disabled = true;
+          claimBtn.textContent = ctx.i18n.t(
+            `领取中 (${claimed}/${total})`,
+            `Claiming (${claimed}/${total})`
+          );
+        }
+        targetBtn.click();
+        await new Promise<void>((resolve) => {
+          const t = window.setTimeout(resolve, 95);
+          timers.push(t);
+        });
+      }
+    } finally {
+      isClaimingAll = false;
+      claimingFreezeUntil = Date.now() + 220;
+      syncClaimAllButton();
+      const t = window.setTimeout(() => {
+        if (!destroyed) ctx?.domScheduler.scheduleRun(false);
+      }, 240);
+      timers.push(t);
+    }
+  };
+
   const injectToolbar = () => {
     if (!ctx) return;
     const slotCount = document.querySelector(SLOT_COUNT_SEL);
@@ -466,6 +568,15 @@ export function createTaskBoardModule(): FeatureModule {
     const bar = document.createElement("span");
     bar.className = "mwi-lite-task-toolbar";
     bar.setAttribute("data-mwi-lite", "1");
+
+    const claimAllBtn = document.createElement("button");
+    claimAllBtn.type = "button";
+    claimAllBtn.className = "Button_button__1Fe9z Button_small__3fqC7 mwi-lite-task-btn mwi-lite-task-claim-all";
+    claimAllBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      void claimAllCompletedTasks();
+    });
 
     const sortBtn = document.createElement("button");
     sortBtn.type = "button";
@@ -504,8 +615,9 @@ export function createTaskBoardModule(): FeatureModule {
       if (autoSort) sortTaskCards(true);
     });
 
-    bar.append(sortBtn, autoBtn);
+    bar.append(claimAllBtn, sortBtn, autoBtn);
     slotCount.appendChild(bar);
+    syncClaimAllButton();
   };
 
   const injectTaskMinusOneButton = () => {
@@ -599,6 +711,7 @@ export function createTaskBoardModule(): FeatureModule {
     const cards = Array.from(taskList.children).filter(
       (el): el is HTMLElement => el.matches(TASK_CARD_SEL)
     );
+    syncClaimAllButton(cards);
     if (!cards.length) return;
 
     renderTaskIcons(cards);
@@ -616,6 +729,8 @@ export function createTaskBoardModule(): FeatureModule {
 
     init(context) {
       ctx = context;
+      destroyed = false;
+      isClaimingAll = false;
       const saved = ctx.storage.get<TaskSortPref | null>(TASK_SORT_PREF_KEY, null);
       if (saved) {
         if (saved.mode === "skill" || saved.mode === "name") sortMode = saved.mode;
@@ -651,6 +766,19 @@ export function createTaskBoardModule(): FeatureModule {
         .mwi-lite-task-auto[data-active="0"] {
           background: linear-gradient(180deg, #27324a 0%, #1a2235 100%) !important;
           border-color: #64748b !important;
+        }
+        .mwi-lite-task-claim-all[data-ready="1"] {
+          border-color: var(--mwi-px-gold, #fde047) !important;
+          background: var(--mwi-px-btn-gold, linear-gradient(180deg, #7c580c 0%, #523907 100%)) !important;
+          color: #fef08a !important;
+          box-shadow: 0 0 0 1px #080d1a, inset 1px 1px 0 #eab308 !important;
+        }
+        .mwi-lite-task-claim-all:disabled {
+          opacity: 0.5;
+          cursor: not-allowed !important;
+          background: linear-gradient(180deg, #27324a 0%, #1a2235 100%) !important;
+          border-color: #64748b !important;
+          color: #94a3b8 !important;
         }
         .mwi-lite-task-icon {
           display: inline-flex;
@@ -707,6 +835,8 @@ export function createTaskBoardModule(): FeatureModule {
       });
 
       return () => {
+        destroyed = true;
+        isClaimingAll = false;
         unregStyle?.();
         unregStyle = null;
         unregQuests?.();
