@@ -498,6 +498,47 @@ export function createTaskBoardModule(): FeatureModule {
     );
   };
 
+  const waitForNextClaimEvent = (card: Element, timeoutMs: number): Promise<void> => {
+    return new Promise<void>((resolve) => {
+      if (destroyed || !isClaimingAll || !card.isConnected || !findClaimButton(card)) {
+        resolve();
+        return;
+      }
+      let settled = false;
+      let unsubWs: (() => void) | null = null;
+      let pollId: number | null = null;
+      let timeoutId: number | null = null;
+
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        unsubWs?.();
+        if (pollId !== null) clearInterval(pollId);
+        if (timeoutId !== null) clearTimeout(timeoutId);
+        resolve();
+      };
+
+      // Wake up right after React commits quests_updated that actually cleared this card
+      unsubWs = ctx?.wsBus.on("quests_updated", () => {
+        const t = window.setTimeout(() => {
+          if (destroyed || !isClaimingAll || !card.isConnected || !findClaimButton(card)) {
+            finish();
+          }
+        }, 40);
+        timers.push(t);
+      }) ?? null;
+
+      pollId = window.setInterval(() => {
+        if (destroyed || !isClaimingAll || !card.isConnected || !findClaimButton(card)) {
+          finish();
+        }
+      }, 60);
+
+      timeoutId = window.setTimeout(finish, timeoutMs);
+      timers.push(timeoutId);
+    });
+  };
+
   const claimAllCompletedTasks = async () => {
     if (!ctx || isClaimingAll || destroyed) return;
     const initialCards = getTaskCards();
@@ -507,45 +548,72 @@ export function createTaskBoardModule(): FeatureModule {
       return;
     }
 
-    const claimBtn = document.querySelector<HTMLButtonElement>(".mwi-lite-task-claim-all");
     isClaimingAll = true;
-    const dispatched = new WeakSet<HTMLButtonElement>();
+    const attempts = new WeakMap<Element, number>();
     let claimed = 0;
-    let idleWaitSteps = 0;
 
     try {
-      for (let step = 0; step < total * 3 + 30; step++) {
+      for (let guard = 0; guard < total * 4 + 20; guard++) {
         if (destroyed || !isClaimingAll) break;
-        const pending = getTaskCards()
-          .map((c) => findClaimButton(c))
-          .filter((b): b is HTMLButtonElement => b !== null);
-        if (pending.length === 0) break;
 
-        const targetBtn = pending.find((b) => !dispatched.has(b));
-        if (!targetBtn) {
-          idleWaitSteps++;
-          if (idleWaitSteps >= 15) break;
+        const cards = getTaskCards();
+        let targetCard: HTMLElement | null = null;
+        let targetBtn: HTMLButtonElement | null = null;
+        let hasPendingCooldownCard = false;
+
+        for (const c of cards) {
+          const cardAttempts = attempts.get(c) || 0;
+          if (cardAttempts >= 2) continue;
+          const btn = findClaimButton(c);
+          if (btn) {
+            targetCard = c;
+            targetBtn = btn;
+            break;
+          }
+          // Detect card still in 600ms button cooldown if it still shows a claim button
+          const rawBtns = c.querySelectorAll<HTMLButtonElement>("button");
+          for (const rb of rawBtns) {
+            if (CLAIM_REWARD_BTN_RE.test(rb.textContent || "")) {
+              hasPendingCooldownCard = true;
+              break;
+            }
+          }
+        }
+
+        if (!targetCard || !targetBtn) {
+          if (!hasPendingCooldownCard) break;
           await new Promise<void>((resolve) => {
-            const t = window.setTimeout(resolve, 80);
+            const t = window.setTimeout(resolve, 200);
             timers.push(t);
           });
           continue;
         }
 
-        idleWaitSteps = 0;
-        dispatched.add(targetBtn);
-        claimed++;
-        claimingFreezeUntil = Date.now() + 900;
-        if (claimBtn && claimBtn.isConnected) {
-          claimBtn.disabled = true;
-          claimBtn.textContent = ctx.i18n.t(
-            `领取中 (${claimed}/${total})`,
-            `Claiming (${claimed}/${total})`
+        const attemptNo = (attempts.get(targetCard) || 0) + 1;
+        attempts.set(targetCard, attemptNo);
+        claimingFreezeUntil = Date.now() + 2500;
+
+        const progressDone = Math.min(total, claimed + 1);
+        const claimAllBtn = document.querySelector<HTMLButtonElement>(".mwi-lite-task-claim-all");
+        if (claimAllBtn && claimAllBtn.isConnected) {
+          claimAllBtn.disabled = true;
+          claimAllBtn.textContent = ctx.i18n.t(
+            `领取中 (${progressDone}/${total})`,
+            `Claiming (${progressDone}/${total})`
           );
         }
+
+        const waitConfirm = waitForNextClaimEvent(targetCard, 1800);
         targetBtn.click();
+        await waitConfirm;
+
+        if (!targetCard.isConnected || !findClaimButton(targetCard)) {
+          claimed++;
+        }
+
+        // Polite serial delay between claim requests so server never rate-limits concurrent claims
         await new Promise<void>((resolve) => {
-          const t = window.setTimeout(resolve, 95);
+          const t = window.setTimeout(resolve, 280);
           timers.push(t);
         });
       }
