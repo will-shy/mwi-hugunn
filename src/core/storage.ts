@@ -87,7 +87,19 @@ export function addStyle(id: string, css: string): () => void {
     styleEl = document.createElement("style");
     styleEl.setAttribute(attr, id);
     styleEl.setAttribute("data-mwi-lite", "1");
-    (document.head || document.documentElement).appendChild(styleEl);
+    const host = document.head || document.documentElement;
+    if (host) {
+      host.appendChild(styleEl);
+    } else {
+      const targetEl = styleEl;
+      document.addEventListener(
+        "DOMContentLoaded",
+        () => {
+          (document.head || document.documentElement)?.appendChild(targetEl);
+        },
+        { once: true }
+      );
+    }
   }
   styleEl.textContent = css;
 

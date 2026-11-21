@@ -252,7 +252,19 @@
       styleEl = document.createElement("style");
       styleEl.setAttribute(attr, id);
       styleEl.setAttribute("data-mwi-lite", "1");
-      (document.head || document.documentElement).appendChild(styleEl);
+      const host = document.head || document.documentElement;
+      if (host) {
+        host.appendChild(styleEl);
+      } else {
+        const targetEl = styleEl;
+        document.addEventListener(
+          "DOMContentLoaded",
+          () => {
+            (document.head || document.documentElement)?.appendChild(targetEl);
+          },
+          { once: true }
+        );
+      }
     }
     styleEl.textContent = css;
     return () => {
@@ -1456,7 +1468,7 @@
     rafId = null;
     lastRunTs = 0;
     cooldownTimer = null;
-    minIntervalMs = 80;
+    minIntervalMs = 100;
     start() {
       if (this.observer) return;
       const attach = () => {
@@ -1504,34 +1516,42 @@
     isVisible(selector) {
       const els = document.querySelectorAll(selector);
       for (let i = 0; i < els.length; i++) {
-        if (els[i].offsetParent !== null) return true;
+        const el = els[i];
+        if (el.style.display !== "none" && !el.hidden && el.offsetParent !== null) return true;
       }
       return false;
     }
+    isRouteActive(route) {
+      switch (route) {
+        case "market":
+          return this.isVisible('[class*="MarketplacePanel_marketplacePanel"]');
+        case "labyrinth":
+          return this.isVisible('[class*="LabyrinthPanel_labyrinthPanel"]');
+        case "combat":
+          return this.isVisible('[class*="BattlePanel_"]') || this.isVisible('[class*="CombatPanel_"]') || this.isVisible('[class*="DungeonPanel_"]');
+        case "tasks":
+          return this.isVisible('[class*="TasksPanel_"]');
+        case "house":
+          return this.isVisible('[class*="HousePanel_"]');
+        case "guild":
+          return this.isVisible('[class*="GuildPanel_guildPanel"]');
+        case "production":
+          return this.isVisible('[class*="GatheringProductionSkillPanel_"]') || this.isVisible('[class*="SkillActionDetail_"]') || this.isVisible('[class*="EnhancingPanel_"]') || this.isVisible('[class*="AlchemyPanel_"]');
+        case "calculator":
+          return this.isVisible("#mwi-lite-calculator-panel");
+        default:
+          return false;
+      }
+    }
     detectRoute() {
-      if (this.isVisible('[class*="MarketplacePanel_marketplacePanel"]')) {
-        return "market";
+      if (this.activeRoute !== "other" && this.isRouteActive(this.activeRoute)) {
+        return this.activeRoute;
       }
-      if (this.isVisible('[class*="LabyrinthPanel_labyrinthPanel"]')) {
-        return "labyrinth";
-      }
-      if (this.isVisible('[class*="BattlePanel_"]') || this.isVisible('[class*="CombatPanel_"]') || this.isVisible('[class*="DungeonPanel_"]')) {
-        return "combat";
-      }
-      if (this.isVisible('[class*="TasksPanel_"]')) {
-        return "tasks";
-      }
-      if (this.isVisible('[class*="HousePanel_"]')) {
-        return "house";
-      }
-      if (this.isVisible('[class*="GuildPanel_guildPanel"]')) {
-        return "guild";
-      }
-      if (this.isVisible('[class*="GatheringProductionSkillPanel_"]') || this.isVisible('[class*="SkillActionDetail_"]') || this.isVisible('[class*="EnhancingPanel_"]') || this.isVisible('[class*="AlchemyPanel_"]')) {
-        return "production";
-      }
-      if (this.isVisible("#mwi-lite-calculator-panel")) {
-        return "calculator";
+      const order = ["market", "labyrinth", "combat", "tasks", "house", "guild", "production", "calculator"];
+      for (const r of order) {
+        if (r !== this.activeRoute && this.isRouteActive(r)) {
+          return r;
+        }
       }
       return "other";
     }
@@ -16406,6 +16426,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     containerEvCache = /* @__PURE__ */ new Map();
     prodCostCache = /* @__PURE__ */ new Map();
     enhancementCostCache = /* @__PURE__ */ new Map();
+    shopCostCache = null;
     recipeIndex = null;
     cachePricingMode = "ask";
     invalidate() {
@@ -16486,14 +16507,22 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       return prod;
     }
     getShopCoinCost(itemHrid, clientData) {
-      const shopMap = clientData?.shopItemDetailMap;
-      if (!shopMap) return 0;
-      for (const shopItem of Object.values(shopMap)) {
-        if (shopItem?.itemHrid !== itemHrid || !Array.isArray(shopItem.costs)) continue;
-        const coinCost = shopItem.costs.find((c) => c.itemHrid === "/items/coin");
-        if (coinCost?.count > 0) return coinCost.count;
+      if (!this.shopCostCache) {
+        this.shopCostCache = /* @__PURE__ */ new Map();
+        const shopMap = clientData?.shopItemDetailMap;
+        if (shopMap) {
+          for (const shopItem of Object.values(shopMap)) {
+            if (!shopItem?.itemHrid || !Array.isArray(shopItem.costs) || this.shopCostCache.has(shopItem.itemHrid)) {
+              continue;
+            }
+            const coinCost = shopItem.costs.find((c) => c.itemHrid === "/items/coin");
+            if (coinCost?.count > 0) {
+              this.shopCostCache.set(shopItem.itemHrid, coinCost.count);
+            }
+          }
+        }
       }
-      return 0;
+      return this.shopCostCache.get(itemHrid) || 0;
     }
     ensureContainerEvs(clientData, marketStore2, mode) {
       if (this.containerEvCache.size > 0 && this.cachePricingMode === mode) return;
@@ -17073,9 +17102,11 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       return lastBreakdown;
     };
     const scheduleCompute = () => {
-      if (throttleTimer !== null) return;
+      if (throttleTimer !== null) {
+        clearTimeout(throttleTimer);
+      }
       const elapsed = Date.now() - lastComputeTs;
-      const delay = elapsed >= 2e3 ? 160 : Math.max(160, 2e3 - elapsed);
+      const delay = elapsed >= 2e3 ? 420 : Math.max(420, 2e3 - elapsed);
       throttleTimer = window.setTimeout(() => {
         throttleTimer = null;
         computeNetWorth();
@@ -18568,17 +18599,26 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     return item ? (item.textContent || "").trim() : "";
   }
   function isRowCollectable(row) {
-    const claimsContainer = row.querySelector('[class*="MarketplacePanel_claimsContainer__"]');
-    const claims = row.querySelector('[class*="MarketplacePanel_claims__"]');
-    if (!claimsContainer || !claims || claims.children.length === 0) return false;
-    const button = claimsContainer.querySelector('[class*="Button_button__"]');
+    const claimsCell = row.cells.length >= 7 ? row.cells[4] : null;
+    const claimsContainer = claimsCell?.firstElementChild || row.querySelector('[class*="MarketplacePanel_claimsContainer__"]');
+    if (!claimsContainer) return false;
+    const claims = claimsContainer.firstElementChild;
+    if (!claims || claims.childElementCount === 0) return false;
+    const last = claimsContainer.lastElementChild;
+    const button = last?.tagName === "BUTTON" ? last : claimsContainer.querySelector('[class*="Button_button__"]');
     return !!(button?.textContent && CLAIM_BTN_RE.test(button.textContent));
   }
   function getTableRows(tbody) {
     if (!tbody) return [];
-    return Array.from(tbody.children).filter(
-      (row) => row.tagName === "TR" && !!row.querySelector("td")
-    );
+    const children = tbody.children;
+    const out = [];
+    for (let i = 0; i < children.length; i++) {
+      const row = children[i];
+      if (row.tagName === "TR" && row.cells.length > 0) {
+        out.push(row);
+      }
+    }
+    return out;
   }
   function createMagicSortModule() {
     let ctx = null;
@@ -18594,7 +18634,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     let lastStateSignature = "";
     let lastPointerDownTs = 0;
     let batchFreezeUntil = 0;
-    let claimBurstPending = false;
+    let claimBurstUntil = 0;
     let debounceTimer = null;
     const zhCollator = new Intl.Collator("zh-CN");
     const getRowMeta = (row) => {
@@ -18620,6 +18660,17 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       }
       return parts.join("|");
     };
+    const buildDataSignature = (data) => {
+      const parts = [
+        String(data.length),
+        SORT_MODES[sortIndex]?.key || "time-asc",
+        pinCollectable ? "1" : "0"
+      ];
+      for (let i = 0; i < data.length; i++) {
+        parts.push(data[i].collectable ? "C" : "N");
+      }
+      return parts.join("|");
+    };
     const savePref = () => {
       ctx?.storage.set(SORT_STATE_KEY, {
         sortKey: SORT_MODES[sortIndex]?.key || "time-asc",
@@ -18632,8 +18683,12 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       }
       debounceTimer = window.setTimeout(() => {
         debounceTimer = null;
+        const now = Date.now();
+        if (now < batchFreezeUntil) {
+          scheduleSortDebounced(Math.max(60, batchFreezeUntil - now + 30));
+          return;
+        }
         batchFreezeUntil = 0;
-        claimBurstPending = false;
         sortRows(false);
       }, ms);
     };
@@ -18711,7 +18766,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
             }
           }
         }
-        lastStateSignature = getRowsSignature(getTableRows(tbody));
+        lastStateSignature = buildDataSignature(data);
       } finally {
         isSorting = false;
       }
@@ -18786,13 +18841,14 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
             const btn = ev.target?.closest?.("button");
             if (btn && CLAIM_BTN_RE.test(btn.textContent || "")) {
               const isAll = /全部|All/i.test(btn.textContent || "");
+              const now = Date.now();
               if (isAll) {
-                claimBurstPending = true;
-                batchFreezeUntil = Math.max(batchFreezeUntil, Date.now() + 1400);
-                scheduleSortDebounced(1450);
+                claimBurstUntil = Math.max(claimBurstUntil, now + 2600);
+                batchFreezeUntil = Math.max(batchFreezeUntil, claimBurstUntil);
+                scheduleSortDebounced(Math.max(450, batchFreezeUntil - now + 40));
               } else {
-                batchFreezeUntil = Math.max(batchFreezeUntil, Date.now() + 320);
-                scheduleSortDebounced(340);
+                batchFreezeUntil = Math.max(batchFreezeUntil, now + 360);
+                scheduleSortDebounced(390);
               }
             }
           },
@@ -18879,16 +18935,18 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         .mwi-lite-ms-sort { min-width: 96px; }
         `
         );
-        unregWs = ctx.wsBus.on("market_listings_updated", () => {
+        unregWs = ctx.gameData.on("market_listings_updated", (listings) => {
           if (ctx?.domScheduler.getActiveRoute() !== "market") return;
           const now = Date.now();
-          if (claimBurstPending) {
-            claimBurstPending = false;
-            batchFreezeUntil = now + 300;
+          const hasMoreClaimables = Array.isArray(listings) && listings.some((l) => (l?.unclaimedCoinCount || 0) > 0 || (l?.unclaimedItemCount || 0) > 0);
+          if (now < claimBurstUntil && !hasMoreClaimables) {
+            claimBurstUntil = 0;
+            batchFreezeUntil = now + 380;
           } else {
-            batchFreezeUntil = Math.max(batchFreezeUntil, now + 300);
+            const holdMs = now < claimBurstUntil ? 900 : 380;
+            batchFreezeUntil = Math.max(batchFreezeUntil, now + holdMs);
           }
-          scheduleSortDebounced(320);
+          scheduleSortDebounced(Math.max(380, batchFreezeUntil - now + 40));
         });
         return () => {
           unregWs?.();
@@ -18900,7 +18958,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
             debounceTimer = null;
           }
           batchFreezeUntil = 0;
-          claimBurstPending = false;
+          claimBurstUntil = 0;
           lastPanelRef = null;
           lastTbodyRef = null;
           document.querySelectorAll(".mwi-lite-magic-sort-bar").forEach((el) => el.remove());

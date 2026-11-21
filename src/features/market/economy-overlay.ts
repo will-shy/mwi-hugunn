@@ -316,10 +316,12 @@ export function createNetworthModule(): FeatureModule {
   };
 
   const scheduleCompute = () => {
-    if (throttleTimer !== null) return;
+    if (throttleTimer !== null) {
+      clearTimeout(throttleTimer);
+    }
     const elapsed = Date.now() - lastComputeTs;
-    // Defer computation so burst WS frames (e.g. Claim All) coalesce without blocking WS handlers
-    const delay = elapsed >= 2000 ? 160 : Math.max(160, 2000 - elapsed);
+    // Debounce burst updates (e.g. 10+ Claim All packets) so compute runs once after settle
+    const delay = elapsed >= 2000 ? 420 : Math.max(420, 2000 - elapsed);
     throttleTimer = window.setTimeout(() => {
       throttleTimer = null;
       computeNetWorth();

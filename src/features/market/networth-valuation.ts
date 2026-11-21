@@ -55,6 +55,7 @@ export class ToolashaNetworthEvaluator {
   private containerEvCache = new Map<string, number>();
   private prodCostCache = new Map<string, number>();
   private enhancementCostCache = new Map<string, number>();
+  private shopCostCache: Map<string, number> | null = null;
   private recipeIndex: Map<string, any> | null = null;
   private cachePricingMode: NetWorthPricingMode = "ask";
 
@@ -155,14 +156,22 @@ export class ToolashaNetworthEvaluator {
   }
 
   private getShopCoinCost(itemHrid: string, clientData: any): number {
-    const shopMap = clientData?.shopItemDetailMap;
-    if (!shopMap) return 0;
-    for (const shopItem of Object.values<any>(shopMap)) {
-      if (shopItem?.itemHrid !== itemHrid || !Array.isArray(shopItem.costs)) continue;
-      const coinCost = shopItem.costs.find((c: any) => c.itemHrid === "/items/coin");
-      if (coinCost?.count > 0) return coinCost.count;
+    if (!this.shopCostCache) {
+      this.shopCostCache = new Map<string, number>();
+      const shopMap = clientData?.shopItemDetailMap;
+      if (shopMap) {
+        for (const shopItem of Object.values<any>(shopMap)) {
+          if (!shopItem?.itemHrid || !Array.isArray(shopItem.costs) || this.shopCostCache.has(shopItem.itemHrid)) {
+            continue;
+          }
+          const coinCost = shopItem.costs.find((c: any) => c.itemHrid === "/items/coin");
+          if (coinCost?.count > 0) {
+            this.shopCostCache.set(shopItem.itemHrid, coinCost.count);
+          }
+        }
+      }
     }
-    return 0;
+    return this.shopCostCache.get(itemHrid) || 0;
   }
 
   private ensureContainerEvs(clientData: any, marketStore: MarketStore, mode: NetWorthPricingMode): void {

@@ -20,7 +20,7 @@ class SingleRafDomScheduler implements DomScheduler {
   private rafId: number | null = null;
   private lastRunTs = 0;
   private cooldownTimer: number | null = null;
-  private readonly minIntervalMs = 80;
+  private readonly minIntervalMs = 100;
 
   start(): void {
     if (this.observer) return;
@@ -76,44 +76,54 @@ class SingleRafDomScheduler implements DomScheduler {
   private isVisible(selector: string): boolean {
     const els = document.querySelectorAll<HTMLElement>(selector);
     for (let i = 0; i < els.length; i++) {
-      if (els[i].offsetParent !== null) return true;
+      const el = els[i];
+      if (el.style.display !== "none" && !el.hidden && el.offsetParent !== null) return true;
     }
     return false;
   }
 
+  private isRouteActive(route: PanelRoute): boolean {
+    switch (route) {
+      case "market":
+        return this.isVisible('[class*="MarketplacePanel_marketplacePanel"]');
+      case "labyrinth":
+        return this.isVisible('[class*="LabyrinthPanel_labyrinthPanel"]');
+      case "combat":
+        return (
+          this.isVisible('[class*="BattlePanel_"]') ||
+          this.isVisible('[class*="CombatPanel_"]') ||
+          this.isVisible('[class*="DungeonPanel_"]')
+        );
+      case "tasks":
+        return this.isVisible('[class*="TasksPanel_"]');
+      case "house":
+        return this.isVisible('[class*="HousePanel_"]');
+      case "guild":
+        return this.isVisible('[class*="GuildPanel_guildPanel"]');
+      case "production":
+        return (
+          this.isVisible('[class*="GatheringProductionSkillPanel_"]') ||
+          this.isVisible('[class*="SkillActionDetail_"]') ||
+          this.isVisible('[class*="EnhancingPanel_"]') ||
+          this.isVisible('[class*="AlchemyPanel_"]')
+        );
+      case "calculator":
+        return this.isVisible("#mwi-lite-calculator-panel");
+      default:
+        return false;
+    }
+  }
+
   detectRoute(): PanelRoute {
-    if (this.isVisible('[class*="MarketplacePanel_marketplacePanel"]')) {
-      return "market";
+    // Check active route first to avoid 7 unnecessary DOM layout queries during bursts
+    if (this.activeRoute !== "other" && this.isRouteActive(this.activeRoute)) {
+      return this.activeRoute;
     }
-    if (this.isVisible('[class*="LabyrinthPanel_labyrinthPanel"]')) {
-      return "labyrinth";
-    }
-    if (
-      this.isVisible('[class*="BattlePanel_"]') ||
-      this.isVisible('[class*="CombatPanel_"]') ||
-      this.isVisible('[class*="DungeonPanel_"]')
-    ) {
-      return "combat";
-    }
-    if (this.isVisible('[class*="TasksPanel_"]')) {
-      return "tasks";
-    }
-    if (this.isVisible('[class*="HousePanel_"]')) {
-      return "house";
-    }
-    if (this.isVisible('[class*="GuildPanel_guildPanel"]')) {
-      return "guild";
-    }
-    if (
-      this.isVisible('[class*="GatheringProductionSkillPanel_"]') ||
-      this.isVisible('[class*="SkillActionDetail_"]') ||
-      this.isVisible('[class*="EnhancingPanel_"]') ||
-      this.isVisible('[class*="AlchemyPanel_"]')
-    ) {
-      return "production";
-    }
-    if (this.isVisible("#mwi-lite-calculator-panel")) {
-      return "calculator";
+    const order: PanelRoute[] = ["market", "labyrinth", "combat", "tasks", "house", "guild", "production", "calculator"];
+    for (const r of order) {
+      if (r !== this.activeRoute && this.isRouteActive(r)) {
+        return r;
+      }
     }
     return "other";
   }

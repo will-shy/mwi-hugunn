@@ -38,19 +38,32 @@ function getRowItemName(row: Element): string {
   return item ? (item.textContent || "").trim() : "";
 }
 
-function isRowCollectable(row: Element): boolean {
-  const claimsContainer = row.querySelector('[class*="MarketplacePanel_claimsContainer__"]');
-  const claims = row.querySelector('[class*="MarketplacePanel_claims__"]');
-  if (!claimsContainer || !claims || claims.children.length === 0) return false;
-  const button = claimsContainer.querySelector('[class*="Button_button__"]');
+function isRowCollectable(row: HTMLTableRowElement): boolean {
+  // Fast path on MWI MyListings column 4 (claims cell) avoids 3x subtree querySelector per row
+  const claimsCell = row.cells.length >= 7 ? row.cells[4] : null;
+  const claimsContainer =
+    claimsCell?.firstElementChild ||
+    row.querySelector('[class*="MarketplacePanel_claimsContainer__"]');
+  if (!claimsContainer) return false;
+  const claims = claimsContainer.firstElementChild;
+  if (!claims || claims.childElementCount === 0) return false;
+  const last = claimsContainer.lastElementChild;
+  const button =
+    last?.tagName === "BUTTON" ? last : claimsContainer.querySelector('[class*="Button_button__"]');
   return !!(button?.textContent && CLAIM_BTN_RE.test(button.textContent));
 }
 
 function getTableRows(tbody: Element | null): HTMLTableRowElement[] {
   if (!tbody) return [];
-  return Array.from(tbody.children).filter(
-    (row): row is HTMLTableRowElement => row.tagName === "TR" && !!row.querySelector("td")
-  );
+  const children = tbody.children;
+  const out: HTMLTableRowElement[] = [];
+  for (let i = 0; i < children.length; i++) {
+    const row = children[i] as HTMLTableRowElement;
+    if (row.tagName === "TR" && row.cells.length > 0) {
+      out.push(row);
+    }
+  }
+  return out;
 }
 
 export function createMagicSortModule(): FeatureModule {
@@ -67,7 +80,7 @@ export function createMagicSortModule(): FeatureModule {
   let lastStateSignature = "";
   let lastPointerDownTs = 0;
   let batchFreezeUntil = 0;
-  let claimBurstPending = false;
+  let claimBurstUntil = 0;
   let debounceTimer: number | null = null;
   const zhCollator = new Intl.Collator("zh-CN");
 
@@ -96,6 +109,18 @@ export function createMagicSortModule(): FeatureModule {
     return parts.join("|");
   };
 
+  const buildDataSignature = (data: Array<{ collectable: boolean }>): string => {
+    const parts: string[] = [
+      String(data.length),
+      SORT_MODES[sortIndex]?.key || "time-asc",
+      pinCollectable ? "1" : "0",
+    ];
+    for (let i = 0; i < data.length; i++) {
+      parts.push(data[i].collectable ? "C" : "N");
+    }
+    return parts.join("|");
+  };
+
   const savePref = () => {
     ctx?.storage.set<SortPref>(SORT_STATE_KEY, {
       sortKey: SORT_MODES[sortIndex]?.key || "time-asc",
@@ -109,8 +134,12 @@ export function createMagicSortModule(): FeatureModule {
     }
     debounceTimer = window.setTimeout(() => {
       debounceTimer = null;
+      const now = Date.now();
+      if (now < batchFreezeUntil) {
+        scheduleSortDebounced(Math.max(60, batchFreezeUntil - now + 30));
+        return;
+      }
       batchFreezeUntil = 0;
-      claimBurstPending = false;
       sortRows(false);
     }, ms);
   };
@@ -197,7 +226,7 @@ export function createMagicSortModule(): FeatureModule {
           }
         }
       }
-      lastStateSignature = getRowsSignature(getTableRows(tbody));
+      lastStateSignature = buildDataSignature(data);
     } finally {
       isSorting = false;
     }
@@ -283,13 +312,14 @@ export function createMagicSortModule(): FeatureModule {
           const btn = (ev.target as Element | null)?.closest?.("button");
           if (btn && CLAIM_BTN_RE.test(btn.textContent || "")) {
             const isAll = /全部|All/i.test(btn.textContent || "");
+            const now = Date.now();
             if (isAll) {
-              claimBurstPending = true;
-              batchFreezeUntil = Math.max(batchFreezeUntil, Date.now() + 1400);
-              scheduleSortDebounced(1450);
+              claimBurstUntil = Math.max(claimBurstUntil, now + 2600);
+              batchFreezeUntil = Math.max(batchFreezeUntil, claimBurstUntil);
+              scheduleSortDebounced(Math.max(450, batchFreezeUntil - now + 40));
             } else {
-              batchFreezeUntil = Math.max(batchFreezeUntil, Date.now() + 320);
-              scheduleSortDebounced(340);
+              batchFreezeUntil = Math.max(batchFreezeUntil, now + 360);
+              scheduleSortDebounced(390);
             }
           }
         },
@@ -385,17 +415,21 @@ export function createMagicSortModule(): FeatureModule {
         `
       );
 
-      unregWs = ctx.wsBus.on("market_listings_updated", () => {
+      unregWs = ctx.gameData.on("market_listings_updated", (listings: any[]) => {
         if (ctx?.domScheduler.getActiveRoute() !== "market") return;
-        // Collapse Claim-All WS bursts into a single post-reconciliation sort without shrinking freeze
         const now = Date.now();
-        if (claimBurstPending) {
-          claimBurstPending = false;
-          batchFreezeUntil = now + 300;
+        const hasMoreClaimables =
+          Array.isArray(listings) &&
+          listings.some((l) => (l?.unclaimedCoinCount || 0) > 0 || (l?.unclaimedItemCount || 0) > 0);
+        if (now < claimBurstUntil && !hasMoreClaimables) {
+          // All claimables cleared — allow React 380ms to commit before single final sort
+          claimBurstUntil = 0;
+          batchFreezeUntil = now + 380;
         } else {
-          batchFreezeUntil = Math.max(batchFreezeUntil, now + 300);
+          const holdMs = now < claimBurstUntil ? 900 : 380;
+          batchFreezeUntil = Math.max(batchFreezeUntil, now + holdMs);
         }
-        scheduleSortDebounced(320);
+        scheduleSortDebounced(Math.max(380, batchFreezeUntil - now + 40));
       });
 
       return () => {
@@ -408,7 +442,7 @@ export function createMagicSortModule(): FeatureModule {
           debounceTimer = null;
         }
         batchFreezeUntil = 0;
-        claimBurstPending = false;
+        claimBurstUntil = 0;
         lastPanelRef = null;
         lastTbodyRef = null;
         document.querySelectorAll(".mwi-lite-magic-sort-bar").forEach((el) => el.remove());
