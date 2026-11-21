@@ -1,5 +1,6 @@
 import { domScheduler } from "./dom-scheduler";
 import { i18n } from "./i18n";
+import { getHugunnIconSvg } from "./pixel-theme";
 import { registry } from "./registry";
 import { addStyle } from "./storage";
 import type { FeatureCategory } from "./types";
@@ -22,7 +23,7 @@ export function mountSettingsUI(isWorkerActiveFn: () => boolean): void {
     #${SETTINGS_BTN_ID} {
       display: inline-flex;
       align-items: center;
-      gap: 4px;
+      gap: 5px;
       margin-left: 8px;
       padding: 3px 9px;
       border-radius: 0;
@@ -85,6 +86,9 @@ export function mountSettingsUI(isWorkerActiveFn: () => boolean): void {
       background: var(--mwi-px-head-bg, linear-gradient(180deg, #1d2c5e 0%, #141f46 100%));
     }
     #${SETTINGS_MODAL_ID} .mwi-lite-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
       font-size: 15px;
       font-weight: 800;
       color: #ffffff;
@@ -202,7 +206,7 @@ export function mountSettingsUI(isWorkerActiveFn: () => boolean): void {
       <div class="mwi-lite-card">
         <div class="mwi-lite-header">
           <div>
-            <div class="mwi-lite-title">🪶 MWI · Hugunn v1.1.0</div>
+            <div class="mwi-lite-title">${getHugunnIconSvg(18)}<span>MWI · Hugunn v1.1.0</span></div>
             <div class="mwi-lite-status">
               ${i18n.t(`已启用 ${enabledCount}/${items.length} 模块`, `${enabledCount}/${items.length} modules enabled`)}
               · ${i18n.t("当前路由", "Route")}: <b>${domScheduler.getActiveRoute()}</b>
@@ -239,7 +243,7 @@ export function mountSettingsUI(isWorkerActiveFn: () => boolean): void {
 
   if (typeof GM_registerMenuCommand === "function") {
     try {
-      GM_registerMenuCommand("🪶 MWI · Hugunn 设置 / Settings", openSettings);
+      GM_registerMenuCommand("✦ MWI · Hugunn 设置 / Settings", openSettings);
     } catch {
       // Ignore
     }
@@ -258,7 +262,7 @@ export function mountSettingsUI(isWorkerActiveFn: () => boolean): void {
       btn.id = SETTINGS_BTN_ID;
       btn.type = "button";
       btn.setAttribute("data-mwi-lite", "1");
-      btn.textContent = "🪶 Hugunn";
+      btn.innerHTML = `${getHugunnIconSvg(15)}<span>Hugunn</span>`;
       btn.title = i18n.t("打开 MWI · Hugunn 设置", "Open MWI · Hugunn Settings");
       btn.addEventListener("click", openSettings);
     }

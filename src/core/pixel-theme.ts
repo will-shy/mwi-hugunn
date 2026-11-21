@@ -33,3 +33,12 @@ export function mountPixelTheme(): void {
     `
   );
 }
+
+/** 16×16 SNES Starlight Raven pixel art SVG paths (`shape-rendering="crispEdges"`). */
+export const HUGUNN_ICON_PATHS =
+  '<path fill="#070b16" d="M6 1h5v1H6zM5 2h1v1H5zM11 2h1v1H11zM4 3h1v1H4zM12 3h1v1H12zM4 4h1v1H4zM12 4h3v1H12zM3 5h1v1H3zM10 5h1v1H10zM15 5h1v1H15zM3 6h1v1H3zM10 6h1v1H10zM15 6h1v1H15zM2 7h1v1H2zM10 7h5v1H10zM2 8h1v1H2zM10 8h1v1H10zM1 9h1v1H1zM9 9h1v1H9zM1 10h1v1H1zM4 10h2v1H4zM8 10h1v1H8zM2 11h2v1H2zM6 11h3v1H6z"/><path fill="#121c3b" d="M9 5h1v1H9zM3 7h1v1H3zM3 8h2v1H3zM9 8h1v1H9zM2 9h3v1H2zM8 9h1v1H8zM2 10h2v1H2zM6 10h2v1H6z"/><path fill="#25418c" d="M8 3h1v1H8zM7 4h2v1H7zM10 4h1v1H10zM7 5h2v1H7zM5 6h2v1H5zM9 6h1v1H9zM5 7h3v1H5zM9 7h1v1H9zM6 8h3v1H6zM6 9h2v1H6z"/><path fill="#4f7ce8" d="M6 2h4v1H6zM5 3h1v1H5zM5 4h1v1H5zM4 5h2v1H4zM4 6h1v1H4zM7 6h2v1H7zM4 7h1v1H4zM8 7h1v1H8zM5 8h1v1H5zM5 9h1v1H5z"/><path fill="#9dbbff" d="M10 2h1v1H10zM6 3h2v1H6zM6 4h1v1H6zM6 5h1v1H6z"/><path fill="#38bdf8" d="M11 3h1v1H11zM9 4h1v1H9zM11 4h1v1H11z"/><path fill="#ffffff" d="M9 3h2v1H9z"/><path fill="#fde047" d="M2 0h1v1H2zM11 5h4v1H11zM14 11h1v1H14z"/><path fill="#f59e0b" d="M11 6h2v1H11zM5 12h1v1H5zM8 12h1v1H8zM4 13h2v1H4zM8 13h2v1H8z"/><path fill="#b45309" d="M13 6h2v1H13z"/>';
+
+/** Render an inline crisp-edge Hugunn pixel icon SVG. */
+export function getHugunnIconSvg(size = 16): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="${size}" height="${size}" shape-rendering="crispEdges" aria-hidden="true" style="display:inline-block;flex:0 0 auto;image-rendering:pixelated">${HUGUNN_ICON_PATHS}</svg>`;
+}

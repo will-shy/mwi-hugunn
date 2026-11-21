@@ -2,6 +2,18 @@ import { build } from "esbuild";
 import fs from "node:fs";
 import path from "node:path";
 
+function buildHugunnIconDataUri() {
+  const src = fs.readFileSync(path.resolve("src/core/pixel-theme.ts"), "utf8");
+  const match = src.match(/export const HUGUNN_ICON_PATHS =\s*(['"`])([\s\S]*?)\1;/);
+  if (!match) {
+    throw new Error("Missing HUGUNN_ICON_PATHS in src/core/pixel-theme.ts");
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="32" height="32" shape-rendering="crispEdges">${match[2]}</svg>`;
+  return `data:image/svg+xml;base64,${Buffer.from(svg, "utf8").toString("base64")}`;
+}
+
+const iconDataUri = buildHugunnIconDataUri();
+
 const banner = `// ==UserScript==
 // @name         MWI · Hugunn
 // @name:zh-CN   MWI · Hugunn
@@ -18,7 +30,7 @@ const banner = `// ==UserScript==
 // @match        https://test.milkywayidle.com/*
 // @match        https://www.milkywayidlecn.com/*
 // @match        https://test.milkywayidlecn.com/*
-// @icon         https://www.milkywayidle.com/favicon.ico
+// @icon         ${iconDataUri}
 // @run-at       document-start
 // @grant        GM_getValue
 // @grant        GM_setValue
