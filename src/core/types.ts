@@ -2,9 +2,10 @@ export type PanelRoute =
   | "market"
   | "labyrinth"
   | "combat"
-  | "production"
   | "tasks"
   | "house"
+  | "guild"
+  | "production"
   | "calculator"
   | "other";
 
@@ -77,6 +78,18 @@ export interface I18nAPI {
   getItemHridByName(name: string): string | null;
 }
 
+export interface ActionTypeBuffSources {
+  readonly mooPass: Record<string, any[]>;
+  readonly community: Record<string, any[]>;
+  readonly house: Record<string, any[]>;
+  readonly guild: Record<string, any[]>;
+  readonly achievement: Record<string, any[]>;
+  readonly consumable: Record<string, any[]>;
+  readonly equipment: Record<string, any[]>;
+  readonly personal: Record<string, any[]>;
+  readonly equipmentTaskActionBuffs: any[];
+}
+
 export interface GameDataAPI {
   init(): void;
   getClientData(): any | null;
@@ -94,6 +107,8 @@ export interface GameDataAPI {
   getActionTypeDrinkSlots(): Map<string, any[]>;
   getPersonalBuffs(): Record<string, any>;
   getGuildActionBuffs(): Record<string, any[]>;
+  getActionTypeBuffSources(): ActionTypeBuffSources;
+  getCharacterLoadouts(): Record<string, any>;
   getLabyrinthData(): any | null;
   getBattleData(): any | null;
   getReactGameCore(forceRefresh?: boolean): any | null;

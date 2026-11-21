@@ -1,5 +1,5 @@
 import { decompressFromUTF16 } from "./lz-utf16";
-import type { GameDataAPI } from "./types";
+import type { ActionTypeBuffSources, GameDataAPI } from "./types";
 import { wsBus } from "./ws-bus";
 
 function mergeMarketListings(currentListings: any[] = [], updatedListings: any[] = []): any[] {
@@ -39,6 +39,15 @@ class InMemoryGameData implements GameDataAPI {
   private drinkSlotsMap = new Map<string, any[]>();
   private personalBuffs: Record<string, any> = {};
   private guildActionBuffs: Record<string, any[]> = {};
+  private mooPassBuffs: Record<string, any[]> = {};
+  private communityBuffs: Record<string, any[]> = {};
+  private houseBuffs: Record<string, any[]> = {};
+  private achievementBuffs: Record<string, any[]> = {};
+  private consumableBuffs: Record<string, any[]> = {};
+  private equipmentBuffs: Record<string, any[]> = {};
+  private equipmentTaskActionBuffs: any[] = [];
+  private characterLoadouts: Record<string, any> = {};
+  private hasInitCharBuffs = false;
   private labyrinthData: any | null = null;
   private battleData: any | null = null;
   private listeners = new Map<string, Set<(data?: any) => void>>();
@@ -84,6 +93,17 @@ class InMemoryGameData implements GameDataAPI {
 
       this.personalBuffs = data.personalActionTypeBuffsMap || {};
       this.guildActionBuffs = data.guildActionTypeBuffsMap || {};
+      this.mooPassBuffs = data.mooPassActionTypeBuffsMap || {};
+      this.communityBuffs = data.communityActionTypeBuffsMap || {};
+      this.houseBuffs = data.houseActionTypeBuffsMap || {};
+      this.achievementBuffs = data.achievementActionTypeBuffsMap || {};
+      this.consumableBuffs = data.consumableActionTypeBuffsMap || {};
+      this.equipmentBuffs = data.equipmentActionTypeBuffsMap || {};
+      this.equipmentTaskActionBuffs = Array.isArray(data.equipmentTaskActionBuffs)
+        ? data.equipmentTaskActionBuffs
+        : [];
+      this.characterLoadouts = data.characterLoadoutMap || {};
+      this.hasInitCharBuffs = true;
 
       if (data.labyrinth) this.labyrinthData = data.labyrinth;
 
@@ -173,7 +193,67 @@ class InMemoryGameData implements GameDataAPI {
     wsBus.on("personal_buffs_updated", (data) => {
       if (data?.personalActionTypeBuffsMap) {
         this.personalBuffs = data.personalActionTypeBuffsMap;
+        this.hasInitCharBuffs = true;
         this.emit("personal_buffs_updated", data);
+        this.emit("buffs_updated", data);
+      }
+    });
+
+    wsBus.on("moo_pass_buffs_updated", (data) => {
+      if (data?.mooPassActionTypeBuffsMap) {
+        this.mooPassBuffs = data.mooPassActionTypeBuffsMap;
+        this.hasInitCharBuffs = true;
+        this.emit("buffs_updated", data);
+      }
+    });
+
+    wsBus.on("community_buffs_updated", (data) => {
+      if (data?.communityActionTypeBuffsMap) {
+        this.communityBuffs = data.communityActionTypeBuffsMap;
+        this.hasInitCharBuffs = true;
+        this.emit("buffs_updated", data);
+      }
+    });
+
+    wsBus.on("guild_buffs_updated", (data) => {
+      if (data?.guildActionTypeBuffsMap) {
+        this.guildActionBuffs = data.guildActionTypeBuffsMap;
+        this.hasInitCharBuffs = true;
+        this.emit("buffs_updated", data);
+      }
+    });
+
+    wsBus.on("achievement_buffs_updated", (data) => {
+      if (data?.achievementActionTypeBuffsMap) {
+        this.achievementBuffs = data.achievementActionTypeBuffsMap;
+        this.hasInitCharBuffs = true;
+        this.emit("buffs_updated", data);
+      }
+    });
+
+    wsBus.on("consumable_buffs_updated", (data) => {
+      if (data?.consumableActionTypeBuffsMap) {
+        this.consumableBuffs = data.consumableActionTypeBuffsMap;
+        this.hasInitCharBuffs = true;
+        this.emit("buffs_updated", data);
+      }
+    });
+
+    wsBus.on("equipment_buffs_updated", (data) => {
+      if (data?.equipmentActionTypeBuffsMap) {
+        this.equipmentBuffs = data.equipmentActionTypeBuffsMap;
+        this.hasInitCharBuffs = true;
+      }
+      if (Array.isArray(data?.equipmentTaskActionBuffs)) {
+        this.equipmentTaskActionBuffs = data.equipmentTaskActionBuffs;
+      }
+      this.emit("buffs_updated", data);
+    });
+
+    wsBus.on("loadouts_updated", (data) => {
+      if (data?.characterLoadoutMap) {
+        this.characterLoadouts = data.characterLoadoutMap;
+        this.emit("buffs_updated", data);
       }
     });
 
@@ -183,7 +263,12 @@ class InMemoryGameData implements GameDataAPI {
           this.houseRooms.set(k, v);
         }
       }
+      if (data?.houseActionTypeBuffsMap) {
+        this.houseBuffs = data.houseActionTypeBuffsMap;
+        this.hasInitCharBuffs = true;
+      }
       this.emit("house_rooms_updated", data);
+      this.emit("buffs_updated", data);
     });
 
     wsBus.on("abilities_updated", (data) => {
@@ -377,11 +462,51 @@ class InMemoryGameData implements GameDataAPI {
   }
 
   getPersonalBuffs(): Record<string, any> {
-    return this.personalBuffs;
+    if (this.hasInitCharBuffs) return this.personalBuffs;
+    const core = this.getReactGameCore();
+    return core?.state?.personalActionTypeBuffsDict || this.personalBuffs;
   }
 
   getGuildActionBuffs(): Record<string, any[]> {
-    return this.guildActionBuffs;
+    if (this.hasInitCharBuffs) return this.guildActionBuffs;
+    const core = this.getReactGameCore();
+    return core?.state?.guildActionTypeBuffsDict || this.guildActionBuffs;
+  }
+
+  getActionTypeBuffSources(): ActionTypeBuffSources {
+    if (this.hasInitCharBuffs) {
+      return {
+        mooPass: this.mooPassBuffs,
+        community: this.communityBuffs,
+        house: this.houseBuffs,
+        guild: this.guildActionBuffs,
+        achievement: this.achievementBuffs,
+        consumable: this.consumableBuffs,
+        equipment: this.equipmentBuffs,
+        personal: this.personalBuffs,
+        equipmentTaskActionBuffs: this.equipmentTaskActionBuffs,
+      };
+    }
+    const st = this.getReactGameCore()?.state;
+    return {
+      mooPass: st?.mooPassActionTypeBuffsDict || this.mooPassBuffs,
+      community: st?.communityActionTypeBuffsDict || this.communityBuffs,
+      house: st?.houseActionTypeBuffsDict || this.houseBuffs,
+      guild: st?.guildActionTypeBuffsDict || this.guildActionBuffs,
+      achievement: st?.achievementActionTypeBuffsDict || this.achievementBuffs,
+      consumable: st?.consumableActionTypeBuffsDict || this.consumableBuffs,
+      equipment: st?.equipmentActionTypeBuffsDict || this.equipmentBuffs,
+      personal: st?.personalActionTypeBuffsDict || this.personalBuffs,
+      equipmentTaskActionBuffs: Array.isArray(st?.equipmentTaskActionBuffs)
+        ? st.equipmentTaskActionBuffs
+        : this.equipmentTaskActionBuffs,
+    };
+  }
+
+  getCharacterLoadouts(): Record<string, any> {
+    if (Object.keys(this.characterLoadouts).length > 0) return this.characterLoadouts;
+    const st = this.getReactGameCore()?.state;
+    return st?.characterLoadoutDict || this.characterLoadouts;
   }
 
   getLabyrinthData(): any | null {
@@ -408,9 +533,13 @@ class InMemoryGameData implements GameDataAPI {
     if (!fiberKey) return null;
 
     let fiber: any = (el as any)[fiberKey];
-    for (let depth = 0; fiber && depth < 12; depth++) {
+    for (let depth = 0; fiber && depth < 24; depth++) {
       const sn = fiber.stateNode;
-      if (sn && typeof sn === "object" && (sn.state?.character || sn.props?.i18n || sn.handleMoveCharacterActionByOne)) {
+      if (
+        sn &&
+        typeof sn === "object" &&
+        (sn.state?.character || sn.state?.skillingActionTypeBuffsDict || sn.props?.i18n || sn.handleMoveCharacterActionByOne)
+      ) {
         this.cachedCoreEl = el;
         this.cachedCore = sn;
         return sn;

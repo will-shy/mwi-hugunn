@@ -101,6 +101,9 @@ class SingleRafDomScheduler implements DomScheduler {
     if (this.isVisible('[class*="HousePanel_"]')) {
       return "house";
     }
+    if (this.isVisible('[class*="GuildPanel_guildPanel"]')) {
+      return "guild";
+    }
     if (
       this.isVisible('[class*="GatheringProductionSkillPanel_"]') ||
       this.isVisible('[class*="SkillActionDetail_"]') ||

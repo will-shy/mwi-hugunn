@@ -467,6 +467,15 @@
     drinkSlotsMap = /* @__PURE__ */ new Map();
     personalBuffs = {};
     guildActionBuffs = {};
+    mooPassBuffs = {};
+    communityBuffs = {};
+    houseBuffs = {};
+    achievementBuffs = {};
+    consumableBuffs = {};
+    equipmentBuffs = {};
+    equipmentTaskActionBuffs = [];
+    characterLoadouts = {};
+    hasInitCharBuffs = false;
     labyrinthData = null;
     battleData = null;
     listeners = /* @__PURE__ */ new Map();
@@ -505,6 +514,15 @@
         }
         this.personalBuffs = data.personalActionTypeBuffsMap || {};
         this.guildActionBuffs = data.guildActionTypeBuffsMap || {};
+        this.mooPassBuffs = data.mooPassActionTypeBuffsMap || {};
+        this.communityBuffs = data.communityActionTypeBuffsMap || {};
+        this.houseBuffs = data.houseActionTypeBuffsMap || {};
+        this.achievementBuffs = data.achievementActionTypeBuffsMap || {};
+        this.consumableBuffs = data.consumableActionTypeBuffsMap || {};
+        this.equipmentBuffs = data.equipmentActionTypeBuffsMap || {};
+        this.equipmentTaskActionBuffs = Array.isArray(data.equipmentTaskActionBuffs) ? data.equipmentTaskActionBuffs : [];
+        this.characterLoadouts = data.characterLoadoutMap || {};
+        this.hasInitCharBuffs = true;
         if (data.labyrinth) this.labyrinthData = data.labyrinth;
         this.tryDecodeLocalInitClientData();
         this.emit("character_initialized", data);
@@ -583,7 +601,60 @@
       wsBus.on("personal_buffs_updated", (data) => {
         if (data?.personalActionTypeBuffsMap) {
           this.personalBuffs = data.personalActionTypeBuffsMap;
+          this.hasInitCharBuffs = true;
           this.emit("personal_buffs_updated", data);
+          this.emit("buffs_updated", data);
+        }
+      });
+      wsBus.on("moo_pass_buffs_updated", (data) => {
+        if (data?.mooPassActionTypeBuffsMap) {
+          this.mooPassBuffs = data.mooPassActionTypeBuffsMap;
+          this.hasInitCharBuffs = true;
+          this.emit("buffs_updated", data);
+        }
+      });
+      wsBus.on("community_buffs_updated", (data) => {
+        if (data?.communityActionTypeBuffsMap) {
+          this.communityBuffs = data.communityActionTypeBuffsMap;
+          this.hasInitCharBuffs = true;
+          this.emit("buffs_updated", data);
+        }
+      });
+      wsBus.on("guild_buffs_updated", (data) => {
+        if (data?.guildActionTypeBuffsMap) {
+          this.guildActionBuffs = data.guildActionTypeBuffsMap;
+          this.hasInitCharBuffs = true;
+          this.emit("buffs_updated", data);
+        }
+      });
+      wsBus.on("achievement_buffs_updated", (data) => {
+        if (data?.achievementActionTypeBuffsMap) {
+          this.achievementBuffs = data.achievementActionTypeBuffsMap;
+          this.hasInitCharBuffs = true;
+          this.emit("buffs_updated", data);
+        }
+      });
+      wsBus.on("consumable_buffs_updated", (data) => {
+        if (data?.consumableActionTypeBuffsMap) {
+          this.consumableBuffs = data.consumableActionTypeBuffsMap;
+          this.hasInitCharBuffs = true;
+          this.emit("buffs_updated", data);
+        }
+      });
+      wsBus.on("equipment_buffs_updated", (data) => {
+        if (data?.equipmentActionTypeBuffsMap) {
+          this.equipmentBuffs = data.equipmentActionTypeBuffsMap;
+          this.hasInitCharBuffs = true;
+        }
+        if (Array.isArray(data?.equipmentTaskActionBuffs)) {
+          this.equipmentTaskActionBuffs = data.equipmentTaskActionBuffs;
+        }
+        this.emit("buffs_updated", data);
+      });
+      wsBus.on("loadouts_updated", (data) => {
+        if (data?.characterLoadoutMap) {
+          this.characterLoadouts = data.characterLoadoutMap;
+          this.emit("buffs_updated", data);
         }
       });
       wsBus.on("house_rooms_updated", (data) => {
@@ -592,7 +663,12 @@
             this.houseRooms.set(k, v);
           }
         }
+        if (data?.houseActionTypeBuffsMap) {
+          this.houseBuffs = data.houseActionTypeBuffsMap;
+          this.hasInitCharBuffs = true;
+        }
         this.emit("house_rooms_updated", data);
+        this.emit("buffs_updated", data);
       });
       wsBus.on("abilities_updated", (data) => {
         if (this.characterData) {
@@ -764,10 +840,46 @@
       return this.drinkSlotsMap;
     }
     getPersonalBuffs() {
-      return this.personalBuffs;
+      if (this.hasInitCharBuffs) return this.personalBuffs;
+      const core = this.getReactGameCore();
+      return core?.state?.personalActionTypeBuffsDict || this.personalBuffs;
     }
     getGuildActionBuffs() {
-      return this.guildActionBuffs;
+      if (this.hasInitCharBuffs) return this.guildActionBuffs;
+      const core = this.getReactGameCore();
+      return core?.state?.guildActionTypeBuffsDict || this.guildActionBuffs;
+    }
+    getActionTypeBuffSources() {
+      if (this.hasInitCharBuffs) {
+        return {
+          mooPass: this.mooPassBuffs,
+          community: this.communityBuffs,
+          house: this.houseBuffs,
+          guild: this.guildActionBuffs,
+          achievement: this.achievementBuffs,
+          consumable: this.consumableBuffs,
+          equipment: this.equipmentBuffs,
+          personal: this.personalBuffs,
+          equipmentTaskActionBuffs: this.equipmentTaskActionBuffs
+        };
+      }
+      const st = this.getReactGameCore()?.state;
+      return {
+        mooPass: st?.mooPassActionTypeBuffsDict || this.mooPassBuffs,
+        community: st?.communityActionTypeBuffsDict || this.communityBuffs,
+        house: st?.houseActionTypeBuffsDict || this.houseBuffs,
+        guild: st?.guildActionTypeBuffsDict || this.guildActionBuffs,
+        achievement: st?.achievementActionTypeBuffsDict || this.achievementBuffs,
+        consumable: st?.consumableActionTypeBuffsDict || this.consumableBuffs,
+        equipment: st?.equipmentActionTypeBuffsDict || this.equipmentBuffs,
+        personal: st?.personalActionTypeBuffsDict || this.personalBuffs,
+        equipmentTaskActionBuffs: Array.isArray(st?.equipmentTaskActionBuffs) ? st.equipmentTaskActionBuffs : this.equipmentTaskActionBuffs
+      };
+    }
+    getCharacterLoadouts() {
+      if (Object.keys(this.characterLoadouts).length > 0) return this.characterLoadouts;
+      const st = this.getReactGameCore()?.state;
+      return st?.characterLoadoutDict || this.characterLoadouts;
     }
     getLabyrinthData() {
       return this.labyrinthData;
@@ -786,9 +898,9 @@
       );
       if (!fiberKey) return null;
       let fiber = el[fiberKey];
-      for (let depth = 0; fiber && depth < 12; depth++) {
+      for (let depth = 0; fiber && depth < 24; depth++) {
         const sn = fiber.stateNode;
-        if (sn && typeof sn === "object" && (sn.state?.character || sn.props?.i18n || sn.handleMoveCharacterActionByOne)) {
+        if (sn && typeof sn === "object" && (sn.state?.character || sn.state?.skillingActionTypeBuffsDict || sn.props?.i18n || sn.handleMoveCharacterActionByOne)) {
           this.cachedCoreEl = el;
           this.cachedCore = sn;
           return sn;
@@ -1411,6 +1523,9 @@
       }
       if (this.isVisible('[class*="HousePanel_"]')) {
         return "house";
+      }
+      if (this.isVisible('[class*="GuildPanel_guildPanel"]')) {
+        return "guild";
       }
       if (this.isVisible('[class*="GatheringProductionSkillPanel_"]') || this.isVisible('[class*="SkillActionDetail_"]') || this.isVisible('[class*="EnhancingPanel_"]') || this.isVisible('[class*="AlchemyPanel_"]')) {
         return "production";
@@ -4894,7 +5009,7 @@
     };
     const COMBAT_LEVEL_SKILL_HRID = "/skills/combat";
     const BADGE_CLASS = "mwi-lab-clear-rate-badge";
-    const STYLE_ID = "mwi-lab-clear-rate-style";
+    const STYLE_ID2 = "mwi-lab-clear-rate-style";
     const CONTROL_ID = "mwi-lab-clear-rate-control";
     const CONTROL_CLASS = "mwi-lab-clear-rate-control";
     const CONTROL_LOAN_TOGGLE_CLASS = "mwi-lab-clear-rate-control__loan-toggle";
@@ -7200,7 +7315,7 @@
     function getCombatSimulatorPersonalSealItemHrids(state, options = {}) {
       return [];
     }
-    function getSkillLevel(skillMap, skillHrid) {
+    function getSkillLevel2(skillMap, skillHrid) {
       if (!skillMap) {
         return 0;
       }
@@ -7488,11 +7603,11 @@
       return "#d84b4b";
     }
     function ensureStyle() {
-      if (document.getElementById(STYLE_ID)) {
+      if (document.getElementById(STYLE_ID2)) {
         return;
       }
       const style = document.createElement("style");
-      style.id = STYLE_ID;
+      style.id = STYLE_ID2;
       style.setAttribute("data-mwi-lite", "1");
       style.textContent = `
 .${BADGE_CLASS} {
@@ -8989,7 +9104,7 @@ table[class*="LabyrinthPanel_automationTable"] tbody td:nth-child(3) {
       return Math.floor(finiteNumber(value, AUTOMATION_ESTIMATE_DEFAULT_SKIP_THRESHOLD));
     }
     function getAutomationCombatBaseLevel(state) {
-      const fromCombatSkill = finiteNumber(getSkillLevel(state?.characterSkillMap, COMBAT_LEVEL_SKILL_HRID), NaN);
+      const fromCombatSkill = finiteNumber(getSkillLevel2(state?.characterSkillMap, COMBAT_LEVEL_SKILL_HRID), NaN);
       if (Number.isFinite(fromCombatSkill) && fromCombatSkill > 0) {
         return fromCombatSkill;
       }
@@ -9061,7 +9176,7 @@ table[class*="LabyrinthPanel_automationTable"] tbody td:nth-child(3) {
             return Math.max(0, fromPanel);
           }
         }
-        const baseLevel = positiveNumber(getSkillLevel(state?.characterSkillMap, entry.skillHrid), 1);
+        const baseLevel = positiveNumber(getSkillLevel2(state?.characterSkillMap, entry.skillHrid), 1);
         const selection = getLabyrinthCrateSelection(state);
         const teaCrateItemHrid = String(selection?.teaCrateItemHrid || "");
         const skillId = skillHridToSkillId(entry.skillHrid);
@@ -12598,7 +12713,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       addSkillingMetrics(combinedMetrics, crateMetrics);
       addSkillingMetrics(combinedMetrics, labyrinthUpgradeMetrics);
       addSkillingMetrics(combinedMetrics, loanMetrics);
-      const baseSkillLevel = getSkillLevel(state.characterSkillMap, room.skillHrid);
+      const baseSkillLevel = getSkillLevel2(state.characterSkillMap, room.skillHrid);
       const skillLevelBonus = combinedMetrics.skillLevelBonus;
       const efficiencyBonus = combinedMetrics.efficiencyBonus;
       const actionSpeedBonus = combinedMetrics.actionSpeedBonus;
@@ -13913,7 +14028,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     function getCombatSkillLevelsFromState(state) {
       const levels = {};
       for (const [key, hrid] of Object.entries(COMBAT_SKILL_HRID_BY_KEY)) {
-        levels[key] = positiveNumber(getSkillLevel(state?.characterSkillMap, hrid), 1);
+        levels[key] = positiveNumber(getSkillLevel2(state?.characterSkillMap, hrid), 1);
       }
       if (!state?.characterSkillMap && state?.combatUnit?.combatDetails) {
         levels.attack = positiveNumber(state.combatUnit.combatDetails.attackLevel, levels.attack);
@@ -15670,7 +15785,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         if (combatSimulatorWorker) {
           resetCombatSimulatorWorker(new Error("Labyrinth module disposed"));
         }
-        document.getElementById(STYLE_ID)?.remove();
+        document.getElementById(STYLE_ID2)?.remove();
         document.getElementById(CONTROL_ID)?.remove();
         document.getElementById(AUTOMATION_ESTIMATE_CONTROL_ID)?.remove();
         document.getElementById(PREVIEW_TOOLTIP_ID)?.remove();
@@ -17124,6 +17239,1174 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         if (!document.getElementById(NW_BADGE_ID)) {
           renderBadge();
         }
+      }
+    };
+  }
+
+  // src/features/market/guild-credit-math.ts
+  var GUILD_CREDIT_ORDER = [
+    { hrid: "/items/green_guild_credit", iconId: "green_guild_credit", shortZh: "绿", shortEn: "Green", color: "#4ade80" },
+    { hrid: "/items/brown_guild_credit", iconId: "brown_guild_credit", shortZh: "棕", shortEn: "Brown", color: "#d97706" },
+    { hrid: "/items/white_guild_credit", iconId: "white_guild_credit", shortZh: "白", shortEn: "White", color: "#e2e8f0" },
+    { hrid: "/items/blue_guild_credit", iconId: "blue_guild_credit", shortZh: "蓝", shortEn: "Blue", color: "#60a5fa" },
+    { hrid: "/items/purple_guild_credit", iconId: "purple_guild_credit", shortZh: "紫", shortEn: "Purple", color: "#c084fc" },
+    { hrid: "/items/red_guild_credit", iconId: "red_guild_credit", shortZh: "红", shortEn: "Red", color: "#f87171" },
+    { hrid: "/items/silver_guild_credit", iconId: "silver_guild_credit", shortZh: "银", shortEn: "Silver", color: "#cbd5e1" },
+    { hrid: "/items/gold_guild_credit", iconId: "gold_guild_credit", shortZh: "金", shortEn: "Gold", color: "#facc15" }
+  ];
+  var GUILD_CREDIT_META_MAP = new Map(
+    GUILD_CREDIT_ORDER.map((m) => [m.hrid, m])
+  );
+  var catalogCache = /* @__PURE__ */ new WeakMap();
+  function parseCompactNumber(raw) {
+    if (!raw) return 0;
+    const cleaned = raw.replace(/,/g, "").replace(/[^\d.KMB]/gi, "").toUpperCase();
+    if (!cleaned) return 0;
+    const mult = cleaned.endsWith("B") ? 1e9 : cleaned.endsWith("M") ? 1e6 : cleaned.endsWith("K") ? 1e3 : 1;
+    const num = parseFloat(cleaned.replace(/[KMB]/g, ""));
+    return Number.isFinite(num) ? Math.round(num * mult) : 0;
+  }
+  function formatCompactCoins(val) {
+    if (val === null || val === void 0 || !Number.isFinite(val) || val <= 0) return "-";
+    if (val >= 1e9) return `${(val / 1e9).toFixed(val >= 1e11 ? 0 : 2)}B`;
+    if (val >= 1e6) return `${(val / 1e6).toFixed(val >= 1e8 ? 0 : 1)}M`;
+    if (val >= 1e3) return `${(val / 1e3).toFixed(val >= 1e5 ? 0 : 1)}K`;
+    if (val >= 100) return `${Math.round(val)}`;
+    if (val >= 10) return val.toFixed(1);
+    return val.toFixed(2);
+  }
+  function buildGuildCreditCatalog(clientData) {
+    if (!clientData || typeof clientData !== "object") {
+      return /* @__PURE__ */ new Map();
+    }
+    const cached = catalogCache.get(clientData);
+    if (cached) return cached;
+    const catalog = /* @__PURE__ */ new Map();
+    for (const meta of GUILD_CREDIT_ORDER) {
+      catalog.set(meta.hrid, []);
+    }
+    const itemMap = clientData.itemDetailMap;
+    if (itemMap && typeof itemMap === "object") {
+      for (const [itemHrid, detail] of Object.entries(itemMap)) {
+        const conversions = detail?.guildCreditConversions;
+        if (!Array.isArray(conversions) || conversions.length === 0) continue;
+        for (const conv of conversions) {
+          const creditItemHrid = conv?.creditItemHrid;
+          const itemCount = Number(conv?.itemCount);
+          const creditCount = Number(conv?.creditCount);
+          if (typeof creditItemHrid !== "string" || !creditItemHrid || !Number.isFinite(itemCount) || itemCount <= 0 || !Number.isFinite(creditCount) || creditCount <= 0) {
+            continue;
+          }
+          let bucket = catalog.get(creditItemHrid);
+          if (!bucket) {
+            bucket = [];
+            catalog.set(creditItemHrid, bucket);
+          }
+          bucket.push({
+            creditItemHrid,
+            itemHrid,
+            itemCount,
+            creditCount,
+            creditsPerItem: creditCount / itemCount,
+            isTradable: detail?.isTradable !== false,
+            fallbackName: typeof detail?.name === "string" ? detail.name : itemHrid,
+            sortIndex: typeof detail?.sortIndex === "number" ? detail.sortIndex : 999999
+          });
+        }
+      }
+    }
+    catalogCache.set(clientData, catalog);
+    return catalog;
+  }
+  function buildInventoryCountMap(characterItems) {
+    const counts = /* @__PURE__ */ new Map();
+    if (!Array.isArray(characterItems)) return counts;
+    for (let i = 0; i < characterItems.length; i++) {
+      const it = characterItems[i];
+      if (!it || it.count <= 0 || it.itemLocationHrid !== "/item_locations/inventory") continue;
+      counts.set(it.itemHrid, (counts.get(it.itemHrid) || 0) + Number(it.count));
+    }
+    return counts;
+  }
+  function getSortableMetric(row, key) {
+    switch (key) {
+      case "askPerCredit":
+        return row.askPerCredit;
+      case "bidPerCredit":
+        return row.bidPerCredit;
+      case "askPrice":
+        return row.askPrice;
+      case "bidPrice":
+        return row.bidPrice;
+      case "rate":
+        return row.creditsPerItem;
+      case "owned":
+        return row.owned;
+    }
+  }
+  function rankGuildCreditItems(catalog, marketStore2, inventoryCounts, query) {
+    const specs = catalog.get(query.creditItemHrid);
+    if (!specs || specs.length === 0) return [];
+    const q = query.searchText?.trim().toLowerCase() || "";
+    const tradableOnly = query.tradableOnly ?? true;
+    const ownedOnly = query.ownedOnly ?? false;
+    const out = [];
+    for (let i = 0; i < specs.length; i++) {
+      const spec = specs[i];
+      if (tradableOnly && !spec.isTradable) continue;
+      const owned = inventoryCounts.get(spec.itemHrid) || 0;
+      if (ownedOnly && owned <= 0) continue;
+      if (q) {
+        const displayName = (query.resolveName ? query.resolveName(spec.itemHrid) : spec.fallbackName).toLowerCase();
+        if (!displayName.includes(q) && !spec.itemHrid.toLowerCase().includes(q)) {
+          continue;
+        }
+      }
+      const price = marketStore2.getPrice(spec.itemHrid, 0);
+      const askPrice = price?.ask && price.ask > 0 ? price.ask : null;
+      const bidPrice = price?.bid && price.bid > 0 ? price.bid : null;
+      out.push({
+        itemHrid: spec.itemHrid,
+        creditItemHrid: spec.creditItemHrid,
+        itemCount: spec.itemCount,
+        creditCount: spec.creditCount,
+        creditsPerItem: spec.creditsPerItem,
+        isTradable: spec.isTradable,
+        askPrice,
+        bidPrice,
+        askPerCredit: askPrice !== null ? askPrice * spec.itemCount / spec.creditCount : null,
+        bidPerCredit: bidPrice !== null ? bidPrice * spec.itemCount / spec.creditCount : null,
+        owned,
+        sortIndex: spec.sortIndex
+      });
+    }
+    const dir = query.sortDir === "desc" ? -1 : 1;
+    out.sort((a, b) => {
+      const va = getSortableMetric(a, query.sortBy);
+      const vb = getSortableMetric(b, query.sortBy);
+      if (va === null && vb === null) return a.sortIndex - b.sortIndex;
+      if (va === null) return 1;
+      if (vb === null) return -1;
+      if (va !== vb) return (va - vb) * dir;
+      const secA = query.sortBy === "bidPerCredit" ? a.askPerCredit : a.bidPerCredit;
+      const secB = query.sortBy === "bidPerCredit" ? b.askPerCredit : b.bidPerCredit;
+      if (secA !== null && secB !== null && secA !== secB) return secA - secB;
+      return a.sortIndex - b.sortIndex;
+    });
+    if (query.limit && query.limit > 0 && out.length > query.limit) {
+      return out.slice(0, query.limit);
+    }
+    return out;
+  }
+  function evaluateGuildBuffUpgrade(needs, catalog, marketStore2, inventoryCounts, sortMode = "ask", topN = 3) {
+    const sortBy = sortMode === "bid" ? "bidPerCredit" : "askPerCredit";
+    const rows = [];
+    let totalAsk = 0;
+    let totalBid = 0;
+    for (const need of needs) {
+      const deficit = Math.max(0, need.required - need.owned);
+      const ranked = rankGuildCreditItems(catalog, marketStore2, inventoryCounts, {
+        creditItemHrid: need.creditItemHrid,
+        sortBy,
+        sortDir: "asc",
+        tradableOnly: true,
+        limit: topN
+      });
+      const topOptions = ranked.map((r) => {
+        const batches = deficit > 0 ? Math.ceil(deficit / r.creditCount) : 0;
+        const neededItems = batches * r.itemCount;
+        const askCost = r.askPrice !== null && neededItems > 0 ? neededItems * r.askPrice : null;
+        const bidCost = r.bidPrice !== null && neededItems > 0 ? neededItems * r.bidPrice : null;
+        return {
+          itemHrid: r.itemHrid,
+          itemCount: r.itemCount,
+          creditCount: r.creditCount,
+          neededItems,
+          askPrice: r.askPrice,
+          bidPrice: r.bidPrice,
+          askPerCredit: r.askPerCredit,
+          bidPerCredit: r.bidPerCredit,
+          askCost,
+          bidCost,
+          owned: r.owned
+        };
+      });
+      const bestAskCost = topOptions[0]?.askCost ?? null;
+      const bestBidCost = topOptions[0]?.bidCost ?? null;
+      if (bestAskCost !== null && bestAskCost > 0) totalAsk += bestAskCost;
+      if (bestBidCost !== null && bestBidCost > 0) totalBid += bestBidCost;
+      rows.push({
+        creditItemHrid: need.creditItemHrid,
+        owned: need.owned,
+        required: need.required,
+        deficit,
+        bestAskCost,
+        bestBidCost,
+        topOptions
+      });
+    }
+    return { rows, totalAsk, totalBid };
+  }
+
+  // src/features/market/guild-shop-rank.ts
+  var STYLE_ID = "market-guild-credit-rank";
+  var PREF_KEY = "guild_credit_rank_pref_v1";
+  var MAIN_PANEL_ID = "mwi-lite-guild-credit-rank";
+  var EXCHANGE_HINT_ID = "mwi-lite-guild-exchange-hint";
+  var BUFF_COST_ID = "mwi-lite-guild-buff-cost";
+  function escapeHtml2(text) {
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function resolveItemsSpriteUrl() {
+    const useEl = document.querySelector('use[href*="items_sprite"]');
+    const href = useEl?.getAttribute("href") || useEl?.getAttribute("xlink:href") || "";
+    if (href.includes("#")) return href.split("#")[0];
+    return "/static/media/items_sprite.9c39e2ec.svg";
+  }
+  function renderItemIcon(spriteUrl, itemHrid, size = 15) {
+    const iconName = itemHrid.replace("/items/", "");
+    return `<svg class="mwi-lite-gcr-ico" width="${size}" height="${size}" aria-hidden="true"><use href="${escapeHtml2(spriteUrl)}#${escapeHtml2(iconName)}"></use></svg>`;
+  }
+  function createGuildShopRankModule() {
+    let ctx = null;
+    let unregStyle = null;
+    let unsubs = [];
+    let priceEpoch = 0;
+    let itemsEpoch = 0;
+    let ensurePromisePending = false;
+    let searchQuery = "";
+    let showAllRows = false;
+    let copyNoticeTimer = null;
+    let lastMainSig = "";
+    let lastExchangeSig = "";
+    let lastBuffSig = "";
+    let expandedBuffCredits = /* @__PURE__ */ new Set();
+    let pref = {
+      activeTab: "all",
+      sortBy: "askPerCredit",
+      sortDir: "asc",
+      ownedOnly: false,
+      collapsed: false,
+      buffSortMode: "ask"
+    };
+    const savePref = () => {
+      ctx?.storage.set(PREF_KEY, pref);
+    };
+    const getInventoryCounts = () => {
+      if (!ctx) return /* @__PURE__ */ new Map();
+      return buildInventoryCountMap(ctx.gameData.getCharacterItems());
+    };
+    const ensureMarketPrices = (force = false) => {
+      if (!ctx || ensurePromisePending) return;
+      if (!force && ctx.marketStore.isPricesLoaded()) return;
+      ensurePromisePending = true;
+      void ctx.marketStore.ensurePricesLoaded(force).then((ok) => {
+        if (ok) priceEpoch++;
+      }).finally(() => {
+        ensurePromisePending = false;
+        ctx?.domScheduler.scheduleRun(false);
+      });
+    };
+    const copyItemName = (itemHrid) => {
+      if (!ctx) return;
+      const name = ctx.i18n.getItemName(itemHrid);
+      try {
+        void navigator.clipboard?.writeText(name);
+      } catch {
+      }
+      const statusEl = document.querySelector(`#${MAIN_PANEL_ID} .mwi-lite-gcr-status`);
+      if (statusEl) {
+        statusEl.textContent = ctx.i18n.t(`已复制: ${name}`, `Copied: ${name}`);
+        if (copyNoticeTimer !== null) clearTimeout(copyNoticeTimer);
+        copyNoticeTimer = window.setTimeout(() => {
+          copyNoticeTimer = null;
+          if (statusEl.isConnected) statusEl.textContent = "";
+        }, 1800);
+      }
+    };
+    const renderMainPanel = () => {
+      if (!ctx) return;
+      const shopTab = document.querySelector('[class*="GuildPanel_shopTab__"]');
+      if (!shopTab || shopTab.offsetParent === null) {
+        document.getElementById(MAIN_PANEL_ID)?.remove();
+        lastMainSig = "";
+        return;
+      }
+      ensureMarketPrices(false);
+      const clientData = ctx.gameData.getClientData();
+      const catalog = buildGuildCreditCatalog(clientData);
+      const inv = getInventoryCounts();
+      const spriteUrl = resolveItemsSpriteUrl();
+      const pricesLoaded = ctx.marketStore.isPricesLoaded();
+      const sig = [
+        priceEpoch,
+        itemsEpoch,
+        pricesLoaded ? 1 : 0,
+        catalog.size,
+        pref.activeTab,
+        pref.sortBy,
+        pref.sortDir,
+        pref.ownedOnly ? 1 : 0,
+        pref.collapsed ? 1 : 0,
+        showAllRows ? 1 : 0,
+        searchQuery
+      ].join("|");
+      let panel = document.getElementById(MAIN_PANEL_ID);
+      if (!panel) {
+        panel = document.createElement("div");
+        panel.id = MAIN_PANEL_ID;
+        panel.setAttribute("data-mwi-lite", "1");
+        const firstGrid = shopTab.querySelector('[class*="GuildPanel_tileGrid__"]');
+        if (firstGrid?.parentElement) {
+          firstGrid.parentElement.insertBefore(panel, firstGrid.nextSibling);
+        } else {
+          shopTab.appendChild(panel);
+        }
+        panel.innerHTML = `
+        <div class="mwi-lite-gcr-head">
+          <div class="mwi-lite-gcr-title-wrap">
+            <span class="mwi-lite-gcr-title">${escapeHtml2(ctx.i18n.t("信用点兑换性价比排序", "Guild Credit Exchange Ranking"))}</span>
+            <span class="mwi-lite-gcr-sub">${escapeHtml2(ctx.i18n.t("每点信用成本越低越划算", "Lower gold / credit = better value"))}</span>
+            <span class="mwi-lite-gcr-status"></span>
+          </div>
+          <div class="mwi-lite-gcr-actions">
+            <label class="mwi-lite-gcr-chk"><input type="checkbox" data-gcr-act="owned-only" /> <span>${escapeHtml2(ctx.i18n.t("仅看库存", "Owned"))}</span></label>
+            <input type="text" class="mwi-lite-gcr-search" placeholder="${escapeHtml2(ctx.i18n.t("搜索物品...", "Search item..."))}" />
+            <button type="button" class="mwi-lite-gcr-btn" data-gcr-act="sort-mode"></button>
+            <button type="button" class="mwi-lite-gcr-btn" data-gcr-act="refresh">${escapeHtml2(ctx.i18n.t("刷新行情", "Refresh"))}</button>
+            <button type="button" class="mwi-lite-gcr-btn" data-gcr-act="collapse"></button>
+          </div>
+        </div>
+        <div class="mwi-lite-gcr-tabs"></div>
+        <div class="mwi-lite-gcr-body"></div>
+      `;
+        const searchInput = panel.querySelector(".mwi-lite-gcr-search");
+        searchInput?.addEventListener("input", () => {
+          searchQuery = searchInput.value;
+          showAllRows = false;
+          renderMainPanel();
+        });
+        const ownedChk = panel.querySelector('input[data-gcr-act="owned-only"]');
+        if (ownedChk) {
+          ownedChk.checked = pref.ownedOnly;
+          ownedChk.addEventListener("change", () => {
+            pref.ownedOnly = ownedChk.checked;
+            showAllRows = false;
+            savePref();
+            renderMainPanel();
+          });
+        }
+        panel.addEventListener("click", (e) => {
+          const target = e.target;
+          if (!target) return;
+          const copyBtn = target.closest("[data-gcr-copy]");
+          if (copyBtn) {
+            const hrid = copyBtn.getAttribute("data-gcr-copy");
+            if (hrid) copyItemName(hrid);
+            return;
+          }
+          const tabBtn = target.closest("[data-gcr-tab]");
+          if (tabBtn) {
+            pref.activeTab = tabBtn.getAttribute("data-gcr-tab") || "all";
+            showAllRows = false;
+            savePref();
+            renderMainPanel();
+            return;
+          }
+          const sortTh = target.closest("[data-gcr-sort]");
+          if (sortTh) {
+            const key = sortTh.getAttribute("data-gcr-sort");
+            if (pref.sortBy === key) {
+              pref.sortDir = pref.sortDir === "asc" ? "desc" : "asc";
+            } else {
+              pref.sortBy = key;
+              pref.sortDir = key === "owned" || key === "rate" ? "desc" : "asc";
+            }
+            savePref();
+            renderMainPanel();
+            return;
+          }
+          const actEl = target.closest("[data-gcr-act]");
+          const act = actEl?.getAttribute("data-gcr-act");
+          if (!act) return;
+          if (act === "collapse") {
+            pref.collapsed = !pref.collapsed;
+            savePref();
+            renderMainPanel();
+          } else if (act === "refresh") {
+            ensureMarketPrices(true);
+          } else if (act === "sort-mode") {
+            pref.sortBy = pref.sortBy === "bidPerCredit" ? "askPerCredit" : "bidPerCredit";
+            pref.sortDir = "asc";
+            savePref();
+            renderMainPanel();
+          } else if (act === "show-all") {
+            showAllRows = !showAllRows;
+            renderMainPanel();
+          }
+        });
+        lastMainSig = "";
+      }
+      if (sig === lastMainSig) return;
+      lastMainSig = sig;
+      const collapseBtn = panel.querySelector('button[data-gcr-act="collapse"]');
+      if (collapseBtn) {
+        collapseBtn.textContent = pref.collapsed ? ctx.i18n.t("展开", "Expand") : ctx.i18n.t("收起", "Hide");
+      }
+      const sortModeBtn = panel.querySelector('button[data-gcr-act="sort-mode"]');
+      if (sortModeBtn) {
+        sortModeBtn.textContent = pref.sortBy === "bidPerCredit" ? ctx.i18n.t("基准: Bid", "Sort: Bid") : ctx.i18n.t("基准: Ask", "Sort: Ask");
+      }
+      const tabsEl = panel.querySelector(".mwi-lite-gcr-tabs");
+      const bodyEl = panel.querySelector(".mwi-lite-gcr-body");
+      if (!tabsEl || !bodyEl) return;
+      if (pref.collapsed) {
+        tabsEl.style.display = "none";
+        bodyEl.style.display = "none";
+        return;
+      }
+      tabsEl.style.display = "";
+      bodyEl.style.display = "";
+      const allLabel = ctx.i18n.t("全部概览 (Top 3)", "All Top 3");
+      let tabsHtml = `<button type="button" class="mwi-lite-gcr-tab ${pref.activeTab === "all" ? "active" : ""}" data-gcr-tab="all">${escapeHtml2(allLabel)}</button>`;
+      for (const meta of GUILD_CREDIT_ORDER) {
+        const ownedAmt = inv.get(meta.hrid) || 0;
+        const activeCls = pref.activeTab === meta.hrid ? "active" : "";
+        const label = ctx.i18n.isZh() ? meta.shortZh : meta.shortEn;
+        tabsHtml += `<button type="button" class="mwi-lite-gcr-tab ${activeCls}" data-gcr-tab="${escapeHtml2(meta.hrid)}" style="--gcr-accent:${meta.color}">
+        ${renderItemIcon(spriteUrl, meta.hrid, 13)}
+        <span>${escapeHtml2(label)}</span>
+        <span class="mwi-lite-gcr-tab-cnt">${escapeHtml2(formatCompactCoins(ownedAmt) === "-" ? "0" : formatCompactCoins(ownedAmt))}</span>
+      </button>`;
+      }
+      tabsEl.innerHTML = tabsHtml;
+      if (!clientData) {
+        bodyEl.innerHTML = `<div class="mwi-lite-gcr-empty">${escapeHtml2(ctx.i18n.t("正在等待游戏基础数据加载...", "Waiting for game item data..."))}</div>`;
+        return;
+      }
+      const primarySort = pref.sortBy === "bidPerCredit" ? "bidPerCredit" : "askPerCredit";
+      const resolveName = (h) => ctx.i18n.getItemName(h);
+      if (pref.activeTab === "all") {
+        let cardsHtml = `<div class="mwi-lite-gcr-grid">`;
+        for (const meta of GUILD_CREDIT_ORDER) {
+          const creditName = ctx.i18n.getItemName(meta.hrid);
+          const ownedCredits = inv.get(meta.hrid) || 0;
+          const top3 = rankGuildCreditItems(catalog, ctx.marketStore, inv, {
+            creditItemHrid: meta.hrid,
+            sortBy: primarySort,
+            sortDir: "asc",
+            tradableOnly: true,
+            ownedOnly: pref.ownedOnly,
+            searchText: searchQuery,
+            resolveName,
+            limit: 3
+          });
+          let rowsHtml = "";
+          if (top3.length === 0) {
+            rowsHtml = `<div class="mwi-lite-gcr-card-empty">${escapeHtml2(
+              pricesLoaded ? ctx.i18n.t("无匹配可兑换物品", "No matching items") : ctx.i18n.t("行情加载中...", "Loading market prices...")
+            )}</div>`;
+          } else {
+            rowsHtml = top3.map((r, idx) => {
+              const name = ctx.i18n.getItemName(r.itemHrid);
+              const ownTag = r.owned > 0 ? `<span class="mwi-lite-gcr-own" title="${escapeHtml2(ctx.i18n.t("背包库存", "Inventory"))}">${escapeHtml2(formatCompactCoins(r.owned))}</span>` : "";
+              const rateStr = `${r.itemCount}→${r.creditCount}`;
+              return `<div class="mwi-lite-gcr-card-row ${r.owned > 0 ? "has-own" : ""}">
+                <span class="mwi-lite-gcr-rank">#${idx + 1}</span>
+                <span class="mwi-lite-gcr-item" data-gcr-copy="${escapeHtml2(r.itemHrid)}" title="${escapeHtml2(ctx.i18n.t("点击复制物品名", "Click to copy item name"))}">
+                  ${renderItemIcon(spriteUrl, r.itemHrid, 14)}
+                  <span class="mwi-lite-gcr-name">${escapeHtml2(name)}</span>
+                  ${ownTag}
+                </span>
+                <span class="mwi-lite-gcr-rate">${escapeHtml2(rateStr)}</span>
+                <span class="mwi-lite-gcr-cost ${primarySort === "askPerCredit" ? "hi" : ""}">${escapeHtml2(formatCompactCoins(r.askPerCredit))}</span>
+                <span class="mwi-lite-gcr-cost ${primarySort === "bidPerCredit" ? "hi" : ""}">${escapeHtml2(formatCompactCoins(r.bidPerCredit))}</span>
+              </div>`;
+            }).join("");
+          }
+          cardsHtml += `
+          <div class="mwi-lite-gcr-card" style="--gcr-accent:${meta.color}">
+            <div class="mwi-lite-gcr-card-hd" data-gcr-tab="${escapeHtml2(meta.hrid)}" title="${escapeHtml2(ctx.i18n.t("点击查看完整排序", "Click to view full ranking"))}">
+              <span class="mwi-lite-gcr-card-title">${renderItemIcon(spriteUrl, meta.hrid, 15)} ${escapeHtml2(creditName)}</span>
+              <span class="mwi-lite-gcr-card-own">${escapeHtml2(ctx.i18n.t("持有", "Own"))} ${escapeHtml2(ownedCredits ? formatCompactCoins(ownedCredits) : "0")} ▸</span>
+            </div>
+            <div class="mwi-lite-gcr-card-cols">
+              <span>#</span>
+              <span>${escapeHtml2(ctx.i18n.t("物品", "Item"))}</span>
+              <span>${escapeHtml2(ctx.i18n.t("比例", "Rate"))}</span>
+              <span>Ask/pt</span>
+              <span>Bid/pt</span>
+            </div>
+            ${rowsHtml}
+          </div>
+        `;
+        }
+        cardsHtml += `</div>`;
+        bodyEl.innerHTML = cardsHtml;
+        return;
+      }
+      const ranked = rankGuildCreditItems(catalog, ctx.marketStore, inv, {
+        creditItemHrid: pref.activeTab,
+        sortBy: pref.sortBy,
+        sortDir: pref.sortDir,
+        tradableOnly: true,
+        ownedOnly: pref.ownedOnly,
+        searchText: searchQuery,
+        resolveName
+      });
+      if (ranked.length === 0) {
+        bodyEl.innerHTML = `<div class="mwi-lite-gcr-empty">${escapeHtml2(
+          pricesLoaded ? ctx.i18n.t("当前过滤条件下没有可兑换物品", "No matching convertible items") : ctx.i18n.t("正在获取市场行情...", "Loading market prices...")
+        )}</div>`;
+        return;
+      }
+      const MAX_PREVIEW = 40;
+      const displayRows = showAllRows ? ranked : ranked.slice(0, MAX_PREVIEW);
+      const arrow = (k) => pref.sortBy === k ? pref.sortDir === "asc" ? " ▲" : " ▼" : "";
+      const thCls = (k) => pref.sortBy === k ? "sortable active" : "sortable";
+      let tableHtml = `
+      <div class="mwi-lite-gcr-table-wrap">
+        <table class="mwi-lite-gcr-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>${escapeHtml2(ctx.i18n.t("物品 (点击复制)", "Item (click copy)"))}</th>
+              <th class="${thCls("owned")}" data-gcr-sort="owned">${escapeHtml2(ctx.i18n.t("库存", "Own") + arrow("owned"))}</th>
+              <th class="${thCls("rate")}" data-gcr-sort="rate">${escapeHtml2(ctx.i18n.t("兑换比", "Rate") + arrow("rate"))}</th>
+              <th class="${thCls("askPrice")}" data-gcr-sort="askPrice">${escapeHtml2("Ask" + arrow("askPrice"))}</th>
+              <th class="${thCls("bidPrice")}" data-gcr-sort="bidPrice">${escapeHtml2("Bid" + arrow("bidPrice"))}</th>
+              <th class="${thCls("askPerCredit")}" data-gcr-sort="askPerCredit">${escapeHtml2(ctx.i18n.t("Ask/点", "Ask/pt") + arrow("askPerCredit"))}</th>
+              <th class="${thCls("bidPerCredit")}" data-gcr-sort="bidPerCredit">${escapeHtml2(ctx.i18n.t("Bid/点", "Bid/pt") + arrow("bidPerCredit"))}</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+      for (let i = 0; i < displayRows.length; i++) {
+        const r = displayRows[i];
+        const name = ctx.i18n.getItemName(r.itemHrid);
+        const rateText = `${r.itemCount} → ${r.creditCount}`;
+        tableHtml += `
+        <tr class="${r.owned > 0 ? "has-own" : ""}">
+          <td>${i + 1}</td>
+          <td class="item-cell" data-gcr-copy="${escapeHtml2(r.itemHrid)}">
+            ${renderItemIcon(spriteUrl, r.itemHrid, 15)}
+            <span>${escapeHtml2(name)}</span>
+          </td>
+          <td class="num ${r.owned > 0 ? "own-hi" : ""}">${r.owned > 0 ? escapeHtml2(formatCompactCoins(r.owned)) : "-"}</td>
+          <td class="num">${escapeHtml2(rateText)}</td>
+          <td class="num">${escapeHtml2(formatCompactCoins(r.askPrice))}</td>
+          <td class="num">${escapeHtml2(formatCompactCoins(r.bidPrice))}</td>
+          <td class="num ${pref.sortBy === "askPerCredit" ? "cost-hi" : ""}">${escapeHtml2(formatCompactCoins(r.askPerCredit))}</td>
+          <td class="num ${pref.sortBy === "bidPerCredit" ? "cost-hi" : ""}">${escapeHtml2(formatCompactCoins(r.bidPerCredit))}</td>
+        </tr>
+      `;
+      }
+      tableHtml += `</tbody></table></div>`;
+      if (ranked.length > MAX_PREVIEW) {
+        const btnText = showAllRows ? ctx.i18n.t(`收起至前 ${MAX_PREVIEW} 项`, `Show top ${MAX_PREVIEW}`) : ctx.i18n.t(`展开全部 ${ranked.length} 项`, `Show all ${ranked.length} items`);
+        tableHtml += `<div class="mwi-lite-gcr-more"><button type="button" class="mwi-lite-gcr-btn" data-gcr-act="show-all">${escapeHtml2(btnText)}</button></div>`;
+      }
+      bodyEl.innerHTML = tableHtml;
+    };
+    const renderExchangeModalHint = () => {
+      if (!ctx) return;
+      const modal = document.querySelector('[class*="GuildPanel_exchangeModalContent__"]');
+      if (!modal || modal.offsetParent === null) {
+        document.getElementById(EXCHANGE_HINT_ID)?.remove();
+        lastExchangeSig = "";
+        return;
+      }
+      let creditHrid = "";
+      const uses = modal.querySelectorAll("use");
+      for (let i = 0; i < uses.length; i++) {
+        const href = uses[i].getAttribute("href") || uses[i].getAttribute("xlink:href") || "";
+        const hashPart = href.split("#")[1] || "";
+        const candidate = `/items/${hashPart}`;
+        if (GUILD_CREDIT_META_MAP.has(candidate)) {
+          creditHrid = candidate;
+          break;
+        }
+      }
+      if (!creditHrid) return;
+      const sig = `${creditHrid}|${priceEpoch}|${itemsEpoch}|${pref.sortBy}`;
+      let hintEl = document.getElementById(EXCHANGE_HINT_ID);
+      if (hintEl && sig === lastExchangeSig) return;
+      lastExchangeSig = sig;
+      if (!hintEl) {
+        hintEl = document.createElement("div");
+        hintEl.id = EXCHANGE_HINT_ID;
+        hintEl.setAttribute("data-mwi-lite", "1");
+        modal.appendChild(hintEl);
+      }
+      const catalog = buildGuildCreditCatalog(ctx.gameData.getClientData());
+      const inv = getInventoryCounts();
+      const spriteUrl = resolveItemsSpriteUrl();
+      const sortBy = pref.sortBy === "bidPerCredit" ? "bidPerCredit" : "askPerCredit";
+      const ownedBest = rankGuildCreditItems(catalog, ctx.marketStore, inv, {
+        creditItemHrid: creditHrid,
+        sortBy,
+        sortDir: "asc",
+        tradableOnly: false,
+        ownedOnly: true,
+        limit: 5
+      });
+      const marketBest = rankGuildCreditItems(catalog, ctx.marketStore, inv, {
+        creditItemHrid: creditHrid,
+        sortBy,
+        sortDir: "asc",
+        tradableOnly: true,
+        limit: 5
+      });
+      const renderMiniRows = (list, showOwn) => list.map((r, i) => {
+        const name = ctx.i18n.getItemName(r.itemHrid);
+        const ptCost = sortBy === "bidPerCredit" ? r.bidPerCredit : r.askPerCredit;
+        return `<div class="mwi-lite-gcr-mini-row">
+            <span>#${i + 1}</span>
+            <span class="name">${renderItemIcon(spriteUrl, r.itemHrid, 13)} ${escapeHtml2(name)}</span>
+            <span class="rate">${r.itemCount}→${r.creditCount}</span>
+            ${showOwn ? `<span class="own">x${escapeHtml2(formatCompactCoins(r.owned))}</span>` : ""}
+            <span class="cost">${escapeHtml2(formatCompactCoins(ptCost))}/pt</span>
+          </div>`;
+      }).join("");
+      hintEl.innerHTML = `
+      <div class="mwi-lite-gcr-mini-hd">${escapeHtml2(ctx.i18n.t("性价比参考", "Value Reference"))} (${sortBy === "bidPerCredit" ? "Bid" : "Ask"})</div>
+      ${ownedBest.length > 0 ? `<div class="mwi-lite-gcr-mini-sec">${escapeHtml2(ctx.i18n.t("背包已有最划算", "Best Owned in Inventory"))}</div>${renderMiniRows(ownedBest, true)}` : ""}
+      <div class="mwi-lite-gcr-mini-sec">${escapeHtml2(ctx.i18n.t("全市场最低单点成本", "Cheapest on Market"))}</div>
+      ${marketBest.length ? renderMiniRows(marketBest, false) : `<div class="mwi-lite-gcr-card-empty">-</div>`}
+    `;
+    };
+    const renderBuffModalBreakdown = () => {
+      if (!ctx) return;
+      const modal = document.querySelector('[class*="GuildPanel_guildModalContent__"]');
+      if (!modal || modal.offsetParent === null) {
+        document.getElementById(BUFF_COST_ID)?.remove();
+        lastBuffSig = "";
+        return;
+      }
+      const reqRoot = modal.querySelector('[class*="GuildPanel_costs__"] [class*="GuildPanel_itemRequirements__"]');
+      if (!reqRoot) {
+        document.getElementById(BUFF_COST_ID)?.remove();
+        lastBuffSig = "";
+        return;
+      }
+      const needs = [];
+      const children = Array.from(reqRoot.children);
+      for (let i = 0; i < children.length; i++) {
+        const useEl = children[i].querySelector("use");
+        if (!useEl) continue;
+        const href = useEl.getAttribute("href") || useEl.getAttribute("xlink:href") || "";
+        const hashId = href.split("#")[1] || "";
+        const itemHrid = `/items/${hashId}`;
+        if (!GUILD_CREDIT_META_MAP.has(itemHrid)) continue;
+        const haveText = i >= 2 ? children[i - 2].textContent || "0" : "0";
+        const needText = i >= 1 ? children[i - 1].textContent || "0" : "0";
+        needs.push({
+          creditItemHrid: itemHrid,
+          owned: parseCompactNumber(haveText),
+          required: parseCompactNumber(needText)
+        });
+      }
+      if (needs.length === 0) {
+        document.getElementById(BUFF_COST_ID)?.remove();
+        lastBuffSig = "";
+        return;
+      }
+      const needsKey = needs.map((n) => `${n.creditItemHrid}:${n.owned}:${n.required}`).join(",");
+      const expandKey = Array.from(expandedBuffCredits).sort().join(",");
+      const sig = `${needsKey}|${priceEpoch}|${itemsEpoch}|${pref.buffSortMode}|${expandKey}`;
+      let box = document.getElementById(BUFF_COST_ID);
+      if (box && sig === lastBuffSig) return;
+      lastBuffSig = sig;
+      if (!box) {
+        box = document.createElement("div");
+        box.id = BUFF_COST_ID;
+        box.setAttribute("data-mwi-lite", "1");
+        modal.appendChild(box);
+        box.addEventListener("click", (e) => {
+          const t = e.target;
+          const sortBtn = t?.closest("[data-gbuff-sort]");
+          if (sortBtn) {
+            const mode = sortBtn.getAttribute("data-gbuff-sort");
+            pref.buffSortMode = mode;
+            savePref();
+            renderBuffModalBreakdown();
+            return;
+          }
+          const toggleRow = t?.closest("[data-gbuff-credit]");
+          if (toggleRow) {
+            const cid = toggleRow.getAttribute("data-gbuff-credit");
+            if (cid) {
+              if (expandedBuffCredits.has(cid)) expandedBuffCredits.delete(cid);
+              else expandedBuffCredits.add(cid);
+              renderBuffModalBreakdown();
+            }
+          }
+        });
+      }
+      const catalog = buildGuildCreditCatalog(ctx.gameData.getClientData());
+      const inv = getInventoryCounts();
+      const spriteUrl = resolveItemsSpriteUrl();
+      const evalRes = evaluateGuildBuffUpgrade(needs, catalog, ctx.marketStore, inv, pref.buffSortMode, 3);
+      let html = `
+      <div class="mwi-lite-gcr-buff-hd">${escapeHtml2(ctx.i18n.t("升级缺口兑换参考 — 点击列头切换排序", "Credit Deficit Cost — click Ask/Bid to sort"))}</div>
+      <table class="mwi-lite-gcr-buff-tbl">
+        <thead>
+          <tr>
+            <th>${escapeHtml2(ctx.i18n.t("信用点 / Top 3 方案", "Credit / Top 3"))}</th>
+            <th class="num">${escapeHtml2(ctx.i18n.t("缺口/需购", "Qty"))}</th>
+            <th class="num">Ask/pt</th>
+            <th class="num">Bid/pt</th>
+            <th class="num sortable ${pref.buffSortMode === "ask" ? "active" : ""}" data-gbuff-sort="ask">${escapeHtml2("Ask cost" + (pref.buffSortMode === "ask" ? " ▲" : ""))}</th>
+            <th class="num sortable ${pref.buffSortMode === "bid" ? "active" : ""}" data-gbuff-sort="bid">${escapeHtml2("Bid cost" + (pref.buffSortMode === "bid" ? " ▲" : ""))}</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+      for (const row of evalRes.rows) {
+        const creditName = ctx.i18n.getItemName(row.creditItemHrid);
+        const best = row.topOptions[0];
+        const showSub = row.deficit > 0 || expandedBuffCredits.has(row.creditItemHrid);
+        html += `
+        <tr class="credit-summary" data-gbuff-credit="${escapeHtml2(row.creditItemHrid)}">
+          <td>${renderItemIcon(spriteUrl, row.creditItemHrid, 14)} <b>${escapeHtml2(creditName)}</b></td>
+          <td class="num">${escapeHtml2(formatCompactCoins(row.deficit) === "-" ? "0" : formatCompactCoins(row.deficit))} <span class="muted">(own ${escapeHtml2(formatCompactCoins(row.owned) === "-" ? "0" : formatCompactCoins(row.owned))})</span></td>
+          <td class="num">${escapeHtml2(formatCompactCoins(best?.askPerCredit))}</td>
+          <td class="num">${escapeHtml2(formatCompactCoins(best?.bidPerCredit))}</td>
+          <td class="num ${pref.buffSortMode === "ask" ? "cost-hi" : ""}">${escapeHtml2(formatCompactCoins(row.bestAskCost))}</td>
+          <td class="num ${pref.buffSortMode === "bid" ? "cost-hi" : ""}">${escapeHtml2(formatCompactCoins(row.bestBidCost))}</td>
+        </tr>
+      `;
+        if (showSub) {
+          row.topOptions.forEach((opt, idx) => {
+            const itemName = ctx.i18n.getItemName(opt.itemHrid);
+            html += `
+            <tr class="credit-opt ${idx === 0 ? "best" : ""}">
+              <td class="sub">↳ #${idx + 1} ${renderItemIcon(spriteUrl, opt.itemHrid, 13)} ${escapeHtml2(itemName)}</td>
+              <td class="num">${opt.neededItems > 0 ? escapeHtml2(opt.neededItems.toLocaleString()) : "-"}</td>
+              <td class="num">${escapeHtml2(formatCompactCoins(opt.askPrice))}</td>
+              <td class="num">${escapeHtml2(formatCompactCoins(opt.bidPrice))}</td>
+              <td class="num">${escapeHtml2(formatCompactCoins(opt.askCost))}</td>
+              <td class="num">${escapeHtml2(formatCompactCoins(opt.bidCost))}</td>
+            </tr>
+          `;
+          });
+        }
+      }
+      html += `
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="4"><b>${escapeHtml2(ctx.i18n.t("缺口合计估值", "Total Deficit Est."))}</b></td>
+            <td class="num cost-hi"><b>${escapeHtml2(formatCompactCoins(evalRes.totalAsk))}</b></td>
+            <td class="num ${pref.buffSortMode === "bid" ? "cost-hi" : ""}"><b>${escapeHtml2(formatCompactCoins(evalRes.totalBid))}</b></td>
+          </tr>
+        </tfoot>
+      </table>
+    `;
+      box.innerHTML = html;
+    };
+    return {
+      id: "market-guild-credit-rank",
+      nameZh: "公会信用点兑换性价比排序",
+      nameEn: "Guild Credit Exchange Ranking",
+      descriptionZh: "在公会商店展示 8 种信用点兑换性价比排序（Ask/Bid 单点成本、库存匹配及增益升级缺口估算）",
+      descriptionEn: "Rank Guild Credit conversion efficiency (Ask/Bid per credit) inside Guild Shop & upgrade modals",
+      category: "market",
+      defaultEnabled: true,
+      routes: ["guild"],
+      init(context) {
+        ctx = context;
+        const saved = ctx.storage.get(PREF_KEY, null);
+        if (saved) {
+          if (typeof saved.activeTab === "string") pref.activeTab = saved.activeTab;
+          if (saved.sortBy) pref.sortBy = saved.sortBy;
+          if (saved.sortDir === "asc" || saved.sortDir === "desc") pref.sortDir = saved.sortDir;
+          if (typeof saved.ownedOnly === "boolean") pref.ownedOnly = saved.ownedOnly;
+          if (typeof saved.collapsed === "boolean") pref.collapsed = saved.collapsed;
+          if (saved.buffSortMode === "ask" || saved.buffSortMode === "bid") pref.buffSortMode = saved.buffSortMode;
+        }
+        unregStyle = ctx.addStyle(
+          STYLE_ID,
+          `
+        #${MAIN_PANEL_ID} {
+          margin: 10px 0 14px;
+          padding: 10px 12px;
+          border-radius: 8px;
+          border: 1px solid #303d5c;
+          background: rgba(16, 22, 36, 0.92);
+          color: #e2e8f0;
+          font-size: 12px;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-head {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          margin-bottom: 8px;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-title-wrap {
+          display: inline-flex;
+          align-items: baseline;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-title {
+          font-size: 13px;
+          font-weight: 700;
+          color: #93c5fd;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-sub {
+          font-size: 11px;
+          color: #94a3b8;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-status {
+          font-size: 11px;
+          color: #4ade80;
+          font-weight: 600;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-actions {
+          display: inline-flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 6px;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-chk {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 11px;
+          color: #cbd5e1;
+          cursor: pointer;
+          user-select: none;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-search {
+          width: 118px;
+          padding: 3px 7px;
+          border-radius: 4px;
+          border: 1px solid #3b4b72;
+          background: #0f1624;
+          color: #f8fafc;
+          font-size: 11px;
+          outline: none;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-search:focus {
+          border-color: #60a5fa;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-btn {
+          padding: 3px 8px;
+          border-radius: 4px;
+          border: 1px solid #3b4b72;
+          background: #1e293b;
+          color: #dbeafe;
+          font-size: 11px;
+          cursor: pointer;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-btn:hover {
+          background: #2b3b55;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-tabs {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 5px;
+          margin-bottom: 8px;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-tab {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 3px 8px;
+          border-radius: 5px;
+          border: 1px solid #2b3652;
+          background: #141c2e;
+          color: #cbd5e1;
+          font-size: 11px;
+          cursor: pointer;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-tab.active {
+          border-color: var(--gcr-accent, #60a5fa);
+          background: rgba(59, 130, 246, 0.2);
+          color: #ffffff;
+          font-weight: 600;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-tab-cnt {
+          color: #94a3b8;
+          font-size: 10px;
+        }
+        .mwi-lite-gcr-ico {
+          vertical-align: middle;
+          flex-shrink: 0;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(295px, 1fr));
+          gap: 8px;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-card {
+          border: 1px solid #27324a;
+          border-left: 3px solid var(--gcr-accent, #60a5fa);
+          border-radius: 6px;
+          padding: 7px 8px;
+          background: rgba(11, 16, 28, 0.72);
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-card-hd {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 5px;
+          cursor: pointer;
+          font-weight: 600;
+          color: var(--gcr-accent, #93c5fd);
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-card-hd:hover {
+          text-decoration: underline;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-card-title {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-card-own {
+          font-size: 11px;
+          font-weight: 400;
+          color: #94a3b8;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-card-cols,
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-card-row {
+          display: grid;
+          grid-template-columns: 24px 1fr 48px 52px 52px;
+          gap: 4px;
+          align-items: center;
+          font-size: 11px;
+          padding: 2px 0;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-card-cols {
+          color: #64748b;
+          border-bottom: 1px solid #1e293b;
+          margin-bottom: 2px;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-card-cols span:nth-child(n+3),
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-card-row .mwi-lite-gcr-rate,
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-card-row .mwi-lite-gcr-cost {
+          text-align: right;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-card-row.has-own {
+          background: rgba(34, 197, 94, 0.08);
+          border-radius: 3px;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-rank {
+          color: #94a3b8;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-item {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          min-width: 0;
+          cursor: pointer;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-name {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-item:hover .mwi-lite-gcr-name {
+          color: #93c5fd;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-own {
+          padding: 0 4px;
+          border-radius: 3px;
+          background: rgba(34, 197, 94, 0.22);
+          color: #86efac;
+          font-size: 10px;
+          flex-shrink: 0;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-rate {
+          color: #94a3b8;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-cost.hi {
+          color: #4ade80;
+          font-weight: 600;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-table-wrap {
+          max-height: 360px;
+          overflow-y: auto;
+          border: 1px solid #24304a;
+          border-radius: 6px;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-table,
+        #${BUFF_COST_ID} .mwi-lite-gcr-buff-tbl {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 11.5px;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-table th,
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-table td,
+        #${BUFF_COST_ID} .mwi-lite-gcr-buff-tbl th,
+        #${BUFF_COST_ID} .mwi-lite-gcr-buff-tbl td {
+          padding: 4px 7px;
+          border-bottom: 1px solid rgba(51, 65, 85, 0.45);
+          text-align: left;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-table th {
+          position: sticky;
+          top: 0;
+          background: #131b2e;
+          color: #94a3b8;
+          font-weight: 600;
+          z-index: 1;
+        }
+        #${MAIN_PANEL_ID} .sortable,
+        #${BUFF_COST_ID} .sortable {
+          cursor: pointer;
+          user-select: none;
+        }
+        #${MAIN_PANEL_ID} .sortable.active,
+        #${BUFF_COST_ID} .sortable.active {
+          color: #60a5fa;
+          text-decoration: underline;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-table .num,
+        #${BUFF_COST_ID} .mwi-lite-gcr-buff-tbl .num {
+          text-align: right;
+          font-variant-numeric: tabular-nums;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-table td.item-cell {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          cursor: pointer;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-table td.item-cell:hover {
+          color: #93c5fd;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-table tr.has-own {
+          background: rgba(34, 197, 94, 0.08);
+        }
+        #${MAIN_PANEL_ID} .own-hi {
+          color: #86efac;
+          font-weight: 600;
+        }
+        #${MAIN_PANEL_ID} .cost-hi,
+        #${BUFF_COST_ID} .cost-hi {
+          color: #4ade80;
+          font-weight: 600;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-more {
+          margin-top: 6px;
+          text-align: center;
+        }
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-empty,
+        #${MAIN_PANEL_ID} .mwi-lite-gcr-card-empty {
+          padding: 10px;
+          text-align: center;
+          color: #94a3b8;
+        }
+        #${EXCHANGE_HINT_ID},
+        #${BUFF_COST_ID} {
+          margin-top: 10px;
+          padding: 8px 10px;
+          border-radius: 6px;
+          border: 1px solid #2e3b59;
+          background: rgba(15, 22, 36, 0.9);
+          color: #e2e8f0;
+          font-size: 11px;
+        }
+        #${EXCHANGE_HINT_ID} .mwi-lite-gcr-mini-hd,
+        #${BUFF_COST_ID} .mwi-lite-gcr-buff-hd {
+          font-weight: 600;
+          color: #93c5fd;
+          margin-bottom: 5px;
+        }
+        #${EXCHANGE_HINT_ID} .mwi-lite-gcr-mini-sec {
+          color: #94a3b8;
+          margin: 4px 0 2px;
+          font-size: 10.5px;
+        }
+        #${EXCHANGE_HINT_ID} .mwi-lite-gcr-mini-row {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 2px 0;
+        }
+        #${EXCHANGE_HINT_ID} .mwi-lite-gcr-mini-row .name {
+          flex: 1;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        #${EXCHANGE_HINT_ID} .mwi-lite-gcr-mini-row .own {
+          color: #86efac;
+        }
+        #${EXCHANGE_HINT_ID} .mwi-lite-gcr-mini-row .cost {
+          color: #4ade80;
+          font-weight: 600;
+        }
+        #${BUFF_COST_ID} .credit-summary {
+          cursor: pointer;
+          background: rgba(30, 41, 59, 0.45);
+        }
+        #${BUFF_COST_ID} .credit-opt.best td.sub {
+          color: #86efac;
+        }
+        #${BUFF_COST_ID} td.sub {
+          padding-left: 16px;
+        }
+        #${BUFF_COST_ID} .muted {
+          color: #94a3b8;
+          font-size: 10.5px;
+        }
+        `
+        );
+        unsubs = [
+          ctx.marketStore.onPriceUpdate(() => {
+            priceEpoch++;
+            if (ctx?.domScheduler.getActiveRoute() === "guild") {
+              ctx.domScheduler.scheduleRun(false);
+            }
+          }),
+          ctx.gameData.on("items_updated", () => {
+            itemsEpoch++;
+            if (ctx?.domScheduler.getActiveRoute() === "guild") {
+              ctx.domScheduler.scheduleRun(false);
+            }
+          }),
+          ctx.gameData.on("character_initialized", () => {
+            itemsEpoch++;
+            if (ctx?.domScheduler.getActiveRoute() === "guild") {
+              ctx.domScheduler.scheduleRun(false);
+            }
+          }),
+          ctx.domScheduler.onRouteChange((route) => {
+            if (route === "guild") {
+              ensureMarketPrices(false);
+            }
+          })
+        ];
+        return () => {
+          unsubs.forEach((u) => u());
+          unsubs = [];
+          unregStyle?.();
+          unregStyle = null;
+          if (copyNoticeTimer !== null) {
+            clearTimeout(copyNoticeTimer);
+            copyNoticeTimer = null;
+          }
+          document.getElementById(MAIN_PANEL_ID)?.remove();
+          document.getElementById(EXCHANGE_HINT_ID)?.remove();
+          document.getElementById(BUFF_COST_ID)?.remove();
+          lastMainSig = "";
+          lastExchangeSig = "";
+          lastBuffSig = "";
+        };
+      },
+      onDom() {
+        renderMainPanel();
+        renderExchangeModalHint();
+        renderBuffModalBreakdown();
       }
     };
   }
@@ -19317,8 +20600,260 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     createVolumeDisplayModule(),
     createMarketQuickOpsModule(),
     createTooltipEvModule(),
-    createNetworthModule()
+    createNetworthModule(),
+    createGuildShopRankModule()
   ];
+
+  // src/features/planner/action-time-math.ts
+  var EFFICIENCY_FUNCTIONS = /* @__PURE__ */ new Set([
+    "/action_functions/gathering",
+    "/action_functions/production",
+    "/action_functions/alchemy"
+  ]);
+  function parseLoadoutWearable(raw) {
+    if (typeof raw !== "string" || !raw) return null;
+    const parts = raw.split("::");
+    const hrid = parts.find((p) => p.startsWith("/items/"));
+    if (!hrid) return null;
+    const enh = Number(parts[parts.length - 1]);
+    return {
+      itemHrid: hrid,
+      enhancementLevel: Number.isFinite(enh) && enh >= 0 ? enh : 0
+    };
+  }
+  function getItemLevelFromHash(itemHash, characterItems, itemDetailMap) {
+    if (typeof itemHash !== "string" || !itemHash) return null;
+    for (let i = 0; i < characterItems.length; i++) {
+      const it = characterItems[i];
+      if (it?.hash === itemHash && it.itemHrid) {
+        const lvl = itemDetailMap[it.itemHrid]?.itemLevel;
+        if (typeof lvl === "number") return lvl;
+      }
+    }
+    const parts = itemHash.split("::");
+    const hrid = parts.find((p) => p.startsWith("/items/"));
+    if (hrid && typeof itemDetailMap[hrid]?.itemLevel === "number") {
+      return itemDetailMap[hrid].itemLevel;
+    }
+    return null;
+  }
+  function isActionOnTask(actionHrid, characterQuests) {
+    if (!actionHrid || !Array.isArray(characterQuests)) return false;
+    for (let i = 0; i < characterQuests.length; i++) {
+      const q = characterQuests[i];
+      if (q && q.category === "/quest_category/random_task" && q.type === "/quest_type/action" && q.status === "/quest_status/in_progress" && q.actionHrid === actionHrid) {
+        return true;
+      }
+    }
+    return false;
+  }
+  function getSkillLevel(skillHrid, characterSkills) {
+    if (!skillHrid || !Array.isArray(characterSkills)) return 0;
+    for (let i = 0; i < characterSkills.length; i++) {
+      if (characterSkills[i]?.skillHrid === skillHrid) {
+        return Number(characterSkills[i].level) || 0;
+      }
+    }
+    return 0;
+  }
+  function accumulateBuffList(buffs, skillLevelBuffHrid, acc) {
+    if (!Array.isArray(buffs)) return;
+    for (let i = 0; i < buffs.length; i++) {
+      const b = buffs[i];
+      if (!b || !b.typeHrid) continue;
+      const flat = typeof b.flatBoost === "number" ? b.flatBoost : 0;
+      const ratio = typeof b.ratioBoost === "number" ? b.ratioBoost : 0;
+      if (b.typeHrid === "/buff_types/action_speed") {
+        acc.actionSpeed += flat + ratio;
+      } else if (b.typeHrid === "/buff_types/efficiency") {
+        acc.efficiency += flat + ratio;
+      } else if (b.typeHrid === "/buff_types/action_level") {
+        acc.actionLevelFlat += flat;
+      } else if (skillLevelBuffHrid && b.typeHrid === skillLevelBuffHrid) {
+        acc.skillLevelFlat += flat;
+        acc.skillLevelRatio += ratio;
+      }
+    }
+  }
+  function collectLoadoutBonuses(loadout, actionType, skillPart, skillLevelBuffHrid, clientData, drinkSlotsMap, acc) {
+    const itemDetailMap = clientData?.itemDetailMap || {};
+    const multTable = clientData?.enhancementLevelTotalBonusMultiplierTable || [];
+    const speedKey = `${skillPart}Speed`;
+    const effKey = `${skillPart}Efficiency`;
+    const lvlKey = `${skillPart}Level`;
+    let drinkConcentration = 0;
+    let taskSpeed = 0;
+    const wearables = loadout?.wearableMap;
+    if (wearables && typeof wearables === "object") {
+      for (const raw of Object.values(wearables)) {
+        const parsed = parseLoadoutWearable(raw);
+        if (!parsed) continue;
+        const eq = itemDetailMap[parsed.itemHrid]?.equipmentDetail;
+        if (!eq) continue;
+        const stats = eq.noncombatStats || {};
+        const enhStats = eq.noncombatEnhancementBonuses || {};
+        const mult = multTable[parsed.enhancementLevel] || 0;
+        const addStat = (key) => {
+          const base = typeof stats[key] === "number" ? stats[key] : 0;
+          const enh = typeof enhStats[key] === "number" ? enhStats[key] * mult : 0;
+          return base + enh;
+        };
+        acc.actionSpeed += addStat(speedKey) + addStat("skillingSpeed");
+        acc.efficiency += addStat(effKey) + addStat("skillingEfficiency");
+        acc.skillLevelFlat += addStat(lvlKey);
+        taskSpeed += addStat("taskSpeed");
+        drinkConcentration += addStat("drinkConcentration");
+      }
+    }
+    const loadoutDrinks = Array.isArray(loadout?.drinkItemHrids) ? loadout.drinkItemHrids.filter((h) => typeof h === "string" && h.length > 0) : [];
+    const slotDrinks = loadoutDrinks.length > 0 ? loadoutDrinks : (drinkSlotsMap.get(actionType) || []).map((d) => d?.itemHrid).filter(Boolean);
+    const teaScale = 1 + Math.max(0, drinkConcentration);
+    for (const hrid of slotDrinks) {
+      const buffs = itemDetailMap[hrid]?.consumableDetail?.buffs;
+      if (!Array.isArray(buffs)) continue;
+      for (const b of buffs) {
+        if (!b || !b.typeHrid) continue;
+        const flat = (typeof b.flatBoost === "number" ? b.flatBoost : 0) * teaScale;
+        const ratio = (typeof b.ratioBoost === "number" ? b.ratioBoost : 0) * teaScale;
+        if (b.typeHrid === "/buff_types/action_speed") {
+          acc.actionSpeed += flat + ratio;
+        } else if (b.typeHrid === "/buff_types/efficiency") {
+          acc.efficiency += flat + ratio;
+        } else if (b.typeHrid === "/buff_types/action_level") {
+          acc.actionLevelFlat += flat;
+        } else if (skillLevelBuffHrid && b.typeHrid === skillLevelBuffHrid) {
+          acc.skillLevelFlat += flat;
+          acc.skillLevelRatio += ratio;
+        }
+      }
+    }
+    return { taskSpeed };
+  }
+  function estimateActionTiming(input) {
+    const {
+      action,
+      actionIndex,
+      currentActionLoadoutId,
+      clientData,
+      buffSources,
+      characterSkills,
+      characterItems,
+      characterQuests,
+      characterLoadouts,
+      drinkSlotsMap,
+      nowMs = Date.now()
+    } = input;
+    const detail = clientData?.actionDetailMap?.[action?.actionHrid];
+    if (!detail) {
+      return {
+        perAttemptSec: 0,
+        effectiveSecPerCount: 0,
+        actionSpeed: 0,
+        taskActionSpeed: 0,
+        efficiency: 0,
+        remainingActions: 0,
+        totalSec: 0,
+        isInfinite: false
+      };
+    }
+    const baseSec = (detail.baseTimeCost || 0) / 1e9 > 0 ? (detail.baseTimeCost || 0) / 1e9 : 3;
+    const actionType = detail.type || "";
+    const skillPart = actionType.split("/").pop() || "";
+    const actionFunc = detail.function || "";
+    let reqSkillHrid = detail.levelRequirement?.skillHrid || "";
+    if (!reqSkillHrid) {
+      if (actionFunc === "/action_functions/alchemy") reqSkillHrid = "/skills/alchemy";
+      else if (actionFunc === "/action_functions/enhancing") reqSkillHrid = "/skills/enhancing";
+    }
+    const reqSkillPart = reqSkillHrid.split("/").pop() || skillPart;
+    const skillLevelBuffHrid = reqSkillPart ? `/buff_types/${reqSkillPart}_level` : "";
+    const acc = {
+      actionSpeed: 0,
+      efficiency: 0,
+      actionLevelFlat: 0,
+      skillLevelFlat: 0,
+      skillLevelRatio: 0
+    };
+    accumulateBuffList(buffSources.mooPass?.[actionType], skillLevelBuffHrid, acc);
+    accumulateBuffList(buffSources.community?.[actionType], skillLevelBuffHrid, acc);
+    accumulateBuffList(buffSources.house?.[actionType], skillLevelBuffHrid, acc);
+    accumulateBuffList(buffSources.guild?.[actionType], skillLevelBuffHrid, acc);
+    accumulateBuffList(buffSources.achievement?.[actionType], skillLevelBuffHrid, acc);
+    accumulateBuffList(buffSources.personal?.[actionType], skillLevelBuffHrid, acc);
+    const actionLoadoutId = action?.characterLoadoutID;
+    const switchedLoadout = actionIndex > 0 && typeof actionLoadoutId === "number" && actionLoadoutId > 0 && actionLoadoutId !== currentActionLoadoutId && characterLoadouts?.[actionLoadoutId] ? characterLoadouts[actionLoadoutId] : null;
+    const onTask = isActionOnTask(action.actionHrid, characterQuests);
+    let taskActionSpeed = 0;
+    if (switchedLoadout) {
+      const ldRes = collectLoadoutBonuses(
+        switchedLoadout,
+        actionType,
+        skillPart,
+        skillLevelBuffHrid,
+        clientData,
+        drinkSlotsMap,
+        acc
+      );
+      if (onTask) taskActionSpeed = ldRes.taskSpeed;
+    } else {
+      accumulateBuffList(buffSources.equipment?.[actionType], skillLevelBuffHrid, acc);
+      accumulateBuffList(buffSources.consumable?.[actionType], skillLevelBuffHrid, acc);
+      if (onTask && Array.isArray(buffSources.equipmentTaskActionBuffs)) {
+        for (const b of buffSources.equipmentTaskActionBuffs) {
+          if (b?.typeHrid === "/buff_types/task_action_speed") {
+            taskActionSpeed += (b.flatBoost || 0) + (b.ratioBoost || 0);
+          }
+        }
+      }
+    }
+    const baseSkillLevel = getSkillLevel(reqSkillHrid, characterSkills);
+    const boostedSkillLevel = (1 + acc.skillLevelRatio) * baseSkillLevel + acc.skillLevelFlat;
+    const itemDetailMap = clientData?.itemDetailMap || {};
+    if (actionFunc === "/action_functions/gathering" || actionFunc === "/action_functions/production") {
+      const adjReqLevel = (detail.levelRequirement?.level || 0) + acc.actionLevelFlat;
+      if (boostedSkillLevel >= adjReqLevel) {
+        acc.efficiency += 0.01 * (boostedSkillLevel - adjReqLevel);
+      }
+    } else if (actionFunc === "/action_functions/alchemy") {
+      const itemLevel = getItemLevelFromHash(action?.primaryItemHash, characterItems, itemDetailMap);
+      if (itemLevel !== null && boostedSkillLevel > itemLevel) {
+        acc.efficiency += (boostedSkillLevel - itemLevel) / 100;
+      }
+    } else if (actionFunc === "/action_functions/enhancing") {
+      const itemLevel = getItemLevelFromHash(action?.primaryItemHash, characterItems, itemDetailMap);
+      if (itemLevel !== null && boostedSkillLevel > itemLevel) {
+        acc.actionSpeed += (boostedSkillLevel - itemLevel) / 100;
+      }
+    }
+    const perAttemptSec = Math.max(
+      3,
+      baseSec / Math.max(0.1, 1 + acc.actionSpeed) / Math.max(0.1, 1 + taskActionSpeed)
+    );
+    const efficiency = EFFICIENCY_FUNCTIONS.has(actionFunc) ? Math.max(0, acc.efficiency) : 0;
+    const effectiveRate = 1 + efficiency;
+    const effectiveSecPerCount = perAttemptSec / effectiveRate;
+    const hasMax = Boolean(action?.hasMaxCount && (action?.maxCount || 0) > 0);
+    const remainingActions = hasMax ? Math.max(0, action.maxCount - (action.currentCount || 0)) : 0;
+    let elapsedFraction = 0;
+    if (actionIndex === 0 && action?.startTime) {
+      const startMs = new Date(action.startTime).getTime();
+      if (Number.isFinite(startMs)) {
+        const elapsedSec = Math.max(0, (nowMs - startMs) / 1e3);
+        elapsedFraction = Math.min(perAttemptSec * 0.99, elapsedSec % perAttemptSec);
+      }
+    }
+    const totalSec = hasMax ? Math.max(0, remainingActions * effectiveSecPerCount - elapsedFraction) : 0;
+    return {
+      perAttemptSec,
+      effectiveSecPerCount,
+      actionSpeed: acc.actionSpeed,
+      taskActionSpeed,
+      efficiency,
+      remainingActions,
+      totalSec,
+      isInfinite: !hasMax
+    };
+  }
 
   // src/features/planner/action-timer.ts
   var HEADER_TIMER_ID = "mwi-lite-action-timer";
@@ -19346,69 +20881,43 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     }
     return `${hh}:${mm}`;
   }
-  function estimateActionSeconds(ctx, action) {
+  function formatTimingTooltip(ctx, est) {
+    const parts = [
+      `${ctx.i18n.t("单次", "Attempt")}: ${est.perAttemptSec.toFixed(2)}s`,
+      `${ctx.i18n.t("加速", "Speed")}: +${(est.actionSpeed * 100).toFixed(1)}%`
+    ];
+    if (est.taskActionSpeed > 0) {
+      parts.push(`${ctx.i18n.t("任务加速", "Task Spd")}: +${(est.taskActionSpeed * 100).toFixed(1)}%`);
+    }
+    if (est.efficiency > 0) {
+      parts.push(`${ctx.i18n.t("效率", "Efficiency")}: +${(est.efficiency * 100).toFixed(1)}%`);
+      parts.push(`${ctx.i18n.t("等效", "Eff")}: ${est.effectiveSecPerCount.toFixed(2)}s/${ctx.i18n.t("次", "act")}`);
+    }
+    return parts.join(" · ");
+  }
+  function buildActionEstimator(ctx, actions) {
     const clientData = ctx.gameData.getClientData();
-    const detail = clientData?.actionDetailMap?.[action.actionHrid];
-    if (!detail) {
-      return { perActionSec: 0, remainingActions: 0, totalSec: 0, isInfinite: false };
-    }
-    let baseSec = (detail.baseTimeCost || 0) / 1e9;
-    if (baseSec <= 0) baseSec = 3;
-    const actionType = detail.type;
-    let speedBonus = 0;
-    const personal = ctx.gameData.getPersonalBuffs()?.[actionType];
-    if (Array.isArray(personal)) {
-      for (const b of personal) {
-        if (b?.typeHrid === "/buff_types/action_speed") {
-          speedBonus += (b.flatBoost || 0) + (b.ratioBoost || 0);
-        }
-      }
-    }
-    const guildBuffs = ctx.gameData.getGuildActionBuffs()?.[actionType];
-    if (Array.isArray(guildBuffs)) {
-      for (const b of guildBuffs) {
-        if (b?.typeHrid === "/buff_types/action_speed") {
-          speedBonus += (b.flatBoost || 0) + (b.ratioBoost || 0);
-        }
-      }
-    }
-    const itemDetailMap = clientData?.itemDetailMap || {};
-    const multTable = clientData?.enhancementLevelTotalBonusMultiplierTable || [];
-    for (const item of ctx.gameData.getCharacterItems()) {
-      if (!item || item.itemLocationHrid === "/item_locations/inventory") continue;
-      const eq = itemDetailMap[item.itemHrid]?.equipmentDetail;
-      if (!eq) continue;
-      const stats = eq.noncombatStats || {};
-      const enhStats = eq.noncombatEnhancementBonuses || {};
-      const enhMult = multTable[item.enhancementLevel || 0] || 0;
-      const skillPart = actionType?.split("/").pop() || "";
-      const speedKey = `${skillPart}Speed`;
-      if (typeof stats[speedKey] === "number") speedBonus += stats[speedKey];
-      if (typeof enhStats[speedKey] === "number") speedBonus += enhStats[speedKey] * enhMult;
-      if (typeof stats.skillingSpeed === "number") speedBonus += stats.skillingSpeed;
-      if (typeof enhStats.skillingSpeed === "number") speedBonus += enhStats.skillingSpeed * enhMult;
-    }
-    const drinks = ctx.gameData.getActionTypeDrinkSlots().get(actionType) || [];
-    for (const d of drinks) {
-      const buff = itemDetailMap[d?.itemHrid]?.consumableDetail?.buffs;
-      if (Array.isArray(buff)) {
-        for (const b of buff) {
-          if (b?.typeHrid === "/buff_types/action_speed") {
-            speedBonus += b.flatBoost || 0;
-          }
-        }
-      }
-    }
-    const perActionSec = baseSec / Math.max(0.2, 1 + speedBonus);
-    const hasMax = action.hasMaxCount && (action.maxCount || 0) > 0;
-    const remainingActions = hasMax ? Math.max(0, action.maxCount - (action.currentCount || 0)) : 0;
-    let elapsedFraction = 0;
-    if (action.startTime) {
-      const elapsedSec = Math.max(0, (Date.now() - new Date(action.startTime).getTime()) / 1e3);
-      elapsedFraction = Math.min(perActionSec * 0.99, elapsedSec % perActionSec);
-    }
-    const totalSec = hasMax ? Math.max(0, remainingActions * perActionSec - elapsedFraction) : 0;
-    return { perActionSec, remainingActions, totalSec, isInfinite: !hasMax };
+    const buffSources = ctx.gameData.getActionTypeBuffSources();
+    const characterSkills = ctx.gameData.getCharacterSkills();
+    const characterItems = ctx.gameData.getCharacterItems();
+    const characterQuests = ctx.gameData.getCharacterQuests();
+    const characterLoadouts = ctx.gameData.getCharacterLoadouts();
+    const drinkSlotsMap = ctx.gameData.getActionTypeDrinkSlots();
+    const currentActionLoadoutId = actions[0]?.characterLoadoutID ?? null;
+    const nowMs = Date.now();
+    return (action, index) => estimateActionTiming({
+      action,
+      actionIndex: index,
+      currentActionLoadoutId,
+      clientData,
+      buffSources,
+      characterSkills,
+      characterItems,
+      characterQuests,
+      characterLoadouts,
+      drinkSlotsMap,
+      nowMs
+    });
   }
   function createActionTimerModule() {
     let ctx = null;
@@ -19434,23 +20943,29 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         timerEl.setAttribute("data-mwi-lite", "1");
         actionNameEl.parentElement.insertBefore(timerEl, actionNameEl.nextSibling);
       }
-      const curEst = estimateActionSeconds(ctx, current);
-      if (curEst.perActionSec <= 0) {
+      const estimateAt = buildActionEstimator(ctx, actions);
+      const curEst = estimateAt(current, 0);
+      if (curEst.perAttemptSec <= 0) {
         timerEl.textContent = "";
+        timerEl.title = "";
         return;
       }
       let queueTotal = curEst.totalSec;
       let queueInf = curEst.isInfinite;
       for (let i = 1; i < actions.length; i++) {
-        const est = estimateActionSeconds(ctx, actions[i]);
+        const est = estimateAt(actions[i], i);
         if (est.isInfinite) queueInf = true;
         queueTotal += est.totalSec;
       }
-      const curPart = curEst.isInfinite ? `∞ (${curEst.perActionSec.toFixed(1)}s)` : `${formatDuration(curEst.totalSec)} → ${formatFinishClock(curEst.totalSec)}`;
+      const curPart = curEst.isInfinite ? `∞ (${curEst.perAttemptSec.toFixed(2)}s)` : `${formatDuration(curEst.totalSec)} → ${formatFinishClock(curEst.totalSec)}`;
       const queuePart = actions.length > 1 ? queueInf ? ` | ${ctx.i18n.t("队列", "Q")}: ∞` : ` | ${ctx.i18n.t("总计", "Total")}: ${formatDuration(queueTotal)} (${formatFinishClock(queueTotal)})` : "";
       const nextText = `⏱ ${curPart}${queuePart}`;
       if (timerEl.textContent !== nextText) {
         timerEl.textContent = nextText;
+      }
+      const nextTitle = formatTimingTooltip(ctx, curEst);
+      if (timerEl.title !== nextTitle) {
+        timerEl.title = nextTitle;
       }
     };
     const updateQueuePopups = () => {
@@ -19460,23 +20975,26 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         (a, b) => (a.ordinal ?? 0) - (b.ordinal ?? 0)
       );
       if (!actions.length) return;
-      const actionById = /* @__PURE__ */ new Map();
-      for (const a of actions) {
-        if (typeof a.id === "number") actionById.set(a.id, a);
-      }
+      const actionIndexById = /* @__PURE__ */ new Map();
+      actions.forEach((a, idx) => {
+        if (typeof a.id === "number") actionIndexById.set(a.id, idx);
+      });
       const menu = document.querySelector('[class*="QueuedActions_queuedActionsEditMenu"]');
       if (menu) {
-        const firstEst = estimateActionSeconds(context, actions[0]);
+        const estimateAt = buildActionEstimator(context, actions);
+        const firstEst = estimateAt(actions[0], 0);
         let accSec = firstEst.totalSec;
         let hasInf = firstEst.isInfinite;
         const rows = menu.querySelectorAll('[class*="QueuedActions_action__"][data-action-id]');
         rows.forEach((row) => {
           const id = Number(row.getAttribute("data-action-id"));
-          const act = actionById.get(id);
-          if (!act) return;
-          const est = estimateActionSeconds(context, act);
-          accSec += est.totalSec;
-          if (est.isInfinite) hasInf = true;
+          const idx = actionIndexById.get(id);
+          if (idx === void 0) return;
+          const est = estimateAt(actions[idx], idx);
+          if (idx > 0) {
+            accSec += est.totalSec;
+            if (est.isInfinite) hasInf = true;
+          }
           let tag = row.querySelector(`.${QUEUE_TAG_CLASS}`);
           if (!tag) {
             tag = document.createElement("span");
@@ -19484,8 +21002,10 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
             tag.setAttribute("data-mwi-lite", "1");
             row.appendChild(tag);
           }
-          const txt = est.isInfinite ? "∞" : `${formatDuration(est.totalSec)}${hasInf ? "" : ` (${formatFinishClock(accSec)})`}`;
+          const txt = est.isInfinite ? `∞ (${est.perAttemptSec.toFixed(2)}s)` : `${formatDuration(est.totalSec)}${hasInf ? "" : ` (${formatFinishClock(idx === 0 ? firstEst.totalSec : accSec)})`}`;
           if (tag.textContent !== txt) tag.textContent = txt;
+          const tip = formatTimingTooltip(context, est);
+          if (tag.title !== tip) tag.title = tip;
         });
       }
     };
@@ -19538,7 +21058,13 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         unsubs = [
           ctx.gameData.on("character_initialized", syncTimers),
           ctx.gameData.on("actions_updated", syncTimers),
-          ctx.gameData.on("action_completed", updateHeaderBar)
+          ctx.gameData.on("action_completed", updateHeaderBar),
+          ctx.gameData.on("buffs_updated", syncTimers),
+          ctx.gameData.on("skills_updated", syncTimers),
+          ctx.gameData.on("house_rooms_updated", syncTimers),
+          ctx.gameData.on("consumables_updated", syncTimers),
+          ctx.gameData.on("personal_buffs_updated", syncTimers),
+          ctx.gameData.on("quests_updated", syncTimers)
         ];
         document.addEventListener("visibilitychange", syncTimers);
         syncTimers();

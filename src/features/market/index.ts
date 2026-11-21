@@ -1,5 +1,6 @@
 import type { FeatureModule } from "../../core/types";
 import { createNetworthModule, createTooltipEvModule } from "./economy-overlay";
+import { createGuildShopRankModule } from "./guild-shop-rank";
 import { createMagicSortModule } from "./magic-sort";
 import { createMarketQuickOpsModule } from "./market-quick-ops";
 import { createMarketShortcutsModule } from "./market-shortcuts";
@@ -12,4 +13,5 @@ export const marketModules: FeatureModule[] = [
   createMarketQuickOpsModule(),
   createTooltipEvModule(),
   createNetworthModule(),
+  createGuildShopRankModule(),
 ];

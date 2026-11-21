@@ -1,4 +1,5 @@
 import type { FeatureModule, KernelContext } from "../../core/types";
+import { estimateActionTiming, type ActionTimingEstimate } from "./action-time-math";
 
 const HEADER_TIMER_ID = "mwi-lite-action-timer";
 const QUEUE_TAG_CLASS = "mwi-lite-queue-time-tag";
@@ -28,86 +29,46 @@ function formatFinishClock(secFromNow: number): string {
   return `${hh}:${mm}`;
 }
 
-function estimateActionSeconds(ctx: KernelContext, action: any): {
-  perActionSec: number;
-  remainingActions: number;
-  totalSec: number;
-  isInfinite: boolean;
-} {
+function formatTimingTooltip(ctx: KernelContext, est: ActionTimingEstimate): string {
+  const parts = [
+    `${ctx.i18n.t("单次", "Attempt")}: ${est.perAttemptSec.toFixed(2)}s`,
+    `${ctx.i18n.t("加速", "Speed")}: +${(est.actionSpeed * 100).toFixed(1)}%`,
+  ];
+  if (est.taskActionSpeed > 0) {
+    parts.push(`${ctx.i18n.t("任务加速", "Task Spd")}: +${(est.taskActionSpeed * 100).toFixed(1)}%`);
+  }
+  if (est.efficiency > 0) {
+    parts.push(`${ctx.i18n.t("效率", "Efficiency")}: +${(est.efficiency * 100).toFixed(1)}%`);
+    parts.push(`${ctx.i18n.t("等效", "Eff")}: ${est.effectiveSecPerCount.toFixed(2)}s/${ctx.i18n.t("次", "act")}`);
+  }
+  return parts.join(" · ");
+}
+
+function buildActionEstimator(ctx: KernelContext, actions: readonly any[]) {
   const clientData = ctx.gameData.getClientData();
-  const detail = clientData?.actionDetailMap?.[action.actionHrid];
-  if (!detail) {
-    return { perActionSec: 0, remainingActions: 0, totalSec: 0, isInfinite: false };
-  }
+  const buffSources = ctx.gameData.getActionTypeBuffSources();
+  const characterSkills = ctx.gameData.getCharacterSkills();
+  const characterItems = ctx.gameData.getCharacterItems();
+  const characterQuests = ctx.gameData.getCharacterQuests();
+  const characterLoadouts = ctx.gameData.getCharacterLoadouts();
+  const drinkSlotsMap = ctx.gameData.getActionTypeDrinkSlots();
+  const currentActionLoadoutId = actions[0]?.characterLoadoutID ?? null;
+  const nowMs = Date.now();
 
-  let baseSec = (detail.baseTimeCost || 0) / 1e9;
-  if (baseSec <= 0) baseSec = 3;
-
-  // Read equipment speed bonus + personal + guild speed bonus if available
-  const actionType = detail.type;
-  let speedBonus = 0;
-
-  const personal = ctx.gameData.getPersonalBuffs()?.[actionType];
-  if (Array.isArray(personal)) {
-    for (const b of personal) {
-      if (b?.typeHrid === "/buff_types/action_speed") {
-        speedBonus += (b.flatBoost || 0) + (b.ratioBoost || 0);
-      }
-    }
-  }
-
-  const guildBuffs = ctx.gameData.getGuildActionBuffs()?.[actionType];
-  if (Array.isArray(guildBuffs)) {
-    for (const b of guildBuffs) {
-      if (b?.typeHrid === "/buff_types/action_speed") {
-        speedBonus += (b.flatBoost || 0) + (b.ratioBoost || 0);
-      }
-    }
-  }
-
-  // Equipment action speed bonuses
-  const itemDetailMap = clientData?.itemDetailMap || {};
-  const multTable = clientData?.enhancementLevelTotalBonusMultiplierTable || [];
-  for (const item of ctx.gameData.getCharacterItems()) {
-    if (!item || item.itemLocationHrid === "/item_locations/inventory") continue;
-    const eq = itemDetailMap[item.itemHrid]?.equipmentDetail;
-    if (!eq) continue;
-    const stats = eq.noncombatStats || {};
-    const enhStats = eq.noncombatEnhancementBonuses || {};
-    const enhMult = multTable[item.enhancementLevel || 0] || 0;
-    const skillPart = actionType?.split("/").pop() || "";
-    const speedKey = `${skillPart}Speed`;
-    if (typeof stats[speedKey] === "number") speedBonus += stats[speedKey];
-    if (typeof enhStats[speedKey] === "number") speedBonus += enhStats[speedKey] * enhMult;
-    if (typeof stats.skillingSpeed === "number") speedBonus += stats.skillingSpeed;
-    if (typeof enhStats.skillingSpeed === "number") speedBonus += enhStats.skillingSpeed * enhMult;
-  }
-
-  // Tea speed (e.g. artisan doesn't give speed, but ultra_speed / skilling tea can)
-  const drinks = ctx.gameData.getActionTypeDrinkSlots().get(actionType) || [];
-  for (const d of drinks) {
-    const buff = itemDetailMap[d?.itemHrid]?.consumableDetail?.buffs;
-    if (Array.isArray(buff)) {
-      for (const b of buff) {
-        if (b?.typeHrid === "/buff_types/action_speed") {
-          speedBonus += b.flatBoost || 0;
-        }
-      }
-    }
-  }
-
-  const perActionSec = baseSec / Math.max(0.2, 1 + speedBonus);
-  const hasMax = action.hasMaxCount && (action.maxCount || 0) > 0;
-  const remainingActions = hasMax ? Math.max(0, action.maxCount - (action.currentCount || 0)) : 0;
-
-  let elapsedFraction = 0;
-  if (action.startTime) {
-    const elapsedSec = Math.max(0, (Date.now() - new Date(action.startTime).getTime()) / 1000);
-    elapsedFraction = Math.min(perActionSec * 0.99, elapsedSec % perActionSec);
-  }
-
-  const totalSec = hasMax ? Math.max(0, remainingActions * perActionSec - elapsedFraction) : 0;
-  return { perActionSec, remainingActions, totalSec, isInfinite: !hasMax };
+  return (action: any, index: number): ActionTimingEstimate =>
+    estimateActionTiming({
+      action,
+      actionIndex: index,
+      currentActionLoadoutId,
+      clientData,
+      buffSources,
+      characterSkills,
+      characterItems,
+      characterQuests,
+      characterLoadouts,
+      drinkSlotsMap,
+      nowMs,
+    });
 }
 
 export function createActionTimerModule(): FeatureModule {
@@ -139,22 +100,24 @@ export function createActionTimerModule(): FeatureModule {
       actionNameEl.parentElement.insertBefore(timerEl, actionNameEl.nextSibling);
     }
 
-    const curEst = estimateActionSeconds(ctx, current);
-    if (curEst.perActionSec <= 0) {
+    const estimateAt = buildActionEstimator(ctx, actions);
+    const curEst = estimateAt(current, 0);
+    if (curEst.perAttemptSec <= 0) {
       timerEl.textContent = "";
+      timerEl.title = "";
       return;
     }
 
     let queueTotal = curEst.totalSec;
     let queueInf = curEst.isInfinite;
     for (let i = 1; i < actions.length; i++) {
-      const est = estimateActionSeconds(ctx, actions[i]);
+      const est = estimateAt(actions[i], i);
       if (est.isInfinite) queueInf = true;
       queueTotal += est.totalSec;
     }
 
     const curPart = curEst.isInfinite
-      ? `∞ (${curEst.perActionSec.toFixed(1)}s)`
+      ? `∞ (${curEst.perAttemptSec.toFixed(2)}s)`
       : `${formatDuration(curEst.totalSec)} → ${formatFinishClock(curEst.totalSec)}`;
 
     const queuePart =
@@ -168,6 +131,10 @@ export function createActionTimerModule(): FeatureModule {
     if (timerEl.textContent !== nextText) {
       timerEl.textContent = nextText;
     }
+    const nextTitle = formatTimingTooltip(ctx, curEst);
+    if (timerEl.title !== nextTitle) {
+      timerEl.title = nextTitle;
+    }
   };
 
   const updateQueuePopups = () => {
@@ -178,24 +145,27 @@ export function createActionTimerModule(): FeatureModule {
     );
     if (!actions.length) return;
 
-    const actionById = new Map<number, any>();
-    for (const a of actions) {
-      if (typeof a.id === "number") actionById.set(a.id, a);
-    }
+    const actionIndexById = new Map<number, number>();
+    actions.forEach((a, idx) => {
+      if (typeof a.id === "number") actionIndexById.set(a.id, idx);
+    });
 
     const menu = document.querySelector('[class*="QueuedActions_queuedActionsEditMenu"]');
     if (menu) {
-      const firstEst = estimateActionSeconds(context, actions[0]);
+      const estimateAt = buildActionEstimator(context, actions);
+      const firstEst = estimateAt(actions[0], 0);
       let accSec = firstEst.totalSec;
       let hasInf = firstEst.isInfinite;
       const rows = menu.querySelectorAll('[class*="QueuedActions_action__"][data-action-id]');
       rows.forEach((row) => {
         const id = Number(row.getAttribute("data-action-id"));
-        const act = actionById.get(id);
-        if (!act) return;
-        const est = estimateActionSeconds(context, act);
-        accSec += est.totalSec;
-        if (est.isInfinite) hasInf = true;
+        const idx = actionIndexById.get(id);
+        if (idx === undefined) return;
+        const est = estimateAt(actions[idx], idx);
+        if (idx > 0) {
+          accSec += est.totalSec;
+          if (est.isInfinite) hasInf = true;
+        }
 
         let tag = row.querySelector<HTMLElement>(`.${QUEUE_TAG_CLASS}`);
         if (!tag) {
@@ -205,9 +175,11 @@ export function createActionTimerModule(): FeatureModule {
           row.appendChild(tag);
         }
         const txt = est.isInfinite
-          ? "∞"
-          : `${formatDuration(est.totalSec)}${hasInf ? "" : ` (${formatFinishClock(accSec)})`}`;
+          ? `∞ (${est.perAttemptSec.toFixed(2)}s)`
+          : `${formatDuration(est.totalSec)}${hasInf ? "" : ` (${formatFinishClock(idx === 0 ? firstEst.totalSec : accSec)})`}`;
         if (tag.textContent !== txt) tag.textContent = txt;
+        const tip = formatTimingTooltip(context, est);
+        if (tag.title !== tip) tag.title = tip;
       });
     }
   };
@@ -265,6 +237,12 @@ export function createActionTimerModule(): FeatureModule {
         ctx.gameData.on("character_initialized", syncTimers),
         ctx.gameData.on("actions_updated", syncTimers),
         ctx.gameData.on("action_completed", updateHeaderBar),
+        ctx.gameData.on("buffs_updated", syncTimers),
+        ctx.gameData.on("skills_updated", syncTimers),
+        ctx.gameData.on("house_rooms_updated", syncTimers),
+        ctx.gameData.on("consumables_updated", syncTimers),
+        ctx.gameData.on("personal_buffs_updated", syncTimers),
+        ctx.gameData.on("quests_updated", syncTimers),
       ];
       document.addEventListener("visibilitychange", syncTimers);
       syncTimers();
