@@ -288,6 +288,7 @@
     "market_item_order_books_updated",
     "market_listings_updated",
     "actions_updated",
+    "quests_updated",
     "skills_updated",
     "house_rooms_updated",
     "action_type_consumable_slots_updated",
@@ -22483,12 +22484,11 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
   var SLOT_COUNT_SEL = '[class*="TasksPanel_taskSlotCount"]';
   var TASK_N1_ID = "mwi-lite-task-n1";
   var CLAIM_REWARD_BTN_RE = /领取奖励|Claim\s*Reward/i;
-  var MAX_CLAIM_BATCH = 10;
-  var SYNC_CLICK_BUDGET_MS = 70;
+  var MAX_CLAIM_BATCH = 20;
+  var SYNC_CLICK_BUDGET_MS = 55;
   function findAnyClaimButton(card) {
     const btns = card.querySelectorAll("button");
     for (const btn of btns) {
-      if (btn.disabled) continue;
       if (CLAIM_REWARD_BTN_RE.test(btn.textContent || "")) return btn;
     }
     return null;
@@ -22678,8 +22678,10 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     let lastTaskListRef = null;
     let timers = [];
     let cooldownSyncTimer = null;
+    let cooldownWaitStartTs = 0;
     let activeSettleCleanup = null;
     let isClaimingAll = false;
+    let claimingStatusText = "";
     let claimingFreezeUntil = 0;
     let destroyed = false;
     const spriteUrls = {};
@@ -23009,17 +23011,35 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     };
     const scheduleCooldownResync = () => {
       if (cooldownSyncTimer !== null || destroyed) return;
+      if (cooldownWaitStartTs === 0) cooldownWaitStartTs = Date.now();
+      if (Date.now() - cooldownWaitStartTs >= 2500) return;
       cooldownSyncTimer = window.setTimeout(() => {
         cooldownSyncTimer = null;
-        if (!destroyed && !isClaimingAll) {
+        if (!destroyed && !isClaimingAll && ctx?.domScheduler.getActiveRoute() === "tasks") {
           syncClaimAllButton();
         }
       }, 200);
     };
+    const applyClaimAllBtnState = (btn, disabled, ready, text, title) => {
+      if (btn.disabled !== disabled) btn.disabled = disabled;
+      if (btn.dataset.ready !== ready) btn.dataset.ready = ready;
+      if (btn.textContent !== text) btn.textContent = text;
+      if (btn.title !== title) btn.title = title;
+    };
     const syncClaimAllButton = (cards) => {
       if (!ctx) return;
       const btn = document.querySelector(".mwi-lite-task-claim-all");
-      if (!btn || isClaimingAll) return;
+      if (!btn) return;
+      const title = ctx.i18n.t(
+        "领取所有已完成任务的积分奖励",
+        "Claim rewards from all completed tasks"
+      );
+      if (isClaimingAll) {
+        if (claimingStatusText) {
+          applyClaimAllBtnState(btn, true, "0", claimingStatusText, title);
+        }
+        return;
+      }
       const list = cards ?? getTaskCards();
       let readyCount = 0;
       let pendingCount = 0;
@@ -23030,31 +23050,37 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         if (isClaimButtonReady(claimBtn)) readyCount++;
       }
       if (readyCount > 0) {
+        cooldownWaitStartTs = 0;
         if (cooldownSyncTimer !== null) {
           clearTimeout(cooldownSyncTimer);
           cooldownSyncTimer = null;
         }
-        btn.disabled = false;
-        btn.dataset.ready = "1";
-        btn.textContent = ctx.i18n.t(`一键领取 (${readyCount})`, `Claim All (${readyCount})`);
+        applyClaimAllBtnState(
+          btn,
+          false,
+          "1",
+          ctx.i18n.t(`一键领取 (${readyCount})`, `Claim All (${readyCount})`),
+          title
+        );
       } else if (pendingCount > 0) {
-        btn.disabled = true;
-        btn.dataset.ready = "0";
-        btn.textContent = ctx.i18n.t(`冷却中 (${pendingCount})`, `Cooldown (${pendingCount})`);
-        scheduleCooldownResync();
+        applyClaimAllBtnState(
+          btn,
+          true,
+          "0",
+          ctx.i18n.t(`冷却中 (${pendingCount})`, `Cooldown (${pendingCount})`),
+          title
+        );
+        if (btn.isConnected && ctx.domScheduler.getActiveRoute() === "tasks") {
+          scheduleCooldownResync();
+        }
       } else {
+        cooldownWaitStartTs = 0;
         if (cooldownSyncTimer !== null) {
           clearTimeout(cooldownSyncTimer);
           cooldownSyncTimer = null;
         }
-        btn.disabled = true;
-        btn.dataset.ready = "0";
-        btn.textContent = ctx.i18n.t("一键领取", "Claim All");
+        applyClaimAllBtnState(btn, true, "0", ctx.i18n.t("一键领取", "Claim All"), title);
       }
-      btn.title = ctx.i18n.t(
-        "领取所有已完成任务的积分奖励",
-        "Claim rewards from all completed tasks"
-      );
     };
     const waitForBatchSettlement = (dispatchedCards) => {
       return new Promise((resolve) => {
@@ -23070,12 +23096,15 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         let unsubWs = null;
         let pollId = null;
         let timeoutId = null;
+        const wsCheckTimers = [];
         const finish = () => {
           if (settled) return;
           settled = true;
           unsubWs?.();
           if (pollId !== null) clearInterval(pollId);
           if (timeoutId !== null) clearTimeout(timeoutId);
+          for (const t of wsCheckTimers) clearTimeout(t);
+          wsCheckTimers.length = 0;
           activeSettleCleanup = null;
           resolve();
         };
@@ -23094,14 +23123,17 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
           if (settledCount !== lastSettledCount) {
             lastSettledCount = settledCount;
             lastProgressTs = Date.now();
+            claimingStatusText = ctx.i18n.t(
+              `领取中 (${settledCount}/${total})`,
+              `Claiming (${settledCount}/${total})`
+            );
             const claimAllBtn = document.querySelector(".mwi-lite-task-claim-all");
             if (claimAllBtn && claimAllBtn.isConnected) {
-              claimAllBtn.disabled = true;
-              const shown = Math.min(total, Math.max(1, settledCount));
-              claimAllBtn.textContent = ctx.i18n.t(
-                `领取中 (${shown}/${total})`,
-                `Claiming (${shown}/${total})`
-              );
+              if (!claimAllBtn.disabled) claimAllBtn.disabled = true;
+              if (claimAllBtn.dataset.ready !== "0") claimAllBtn.dataset.ready = "0";
+              if (claimAllBtn.textContent !== claimingStatusText) {
+                claimAllBtn.textContent = claimingStatusText;
+              }
             }
           }
           if (settledCount >= total) {
@@ -23109,22 +23141,24 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
             return;
           }
           const now = Date.now();
-          if (now - startTs >= 750 && now - lastProgressTs >= 250) {
+          if (now - startTs >= 1200 && now - lastProgressTs >= 700) {
             finish();
           }
         };
         checkProgress();
         pollId = window.setInterval(checkProgress, 25);
-        unsubWs = ctx?.wsBus.on("quests_updated", () => {
-          lastProgressTs = Date.now();
+        unsubWs = ctx?.wsBus.on("quests_updated", (msg) => {
+          const hasClaimed = Array.isArray(msg?.endCharacterQuests) && msg.endCharacterQuests.some((q) => q?.status === "/quest_status/claimed");
+          if (hasClaimed) {
+            lastProgressTs = Date.now();
+          }
           const t = window.setTimeout(checkProgress, 16);
-          timers.push(t);
+          wsCheckTimers.push(t);
         }) ?? null;
-        timeoutId = window.setTimeout(finish, 1800);
-        timers.push(timeoutId);
+        timeoutId = window.setTimeout(finish, 2400);
       });
     };
-    const claimAllCompletedTasks = () => {
+    const claimAllCompletedTasks = (clickStartTs = Date.now()) => {
       if (!ctx || isClaimingAll || destroyed) return;
       const cards = getTaskCards();
       const targets = [];
@@ -23138,15 +23172,15 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       }
       const batch = targets.slice(0, MAX_CLAIM_BATCH);
       isClaimingAll = true;
-      claimingFreezeUntil = Date.now() + 2500;
+      cooldownWaitStartTs = 0;
+      claimingFreezeUntil = Date.now() + 2600;
       if (cooldownSyncTimer !== null) {
         clearTimeout(cooldownSyncTimer);
         cooldownSyncTimer = null;
       }
-      const clickWindowStart = Date.now();
       const dispatchedCards = [];
       for (let i = 0; i < batch.length; i++) {
-        if (i > 0 && Date.now() - clickWindowStart >= SYNC_CLICK_BUDGET_MS) break;
+        if (i > 0 && Date.now() - clickStartTs >= SYNC_CLICK_BUDGET_MS) break;
         const { card, btn } = batch[i];
         if (!card.isConnected || !isClaimButtonReady(btn)) continue;
         try {
@@ -23157,20 +23191,24 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       }
       if (dispatchedCards.length === 0) {
         isClaimingAll = false;
+        claimingStatusText = "";
         claimingFreezeUntil = 0;
         syncClaimAllButton();
         return;
       }
+      claimingStatusText = ctx.i18n.t(
+        `领取中 (0/${dispatchedCards.length})`,
+        `Claiming (0/${dispatchedCards.length})`
+      );
       const claimAllBtn = document.querySelector(".mwi-lite-task-claim-all");
       if (claimAllBtn && claimAllBtn.isConnected) {
         claimAllBtn.disabled = true;
-        claimAllBtn.textContent = ctx.i18n.t(
-          `领取中 (1/${dispatchedCards.length})`,
-          `Claiming (1/${dispatchedCards.length})`
-        );
+        claimAllBtn.dataset.ready = "0";
+        claimAllBtn.textContent = claimingStatusText;
       }
       void waitForBatchSettlement(dispatchedCards).finally(() => {
         isClaimingAll = false;
+        claimingStatusText = "";
         claimingFreezeUntil = 0;
         syncClaimAllButton();
         sortTaskCards(false);
@@ -23187,9 +23225,10 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       claimAllBtn.type = "button";
       claimAllBtn.className = "Button_button__1Fe9z Button_small__3fqC7 mwi-lite-task-btn mwi-lite-task-claim-all";
       claimAllBtn.addEventListener("click", (e) => {
+        const clickStartTs = Date.now();
         e.preventDefault();
         e.stopPropagation();
-        claimAllCompletedTasks();
+        claimAllCompletedTasks(clickStartTs);
       });
       const sortBtn = document.createElement("button");
       sortBtn.type = "button";
@@ -23320,6 +23359,8 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         ctx = context;
         destroyed = false;
         isClaimingAll = false;
+        claimingStatusText = "";
+        cooldownWaitStartTs = 0;
         const saved = ctx.storage.get(TASK_SORT_PREF_KEY, null);
         if (saved) {
           if (saved.mode === "skill" || saved.mode === "name") sortMode = saved.mode;
@@ -23461,6 +23502,8 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         return () => {
           destroyed = true;
           isClaimingAll = false;
+          claimingStatusText = "";
+          cooldownWaitStartTs = 0;
           activeSettleCleanup?.();
           activeSettleCleanup = null;
           if (cooldownSyncTimer !== null) {

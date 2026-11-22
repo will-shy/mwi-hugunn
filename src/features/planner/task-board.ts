@@ -8,13 +8,12 @@ const TASK_NAME_SEL = '[class*="RandomTask_name"]';
 const SLOT_COUNT_SEL = '[class*="TasksPanel_taskSlotCount"]';
 const TASK_N1_ID = "mwi-lite-task-n1";
 const CLAIM_REWARD_BTN_RE = /领取奖励|Claim\s*Reward/i;
-const MAX_CLAIM_BATCH = 10;
-const SYNC_CLICK_BUDGET_MS = 70;
+const MAX_CLAIM_BATCH = 20;
+const SYNC_CLICK_BUDGET_MS = 55;
 
 function findAnyClaimButton(card: Element): HTMLButtonElement | null {
   const btns = card.querySelectorAll<HTMLButtonElement>("button");
   for (const btn of btns) {
-    if (btn.disabled) continue;
     if (CLAIM_REWARD_BTN_RE.test(btn.textContent || "")) return btn;
   }
   return null;
@@ -245,8 +244,10 @@ export function createTaskBoardModule(): FeatureModule {
   let lastTaskListRef: Element | null = null;
   let timers: number[] = [];
   let cooldownSyncTimer: number | null = null;
+  let cooldownWaitStartTs = 0;
   let activeSettleCleanup: (() => void) | null = null;
   let isClaimingAll = false;
+  let claimingStatusText = "";
   let claimingFreezeUntil = 0;
   let destroyed = false;
 
@@ -621,18 +622,43 @@ export function createTaskBoardModule(): FeatureModule {
 
   const scheduleCooldownResync = () => {
     if (cooldownSyncTimer !== null || destroyed) return;
+    if (cooldownWaitStartTs === 0) cooldownWaitStartTs = Date.now();
+    if (Date.now() - cooldownWaitStartTs >= 2500) return;
     cooldownSyncTimer = window.setTimeout(() => {
       cooldownSyncTimer = null;
-      if (!destroyed && !isClaimingAll) {
+      if (!destroyed && !isClaimingAll && ctx?.domScheduler.getActiveRoute() === "tasks") {
         syncClaimAllButton();
       }
     }, 200);
   };
 
+  const applyClaimAllBtnState = (
+    btn: HTMLButtonElement,
+    disabled: boolean,
+    ready: "0" | "1",
+    text: string,
+    title: string
+  ) => {
+    if (btn.disabled !== disabled) btn.disabled = disabled;
+    if (btn.dataset.ready !== ready) btn.dataset.ready = ready;
+    if (btn.textContent !== text) btn.textContent = text;
+    if (btn.title !== title) btn.title = title;
+  };
+
   const syncClaimAllButton = (cards?: Element[]) => {
     if (!ctx) return;
     const btn = document.querySelector<HTMLButtonElement>(".mwi-lite-task-claim-all");
-    if (!btn || isClaimingAll) return;
+    if (!btn) return;
+    const title = ctx.i18n.t(
+      "领取所有已完成任务的积分奖励",
+      "Claim rewards from all completed tasks"
+    );
+    if (isClaimingAll) {
+      if (claimingStatusText) {
+        applyClaimAllBtnState(btn, true, "0", claimingStatusText, title);
+      }
+      return;
+    }
     const list = cards ?? getTaskCards();
     let readyCount = 0;
     let pendingCount = 0;
@@ -644,32 +670,37 @@ export function createTaskBoardModule(): FeatureModule {
     }
 
     if (readyCount > 0) {
+      cooldownWaitStartTs = 0;
       if (cooldownSyncTimer !== null) {
         clearTimeout(cooldownSyncTimer);
         cooldownSyncTimer = null;
       }
-      btn.disabled = false;
-      btn.dataset.ready = "1";
-      btn.textContent = ctx.i18n.t(`一键领取 (${readyCount})`, `Claim All (${readyCount})`);
+      applyClaimAllBtnState(
+        btn,
+        false,
+        "1",
+        ctx.i18n.t(`一键领取 (${readyCount})`, `Claim All (${readyCount})`),
+        title
+      );
     } else if (pendingCount > 0) {
-      btn.disabled = true;
-      btn.dataset.ready = "0";
-      btn.textContent = ctx.i18n.t(`冷却中 (${pendingCount})`, `Cooldown (${pendingCount})`);
-      scheduleCooldownResync();
+      applyClaimAllBtnState(
+        btn,
+        true,
+        "0",
+        ctx.i18n.t(`冷却中 (${pendingCount})`, `Cooldown (${pendingCount})`),
+        title
+      );
+      if (btn.isConnected && ctx.domScheduler.getActiveRoute() === "tasks") {
+        scheduleCooldownResync();
+      }
     } else {
+      cooldownWaitStartTs = 0;
       if (cooldownSyncTimer !== null) {
         clearTimeout(cooldownSyncTimer);
         cooldownSyncTimer = null;
       }
-      btn.disabled = true;
-      btn.dataset.ready = "0";
-      btn.textContent = ctx.i18n.t("一键领取", "Claim All");
+      applyClaimAllBtnState(btn, true, "0", ctx.i18n.t("一键领取", "Claim All"), title);
     }
-
-    btn.title = ctx.i18n.t(
-      "领取所有已完成任务的积分奖励",
-      "Claim rewards from all completed tasks"
-    );
   };
 
   const waitForBatchSettlement = (dispatchedCards: HTMLElement[]): Promise<void> => {
@@ -687,6 +718,7 @@ export function createTaskBoardModule(): FeatureModule {
       let unsubWs: (() => void) | null = null;
       let pollId: number | null = null;
       let timeoutId: number | null = null;
+      const wsCheckTimers: number[] = [];
 
       const finish = () => {
         if (settled) return;
@@ -694,6 +726,8 @@ export function createTaskBoardModule(): FeatureModule {
         unsubWs?.();
         if (pollId !== null) clearInterval(pollId);
         if (timeoutId !== null) clearTimeout(timeoutId);
+        for (const t of wsCheckTimers) clearTimeout(t);
+        wsCheckTimers.length = 0;
         activeSettleCleanup = null;
         resolve();
       };
@@ -713,14 +747,17 @@ export function createTaskBoardModule(): FeatureModule {
         if (settledCount !== lastSettledCount) {
           lastSettledCount = settledCount;
           lastProgressTs = Date.now();
+          claimingStatusText = ctx!.i18n.t(
+            `领取中 (${settledCount}/${total})`,
+            `Claiming (${settledCount}/${total})`
+          );
           const claimAllBtn = document.querySelector<HTMLButtonElement>(".mwi-lite-task-claim-all");
           if (claimAllBtn && claimAllBtn.isConnected) {
-            claimAllBtn.disabled = true;
-            const shown = Math.min(total, Math.max(1, settledCount));
-            claimAllBtn.textContent = ctx!.i18n.t(
-              `领取中 (${shown}/${total})`,
-              `Claiming (${shown}/${total})`
-            );
+            if (!claimAllBtn.disabled) claimAllBtn.disabled = true;
+            if (claimAllBtn.dataset.ready !== "0") claimAllBtn.dataset.ready = "0";
+            if (claimAllBtn.textContent !== claimingStatusText) {
+              claimAllBtn.textContent = claimingStatusText;
+            }
           }
         }
 
@@ -730,8 +767,9 @@ export function createTaskBoardModule(): FeatureModule {
         }
 
         const now = Date.now();
-        // Wait past the game button's 600ms cooldown and a quiet window before treating leftovers as un-claimed
-        if (now - startTs >= 750 && now - lastProgressTs >= 250) {
+        // Real test-server telemetry showed tail claim confirmations arriving up to ~636ms after prior frames (e.g. 462ms -> 1098ms).
+        // Wait >=1200ms overall and >=700ms quiet since last settled card before treating leftovers as un-claimed; full success exits immediately above.
+        if (now - startTs >= 1200 && now - lastProgressTs >= 700) {
           finish();
         }
       };
@@ -739,18 +777,22 @@ export function createTaskBoardModule(): FeatureModule {
       checkProgress();
       pollId = window.setInterval(checkProgress, 25);
       unsubWs =
-        ctx?.wsBus.on("quests_updated", () => {
-          lastProgressTs = Date.now();
+        ctx?.wsBus.on("quests_updated", (msg: any) => {
+          const hasClaimed =
+            Array.isArray(msg?.endCharacterQuests) &&
+            msg.endCharacterQuests.some((q: any) => q?.status === "/quest_status/claimed");
+          if (hasClaimed) {
+            lastProgressTs = Date.now();
+          }
           const t = window.setTimeout(checkProgress, 16);
-          timers.push(t);
+          wsCheckTimers.push(t);
         }) ?? null;
 
-      timeoutId = window.setTimeout(finish, 1800);
-      timers.push(timeoutId);
+      timeoutId = window.setTimeout(finish, 2400);
     });
   };
 
-  const claimAllCompletedTasks = () => {
+  const claimAllCompletedTasks = (clickStartTs = Date.now()) => {
     if (!ctx || isClaimingAll || destroyed) return;
     const cards = getTaskCards();
     const targets: Array<{ card: HTMLElement; btn: HTMLButtonElement }> = [];
@@ -765,18 +807,18 @@ export function createTaskBoardModule(): FeatureModule {
 
     const batch = targets.slice(0, MAX_CLAIM_BATCH);
     isClaimingAll = true;
-    claimingFreezeUntil = Date.now() + 2500;
+    cooldownWaitStartTs = 0;
+    claimingFreezeUntil = Date.now() + 2600;
     if (cooldownSyncTimer !== null) {
       clearTimeout(cooldownSyncTimer);
       cooldownSyncTimer = null;
     }
 
-    const clickWindowStart = Date.now();
     const dispatchedCards: HTMLElement[] = [];
 
     // Must run synchronously within the user's trusted click (<100ms) so the game client does not flag isAuto=true
     for (let i = 0; i < batch.length; i++) {
-      if (i > 0 && Date.now() - clickWindowStart >= SYNC_CLICK_BUDGET_MS) break;
+      if (i > 0 && Date.now() - clickStartTs >= SYNC_CLICK_BUDGET_MS) break;
       const { card, btn } = batch[i];
       if (!card.isConnected || !isClaimButtonReady(btn)) continue;
       try {
@@ -789,22 +831,26 @@ export function createTaskBoardModule(): FeatureModule {
 
     if (dispatchedCards.length === 0) {
       isClaimingAll = false;
+      claimingStatusText = "";
       claimingFreezeUntil = 0;
       syncClaimAllButton();
       return;
     }
 
+    claimingStatusText = ctx.i18n.t(
+      `领取中 (0/${dispatchedCards.length})`,
+      `Claiming (0/${dispatchedCards.length})`
+    );
     const claimAllBtn = document.querySelector<HTMLButtonElement>(".mwi-lite-task-claim-all");
     if (claimAllBtn && claimAllBtn.isConnected) {
       claimAllBtn.disabled = true;
-      claimAllBtn.textContent = ctx.i18n.t(
-        `领取中 (1/${dispatchedCards.length})`,
-        `Claiming (1/${dispatchedCards.length})`
-      );
+      claimAllBtn.dataset.ready = "0";
+      claimAllBtn.textContent = claimingStatusText;
     }
 
     void waitForBatchSettlement(dispatchedCards).finally(() => {
       isClaimingAll = false;
+      claimingStatusText = "";
       claimingFreezeUntil = 0;
       syncClaimAllButton();
       sortTaskCards(false);
@@ -824,9 +870,10 @@ export function createTaskBoardModule(): FeatureModule {
     claimAllBtn.type = "button";
     claimAllBtn.className = "Button_button__1Fe9z Button_small__3fqC7 mwi-lite-task-btn mwi-lite-task-claim-all";
     claimAllBtn.addEventListener("click", (e) => {
+      const clickStartTs = Date.now();
       e.preventDefault();
       e.stopPropagation();
-      claimAllCompletedTasks();
+      claimAllCompletedTasks(clickStartTs);
     });
 
     const sortBtn = document.createElement("button");
@@ -983,6 +1030,8 @@ export function createTaskBoardModule(): FeatureModule {
       ctx = context;
       destroyed = false;
       isClaimingAll = false;
+      claimingStatusText = "";
+      cooldownWaitStartTs = 0;
       const saved = ctx.storage.get<TaskSortPref | null>(TASK_SORT_PREF_KEY, null);
       if (saved) {
         if (saved.mode === "skill" || saved.mode === "name") sortMode = saved.mode;
@@ -1128,6 +1177,8 @@ export function createTaskBoardModule(): FeatureModule {
       return () => {
         destroyed = true;
         isClaimingAll = false;
+        claimingStatusText = "";
+        cooldownWaitStartTs = 0;
         activeSettleCleanup?.();
         activeSettleCleanup = null;
         if (cooldownSyncTimer !== null) {

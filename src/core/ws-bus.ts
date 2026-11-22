@@ -19,6 +19,7 @@ const SKIP_DEDUP_TYPES = new Set([
   "market_item_order_books_updated",
   "market_listings_updated",
   "actions_updated",
+  "quests_updated",
   "skills_updated",
   "house_rooms_updated",
   "action_type_consumable_slots_updated",
