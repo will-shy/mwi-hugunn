@@ -1,15 +1,35 @@
 import type { FeatureModule, KernelContext } from "../../core/types";
 
+export const TASK_AUTO_N1_MODULE_ID = "planner-task-auto-n1";
+
 const TASK_SORT_PREF_KEY = "task_board_sort_pref_v1";
 const TASK_LIST_SEL = '[class*="TasksPanel_taskList"]';
 const TASK_CARD_SEL = '[class*="RandomTask_randomTask"]';
 const TASK_ACTION_SEL = '[class*="RandomTask_action"]';
 const TASK_NAME_SEL = '[class*="RandomTask_name"]';
 const SLOT_COUNT_SEL = '[class*="TasksPanel_taskSlotCount"]';
+const SKILL_DETAIL_SEL = '[class*="SkillActionDetail_skillActionDetail"]';
+const MAIN_PANEL_SEL = '[class*="MainPanel_mainPanel"]';
+const TASKS_PANEL_SEL = '[class*="TasksPanel_tasksPanel"]';
+const TAB_PANEL_SEL = '[class*="TabPanel_tabPanel"]';
+const SUB_PANEL_SEL = '[class*="MainPanel_subPanelContainer"]';
+const NAV_LINK_SEL = '[class*="NavigationBar_navigationLink__"]';
 const TASK_N1_ID = "mwi-lite-task-n1";
+const TASK_QUEUE_BTN_CLASS = "mwi-lite-task-queue-btn";
+const FREEZE_OVERLAY_ID = "mwi-lite-task-freeze-overlay";
 const CLAIM_REWARD_BTN_RE = /领取奖励|Claim\s*Reward/i;
+const GO_BTN_RE = /^(前往|Go)$/i;
+const ADD_TO_QUEUE_BTN_RE = /添加到队列|Add\s*(?:to\s*)?Queue/i;
+const UPGRADE_QUEUE_BTN_RE = /升级(?:行动)?队列|解锁(?:行动)?队列|Upgrade\s*Queue|Unlock\s*Queue/i;
+const START_ONLY_BTN_RE = /^(开始|Start)$/i;
+const STOP_BTN_RE = /^(停止|Stop)$/i;
+const ACTION_DETAIL_MOUNTED_SEL =
+  '[class*="enhancingComponent"], [class*="alchemyComponent"], [class*="primaryItemSelectorContainer"], [class*="buttonsContainer"]';
 const MAX_CLAIM_BATCH = 20;
 const SYNC_CLICK_BUDGET_MS = 55;
+const TRUSTED_CLICK_WINDOW_MS = 85;
+const QUICK_QUEUE_ASYNC_TIMEOUT_MS = 600;
+const QUEUE_FEEDBACK_TTL_MS = 1200;
 
 function findAnyClaimButton(card: Element): HTMLButtonElement | null {
   const btns = card.querySelectorAll<HTMLButtonElement>("button");
@@ -55,12 +75,129 @@ function formatActionCount(n: number): string {
   return String(n);
 }
 
-function setReactInputValue(input: HTMLInputElement, value: number): void {
+function setReactInputValue(input: HTMLInputElement, value: number, focusInput = true): void {
   const proto = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
   proto?.set?.call(input, String(value));
   input.dispatchEvent(new Event("input", { bubbles: true }));
   input.dispatchEvent(new Event("change", { bubbles: true }));
-  input.focus();
+  if (focusInput) input.focus();
+}
+
+export function computeQuickQueueCount(baseCount: number | null, autoMinusOne: boolean): number | null {
+  if (baseCount === null || !Number.isFinite(baseCount) || baseCount <= 0) return null;
+  const normalized = Math.floor(baseCount);
+  if (autoMinusOne && normalized > 1) return normalized - 1;
+  return normalized;
+}
+
+function findRealGameElement<T extends Element = HTMLElement>(doc: Document, selector: string): T | null {
+  const els = doc.querySelectorAll<T>(selector);
+  for (const el of els) {
+    if (!el.closest(`#${FREEZE_OVERLAY_ID}`) && !el.closest("[data-mwi-lite]")) {
+      return el;
+    }
+  }
+  return null;
+}
+
+function findGoButton(card: Element): HTMLButtonElement | null {
+  const btns = card.querySelectorAll<HTMLButtonElement>("button");
+  for (const btn of btns) {
+    if (btn.classList.contains(TASK_QUEUE_BTN_CLASS)) continue;
+    if (GO_BTN_RE.test((btn.textContent || "").trim())) return btn;
+  }
+  return null;
+}
+
+function findButtonByTextRe(root: ParentNode, re: RegExp): HTMLButtonElement | null {
+  const btns = root.querySelectorAll<HTMLButtonElement>("button");
+  for (const btn of btns) {
+    if (re.test((btn.textContent || "").trim())) return btn;
+  }
+  return null;
+}
+
+function findTasksNavButton(doc: Document): HTMLElement | null {
+  const links = Array.from(doc.querySelectorAll<HTMLElement>(NAV_LINK_SEL));
+  const iconMatches = links.filter((el) => {
+    if (el.querySelector('svg[aria-label="navigationBar.tasks"]')) return true;
+    const useEl = el.querySelector("use");
+    const href = useEl?.getAttribute("href") || useEl?.getAttribute("xlink:href") || "";
+    return href.endsWith("#tasks");
+  });
+  const visibleIcon = iconMatches.find((el) => el.offsetParent !== null);
+  if (visibleIcon) return visibleIcon;
+  if (iconMatches.length > 0) return iconMatches[0];
+
+  const textMatches = links.filter((el) => /^(任务|Tasks)(\s*\d+)?$/i.test((el.textContent || "").trim()));
+  return textMatches.find((el) => el.offsetParent !== null) || textMatches[0] || null;
+}
+
+function findReactNavCore(doc: Document): { handleChangeNavTarget?: (target: string) => void } | null {
+  const root = doc.getElementById("root") || doc.body;
+  if (!root) return null;
+  const key = Reflect.ownKeys(root).find(
+    (k) => typeof k === "string" && (k.startsWith("__reactContainer$") || k.startsWith("__reactFiber$"))
+  );
+  const start = key ? (root as any)[key] : null;
+  if (!start) return null;
+  const queue: any[] = [start];
+  let visited = 0;
+  while (queue.length > 0 && visited++ < 2000) {
+    const cur = queue.shift();
+    if (!cur) continue;
+    const inst = cur.stateNode;
+    if (inst && inst.state && "navTarget" in inst.state && typeof inst.handleChangeNavTarget === "function") {
+      return inst;
+    }
+    if (cur.child) queue.push(cur.child);
+    if (cur.sibling) queue.push(cur.sibling);
+  }
+  return null;
+}
+
+function getDetailActionCount(detail: Element): number | null {
+  const key = Reflect.ownKeys(detail).find(
+    (k) => typeof k === "string" && (k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"))
+  );
+  let fiber: any = key ? (detail as any)[key] : null;
+  for (let depth = 0; fiber && depth < 16; depth++, fiber = fiber.return) {
+    const inst = fiber.stateNode;
+    if (inst && typeof inst.getActionCount === "function") {
+      try {
+        const count = Number(inst.getActionCount());
+        if (Number.isFinite(count)) return count;
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+function triggerButtonActionSafe(btn: HTMLElement, clickStartTs: number): boolean {
+  // Within trusted click window (<85ms), native .click() keeps game's ws.exceeded(100) false and runs full React handler
+  if (Date.now() - clickStartTs < TRUSTED_CLICK_WINDOW_MS) {
+    btn.click();
+    return true;
+  }
+  // Fallback when async render exceeded window: invoke inner React onClick without dispatching untrusted DOM click
+  const key = Reflect.ownKeys(btn).find(
+    (k) => typeof k === "string" && (k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"))
+  );
+  let fiber: any = key ? (btn as any)[key] : null;
+  const isButtonHost = btn.tagName === "BUTTON";
+  for (let depth = 0; fiber && depth < 8; depth++, fiber = fiber.return) {
+    const onClick = fiber.memoizedProps?.onClick;
+    if (typeof onClick === "function") {
+      const fnStr = Function.prototype.toString.call(onClick);
+      if (fnStr.includes("cooldownMs") || (isButtonHost && depth === 0)) continue;
+      onClick({ preventDefault() {}, stopPropagation() {}, isTrusted: true, currentTarget: btn, target: btn });
+      return true;
+    }
+  }
+  btn.click();
+  return true;
 }
 
 type TaskSortMode = "skill" | "name";
@@ -248,6 +385,10 @@ export function createTaskBoardModule(): FeatureModule {
   let isClaimingAll = false;
   let claimingStatusText = "";
   let claimingFreezeUntil = 0;
+  let isQuickQueueing = false;
+  let manualSortedActive = false;
+  let quickQueueAsyncCleanup: (() => void) | null = null;
+  const queueFeedbackMap = new Map<string, { label: string; tone: "ok" | "err"; expiresAt: number }>();
   let destroyed = false;
 
   // Lazy cached sprite URLs & reverse lookup maps
@@ -564,7 +705,7 @@ export function createTaskBoardModule(): FeatureModule {
       return;
     }
 
-    const taskList = document.querySelector(TASK_LIST_SEL);
+    const taskList = findRealGameElement(document, TASK_LIST_SEL);
     if (!taskList) return;
 
     const cards = Array.from(taskList.children).filter(
@@ -617,7 +758,7 @@ export function createTaskBoardModule(): FeatureModule {
   };
 
   const getTaskCards = (): HTMLElement[] => {
-    const taskList = document.querySelector(TASK_LIST_SEL);
+    const taskList = findRealGameElement(document, TASK_LIST_SEL);
     if (!taskList) return [];
     return Array.from(taskList.children).filter((el): el is HTMLElement => el.matches(TASK_CARD_SEL));
   };
@@ -861,7 +1002,7 @@ export function createTaskBoardModule(): FeatureModule {
 
   const injectToolbar = () => {
     if (!ctx) return;
-    const slotCount = document.querySelector(SLOT_COUNT_SEL);
+    const slotCount = findRealGameElement(document, SLOT_COUNT_SEL);
     if (!slotCount || slotCount.querySelector(".mwi-lite-task-toolbar")) return;
 
     const bar = document.createElement("span");
@@ -891,6 +1032,7 @@ export function createTaskBoardModule(): FeatureModule {
       e.preventDefault();
       e.stopPropagation();
       sortMode = sortMode === "skill" ? "name" : "skill";
+      manualSortedActive = true;
       syncLabels();
       savePref();
       sortTaskCards(true);
@@ -910,6 +1052,7 @@ export function createTaskBoardModule(): FeatureModule {
       e.preventDefault();
       e.stopPropagation();
       autoSort = !autoSort;
+      if (autoSort) manualSortedActive = false;
       syncAuto();
       savePref();
       if (autoSort) sortTaskCards(true);
@@ -988,11 +1131,463 @@ export function createTaskBoardModule(): FeatureModule {
     timers.push(tId);
   };
 
-  const syncDom = (route: string) => {
-    injectTaskMinusOneButton();
-    if (route !== "tasks" && !document.querySelector(TASK_LIST_SEL)) return;
+  const getCardBaseName = (card: Element): string => {
+    const parsed = parseCard(card);
+    return parsed ? parsed.fullText : (card.querySelector(TASK_NAME_SEL)?.textContent || "").trim();
+  };
 
-    const taskList = document.querySelector(TASK_LIST_SEL);
+  const buildTaskCardKeys = (cards: Element[]): string[] => {
+    const counts = new Map<string, number>();
+    return cards.map((card, idx) => {
+      const base = getCardBaseName(card);
+      if (!base) return `idx:${idx}`;
+      const nth = counts.get(base) || 0;
+      counts.set(base, nth + 1);
+      return `${base}#${nth}`;
+    });
+  };
+
+  const getTaskCardKey = (card: Element, cards: Element[]): string => {
+    const idx = cards.indexOf(card);
+    if (idx < 0) return "";
+    const keys = buildTaskCardKeys(cards);
+    return keys[idx] || "";
+  };
+
+  const isTaskListSorted = (cards: HTMLElement[]): boolean => {
+    if (cards.length < 2) return true;
+    const toKey = (card: HTMLElement) => {
+      const parsed = parseCard(card);
+      const resolved = parsed ? resolveIconForCard(parsed) : null;
+      return {
+        isCompleted: parsed?.isCompleted ?? false,
+        skillOrder: parsed ? SKILL_ORDER[parsed.skillType] ?? 999 : 999,
+        isCombat: parsed?.isCombat ?? false,
+        monsterSortIndex: resolved?.monsterSortIndex ?? 999_999_999,
+        targetName: parsed?.taskTarget || "",
+      };
+    };
+    let prev = toKey(cards[0]);
+    for (let i = 1; i < cards.length; i++) {
+      const cur = toKey(cards[i]);
+      if (prev.isCompleted !== cur.isCompleted) {
+        if (!prev.isCompleted && cur.isCompleted) return false;
+      } else if (sortMode === "skill") {
+        if (prev.skillOrder !== cur.skillOrder) {
+          if (prev.skillOrder > cur.skillOrder) return false;
+        } else if (prev.isCombat && cur.isCombat && prev.monsterSortIndex !== cur.monsterSortIndex) {
+          if (prev.monsterSortIndex > cur.monsterSortIndex) return false;
+        } else if (prev.targetName.localeCompare(cur.targetName, "zh-CN") > 0) {
+          return false;
+        }
+      } else if (prev.targetName.localeCompare(cur.targetName, "zh-CN") > 0) {
+        return false;
+      }
+      prev = cur;
+    }
+    return true;
+  };
+
+  const setQueueFeedback = (taskKey: string, label: string, tone: "ok" | "err") => {
+    const expiresAt = Date.now() + QUEUE_FEEDBACK_TTL_MS;
+    queueFeedbackMap.set(taskKey, { label, tone, expiresAt });
+    const tId = window.setTimeout(() => {
+      const cur = queueFeedbackMap.get(taskKey);
+      if (cur && cur.expiresAt <= Date.now()) {
+        queueFeedbackMap.delete(taskKey);
+        if (!destroyed && ctx?.domScheduler.getActiveRoute() === "tasks") {
+          const list = getTaskCards();
+          if (list.length) renderTaskQueueButtons(list);
+        }
+      }
+    }, QUEUE_FEEDBACK_TTL_MS + 20);
+    timers.push(tId);
+  };
+
+  const captureVisualFreezeOverlay = (savedTabScrollTop: number) => {
+    const mainPanel = findRealGameElement<HTMLElement>(document, MAIN_PANEL_SEL);
+    const tasksPanel = findRealGameElement<HTMLElement>(document, TASKS_PANEL_SEL);
+    if (!mainPanel || !tasksPanel) {
+      return { mount: () => {}, remove: () => {} };
+    }
+    const clone = tasksPanel.cloneNode(true) as HTMLElement;
+    clone.style.width = "100%";
+    clone.style.height = "100%";
+    clone.style.boxSizing = "border-box";
+    const clonedTabPanel = clone.querySelector<HTMLElement>(TAB_PANEL_SEL);
+    let overlayEl: HTMLElement | null = null;
+
+    return {
+      mount() {
+        if (overlayEl || destroyed || !document.body) return;
+        const rect = mainPanel.getBoundingClientRect();
+        const bg = getComputedStyle(mainPanel).backgroundColor || "#121629";
+        document.getElementById(FREEZE_OVERLAY_ID)?.remove();
+        overlayEl = document.createElement("div");
+        overlayEl.id = FREEZE_OVERLAY_ID;
+        overlayEl.setAttribute("data-mwi-lite", "1");
+        overlayEl.style.cssText = [
+          "position:fixed",
+          `left:${rect.left}px`,
+          `top:${rect.top}px`,
+          `width:${rect.width}px`,
+          `height:${rect.height}px`,
+          `background:${bg === "rgba(0, 0, 0, 0)" || bg === "transparent" ? "#121629" : bg}`,
+          "z-index:9400",
+          "overflow:hidden",
+          "pointer-events:auto",
+        ].join(";");
+        overlayEl.appendChild(clone);
+        document.body.appendChild(overlayEl);
+        if (clonedTabPanel && savedTabScrollTop > 0) {
+          clonedTabPanel.scrollTop = savedTabScrollTop;
+        }
+      },
+      remove() {
+        overlayEl?.remove();
+        overlayEl = null;
+      },
+    };
+  };
+
+  const renderTaskQueueButtons = (cards: HTMLElement[]) => {
+    if (!ctx) return;
+    const now = Date.now();
+    const autoMinusOne = ctx.isFeatureEnabled(TASK_AUTO_N1_MODULE_ID);
+    const baseText = ctx.i18n.t("添加到队列", "Add to Queue");
+    const baseTitle = autoMinusOne
+      ? ctx.i18n.t(
+          "后台静默前往并按 (N-1) 添加到队列后返回任务界面",
+          "Silently go, apply (N-1), add to queue, and return"
+        )
+      : ctx.i18n.t(
+          "后台静默前往并添加到队列后返回任务界面",
+          "Silently go, add to queue, and return"
+        );
+
+    const taskKeys = buildTaskCardKeys(cards);
+    for (let i = 0; i < cards.length; i++) {
+      const card = cards[i];
+      const goBtn = findGoButton(card);
+      const existing = card.querySelector<HTMLButtonElement>(`button.${TASK_QUEUE_BTN_CLASS}`);
+
+      if (!goBtn) {
+        existing?.remove();
+        continue;
+      }
+
+      const taskKey = taskKeys[i];
+      const fb = queueFeedbackMap.get(taskKey);
+      const activeFb = fb && fb.expiresAt > now ? fb : null;
+      if (fb && !activeFb) {
+        queueFeedbackMap.delete(taskKey);
+      }
+
+      let queueBtn = existing;
+      if (!queueBtn) {
+        queueBtn = document.createElement("button");
+        queueBtn.type = "button";
+        queueBtn.className = `Button_button__1Fe9z ${TASK_QUEUE_BTN_CLASS}`;
+        queueBtn.setAttribute("data-mwi-lite", "1");
+        queueBtn.addEventListener("click", (ev) => {
+          const clickStartTs = Date.now();
+          ev.preventDefault();
+          ev.stopPropagation();
+          const curCard = queueBtn!.closest(TASK_CARD_SEL);
+          const curGoBtn = curCard ? findGoButton(curCard) : null;
+          if (!curCard || !curGoBtn || curGoBtn.disabled) return;
+          quickQueueTaskCard(curCard, curGoBtn, clickStartTs);
+        });
+        goBtn.insertAdjacentElement("afterend", queueBtn);
+      } else if (queueBtn.previousElementSibling !== goBtn) {
+        goBtn.insertAdjacentElement("afterend", queueBtn);
+      }
+
+      const nextLabel = activeFb ? activeFb.label : baseText;
+      const nextState = activeFb ? activeFb.tone : "";
+      const nextDisabled = goBtn.disabled || isQuickQueueing;
+
+      if (queueBtn.textContent !== nextLabel) queueBtn.textContent = nextLabel;
+      if (queueBtn.dataset.state !== nextState) {
+        if (nextState) queueBtn.dataset.state = nextState;
+        else queueBtn.removeAttribute("data-state");
+      }
+      if (queueBtn.disabled !== nextDisabled) queueBtn.disabled = nextDisabled;
+      if (queueBtn.title !== baseTitle) queueBtn.title = baseTitle;
+    }
+  };
+
+  const quickQueueTaskCard = (
+    card: Element,
+    goBtn: HTMLButtonElement,
+    clickStartTs: number
+  ) => {
+    if (!ctx || destroyed || isQuickQueueing || isClaimingAll) return;
+    if (!goBtn.isConnected || goBtn.disabled) return;
+
+    const cardsBefore = getTaskCards();
+    const taskKey = getTaskCardKey(card, cardsBefore);
+    const preserveManualSort = manualSortedActive || isTaskListSorted(cardsBefore);
+    const taskListBefore = findRealGameElement(document, TASK_LIST_SEL);
+    const tabScrollBefore = taskListBefore?.closest<HTMLElement>(TAB_PANEL_SEL)?.scrollTop ?? 0;
+    const subScrollBefore = findRealGameElement(document, SUB_PANEL_SEL)?.scrollTop ?? 0;
+    const winScrollXBefore = window.scrollX;
+    const winScrollYBefore = window.scrollY;
+
+    isQuickQueueing = true;
+    const freeze = captureVisualFreezeOverlay(tabScrollBefore);
+
+    const navigateBackToTasks = () => {
+      const navBtn = findTasksNavButton(document);
+      if (navBtn) {
+        triggerButtonActionSafe(navBtn, clickStartTs);
+      }
+      if (!findRealGameElement(document, TASK_LIST_SEL)) {
+        findReactNavCore(document)?.handleChangeNavTarget?.("tasks");
+      }
+    };
+
+    const finalizeOnTasks = (feedback?: { label: string; tone: "ok" | "err" }): boolean => {
+      const taskListAfter = findRealGameElement(document, TASK_LIST_SEL);
+      if (!taskListAfter) return false;
+
+      isQuickQueueing = false;
+      if (feedback) {
+        setQueueFeedback(taskKey, feedback.label, feedback.tone);
+      }
+
+      syncDom("tasks", autoSort || preserveManualSort);
+
+      const tabPanelAfter = taskListAfter.closest<HTMLElement>(TAB_PANEL_SEL);
+      if (tabPanelAfter && tabPanelAfter.scrollTop !== tabScrollBefore) {
+        tabPanelAfter.scrollTop = tabScrollBefore;
+      }
+      const subPanelAfter = findRealGameElement(document, SUB_PANEL_SEL);
+      if (subPanelAfter && subPanelAfter.scrollTop !== subScrollBefore) {
+        subPanelAfter.scrollTop = subScrollBefore;
+      }
+      if (window.scrollX !== winScrollXBefore || window.scrollY !== winScrollYBefore) {
+        window.scrollTo(winScrollXBefore, winScrollYBefore);
+      }
+      return true;
+    };
+
+    const tryDetailStep = (detail: HTMLElement): { status: "done" | "retry"; feedback?: { label: string; tone: "ok" | "err" } } => {
+      const inputSections = detail.querySelectorAll('[class*="maxActionCountInput"]');
+      const mainInput = inputSections[0]?.querySelector<HTMLInputElement>('input[class*="Input_input"]') || null;
+      const addQueueBtn = findButtonByTextRe(detail, ADD_TO_QUEUE_BTN_RE);
+      const upgradeQueueBtn = findButtonByTextRe(detail, UPGRADE_QUEUE_BTN_RE);
+      const startOnlyBtn = findButtonByTextRe(detail, START_ONLY_BTN_RE);
+
+      if (!mainInput && !addQueueBtn && !upgradeQueueBtn && !startOnlyBtn) {
+        // Alchemy/Enhancing without pre-selected item mounts selector & instructions immediately without action buttons
+        if (detail.querySelector(ACTION_DETAIL_MOUNTED_SEL)) {
+          return {
+            status: "done",
+            feedback: { label: ctx!.i18n.t("无法入队", "Cannot Queue"), tone: "err" },
+          };
+        }
+        return { status: "retry" };
+      }
+
+      if (upgradeQueueBtn && !addQueueBtn) {
+        return {
+          status: "done",
+          feedback: { label: ctx!.i18n.t("队列已满", "Queue Full"), tone: "err" },
+        };
+      }
+
+      const autoMinusOne = ctx!.isFeatureEnabled(TASK_AUTO_N1_MODULE_ID);
+      if (autoMinusOne && mainInput) {
+        const baseCount = parseActionCount(mainInput.value);
+        const targetCount = computeQuickQueueCount(baseCount, true);
+        if (targetCount !== null && baseCount !== null && targetCount !== baseCount) {
+          setReactInputValue(mainInput, targetCount, false);
+        }
+      }
+
+      const latestAddQueueBtn = findButtonByTextRe(detail, ADD_TO_QUEUE_BTN_RE);
+      if (latestAddQueueBtn) {
+        if (latestAddQueueBtn.disabled || latestAddQueueBtn.className.includes("Button_disabled")) {
+          return {
+            status: "done",
+            feedback: { label: ctx!.i18n.t("无法入队", "Cannot Queue"), tone: "err" },
+          };
+        }
+        triggerButtonActionSafe(latestAddQueueBtn, clickStartTs);
+        return {
+          status: "done",
+          feedback: { label: ctx!.i18n.t("✓ 已入队", "✓ Queued"), tone: "ok" },
+        };
+      }
+
+      // Only click "Start" if character truly has 0 active/queued actions (never click "Start Now"!)
+      const detailCount = getDetailActionCount(detail);
+      const isEmptyQueue =
+        detailCount !== null ? detailCount === 0 : ctx!.gameData.getCharacterActions().length === 0;
+      let latestStartBtn = isEmptyQueue ? findButtonByTextRe(detail, START_ONLY_BTN_RE) : null;
+      if (!latestStartBtn && isEmptyQueue && detail.querySelector('[class*="enhancingComponent"], [class*="alchemyComponent"]')) {
+        // When queue is empty, Alchemy/Enhancing primary button displays the action name instead of "Start"
+        const successBtn = detail.querySelector<HTMLButtonElement>('[class*="buttonsContainer"] button[class*="Button_success"]');
+        if (successBtn && !STOP_BTN_RE.test((successBtn.textContent || "").trim())) {
+          latestStartBtn = successBtn;
+        }
+      }
+      if (latestStartBtn) {
+        if (latestStartBtn.disabled || latestStartBtn.className.includes("Button_disabled")) {
+          return {
+            status: "done",
+            feedback: { label: ctx!.i18n.t("无法开始", "Cannot Start"), tone: "err" },
+          };
+        }
+        triggerButtonActionSafe(latestStartBtn, clickStartTs);
+        return {
+          status: "done",
+          feedback: { label: ctx!.i18n.t("✓ 已开始", "✓ Started"), tone: "ok" },
+        };
+      }
+
+      return {
+        status: "done",
+        feedback: { label: ctx!.i18n.t("无法入队", "Cannot Queue"), tone: "err" },
+      };
+    };
+
+    // Step 1: trigger native [前往]
+    goBtn.click();
+
+    // Step 2: fast synchronous path (React legacy mode completes inside this call stack with 0 paint frames)
+    const syncDetail = findRealGameElement<HTMLElement>(document, SKILL_DETAIL_SEL);
+    let pendingFeedback: { label: string; tone: "ok" | "err" } | undefined;
+    let detailHandled = false;
+    let backNavDispatchedTs = 0;
+
+    if (syncDetail) {
+      const step = tryDetailStep(syncDetail);
+      if (step.status === "done") {
+        detailHandled = true;
+        pendingFeedback = step.feedback;
+        backNavDispatchedTs = Date.now();
+        navigateBackToTasks();
+        if (finalizeOnTasks(pendingFeedback)) {
+          return;
+        }
+      }
+    }
+
+    // Step 3: async fallback path (mount visual freeze overlay before browser paints intermediate screen)
+    freeze.mount();
+    let pollTimerId: number | null = null;
+    let guardTimerId: number | null = null;
+    let restoreTimerId: number | null = null;
+    let finished = false;
+
+    const cleanupAsync = (restoreFailFeedback?: { label: string; tone: "ok" | "err" }) => {
+      if (finished) return;
+      finished = true;
+      if (pollTimerId !== null) clearTimeout(pollTimerId);
+      if (guardTimerId !== null) clearTimeout(guardTimerId);
+      if (restoreTimerId !== null) clearTimeout(restoreTimerId);
+      const finalFeedback = restoreFailFeedback ?? pendingFeedback;
+      if (!findRealGameElement(document, TASK_LIST_SEL)) {
+        navigateBackToTasks();
+      }
+      if (finalizeOnTasks(finalFeedback)) {
+        quickQueueAsyncCleanup = null;
+        freeze.remove();
+        return;
+      }
+      // If TasksPanel renders asynchronously after return navigation, preserve feedback & wait briefly before unmounting overlay
+      isQuickQueueing = false;
+      if (finalFeedback) {
+        setQueueFeedback(taskKey, finalFeedback.label, finalFeedback.tone);
+      }
+      const restoreStart = Date.now();
+      const waitRestore = () => {
+        if (destroyed) {
+          quickQueueAsyncCleanup = null;
+          freeze.remove();
+          return;
+        }
+        if (finalizeOnTasks(finalFeedback) || Date.now() - restoreStart >= 300) {
+          quickQueueAsyncCleanup = null;
+          freeze.remove();
+          return;
+        }
+        restoreTimerId = window.setTimeout(waitRestore, 16);
+      };
+      restoreTimerId = window.setTimeout(waitRestore, 16);
+    };
+
+    quickQueueAsyncCleanup = () => {
+      if (finished) return;
+      finished = true;
+      if (pollTimerId !== null) clearTimeout(pollTimerId);
+      if (guardTimerId !== null) clearTimeout(guardTimerId);
+      if (restoreTimerId !== null) clearTimeout(restoreTimerId);
+      quickQueueAsyncCleanup = null;
+      freeze.remove();
+      isQuickQueueing = false;
+    };
+
+    const tick = () => {
+      if (finished || destroyed) {
+        cleanupAsync();
+        return;
+      }
+
+      if (!detailHandled) {
+        const detail = findRealGameElement<HTMLElement>(document, SKILL_DETAIL_SEL);
+        if (detail) {
+          const step = tryDetailStep(detail);
+          if (step.status === "done") {
+            detailHandled = true;
+            pendingFeedback = step.feedback;
+            backNavDispatchedTs = Date.now();
+            navigateBackToTasks();
+          }
+        }
+      } else if (!findRealGameElement(document, TASK_LIST_SEL) && Date.now() - backNavDispatchedTs >= 250) {
+        backNavDispatchedTs = Date.now();
+        navigateBackToTasks();
+      }
+
+      if (detailHandled && finalizeOnTasks(pendingFeedback)) {
+        finished = true;
+        if (guardTimerId !== null) clearTimeout(guardTimerId);
+        quickQueueAsyncCleanup = null;
+        freeze.remove();
+        return;
+      }
+
+      if (Date.now() - clickStartTs >= QUICK_QUEUE_ASYNC_TIMEOUT_MS) {
+        cleanupAsync(
+          detailHandled
+            ? pendingFeedback
+            : { label: ctx!.i18n.t("操作超时", "Timeout"), tone: "err" }
+        );
+        return;
+      }
+
+      pollTimerId = window.setTimeout(tick, 16);
+    };
+
+    guardTimerId = window.setTimeout(() => {
+      cleanupAsync(
+        detailHandled
+          ? pendingFeedback
+          : { label: ctx!.i18n.t("操作超时", "Timeout"), tone: "err" }
+      );
+    }, QUICK_QUEUE_ASYNC_TIMEOUT_MS + 40);
+    timers.push(guardTimerId);
+    pollTimerId = window.setTimeout(tick, 16);
+  };
+
+  const syncDom = (route: string, forceSort = false) => {
+    injectTaskMinusOneButton();
+    if (route !== "tasks" && !findRealGameElement(document, TASK_LIST_SEL)) return;
+
+    const taskList = findRealGameElement(document, TASK_LIST_SEL);
     if (!taskList) return;
 
     injectToolbar();
@@ -1016,15 +1611,16 @@ export function createTaskBoardModule(): FeatureModule {
 
     renderTaskIcons(cards);
     renderTaskStockBadges(cards);
-    sortTaskCards(false);
+    sortTaskCards(forceSort);
+    renderTaskQueueButtons(cards);
   };
 
   return {
     id: "planner-task-board",
-    nameZh: "任务图标、排序与跳转 N-1",
-    nameEn: "Task Icons, Sorter & (N-1)",
-    descriptionZh: "显示任务图标与自动排序，并在任务跳转后的行动弹窗提供快捷 (N-1) 次数按钮",
-    descriptionEn: "Task icons, smart sorter, and (N-1) action count helper on task navigation",
+    nameZh: "任务图标、排序与快速入队",
+    nameEn: "Task Icons, Sorter & Quick-Queue",
+    descriptionZh: "显示任务图标、库存与自动排序，在「前往」旁提供静默「添加到队列」按钮并在行动弹窗提供 (N-1) 按钮",
+    descriptionEn: "Task icons, stock badges, sorter, silent Quick-Queue beside Go, and (N-1) action helper",
     category: "planner",
     defaultEnabled: true,
 
@@ -1167,6 +1763,49 @@ export function createTaskBoardModule(): FeatureModule {
           opacity: 0.5;
           cursor: not-allowed;
         }
+        [class*="RandomTask_buttonsContainer"]:has(.${TASK_QUEUE_BTN_CLASS}) {
+          flex-wrap: wrap !important;
+          gap: 4px 6px !important;
+        }
+        [class*="RandomTask_buttonsContainer"]:has(.${TASK_QUEUE_BTN_CLASS}) > [class*="RandomTask_buttonGroup"] {
+          margin-right: auto !important;
+        }
+        .${TASK_QUEUE_BTN_CLASS} {
+          padding: 0 10px !important;
+          border-radius: 0 !important;
+          font-size: 12px !important;
+          font-weight: 700 !important;
+          font-family: var(--mwi-px-mono, monospace) !important;
+          background: var(--mwi-px-btn-bg, linear-gradient(180deg, #324a8f 0%, #22356b 100%)) !important;
+          color: #f8fafc !important;
+          border: 1px solid var(--mwi-px-border, #8eb1ff) !important;
+          box-shadow: var(--mwi-px-shadow-btn, 0 0 0 1px #080d1a) !important;
+          white-space: nowrap !important;
+          cursor: pointer;
+        }
+        @media (max-width: 767px) {
+          .${TASK_QUEUE_BTN_CLASS} {
+            padding: 0 7px !important;
+            font-size: 10px !important;
+          }
+        }
+        .${TASK_QUEUE_BTN_CLASS}:hover:not(:disabled) {
+          background: var(--mwi-px-btn-hover, linear-gradient(180deg, #405eb3 0%, #2b4385 100%)) !important;
+        }
+        .${TASK_QUEUE_BTN_CLASS}[data-state="ok"] {
+          border-color: var(--mwi-px-green-soft, #86efac) !important;
+          background: var(--mwi-px-btn-green, linear-gradient(180deg, #1f6d43 0%, #165132 100%)) !important;
+          color: #dcfce7 !important;
+        }
+        .${TASK_QUEUE_BTN_CLASS}[data-state="err"] {
+          border-color: #fca5a5 !important;
+          background: linear-gradient(180deg, #7f1d1d 0%, #581313 100%) !important;
+          color: #fee2e2 !important;
+        }
+        .${TASK_QUEUE_BTN_CLASS}:disabled {
+          opacity: 0.55;
+          cursor: not-allowed !important;
+        }
         `
       );
 
@@ -1186,10 +1825,15 @@ export function createTaskBoardModule(): FeatureModule {
       return () => {
         destroyed = true;
         isClaimingAll = false;
+        isQuickQueueing = false;
+        manualSortedActive = false;
         claimingStatusText = "";
         cooldownWaitStartTs = 0;
         activeSettleCleanup?.();
         activeSettleCleanup = null;
+        quickQueueAsyncCleanup?.();
+        quickQueueAsyncCleanup = null;
+        queueFeedbackMap.clear();
         if (cooldownSyncTimer !== null) {
           clearTimeout(cooldownSyncTimer);
           cooldownSyncTimer = null;
@@ -1206,7 +1850,9 @@ export function createTaskBoardModule(): FeatureModule {
         timers = [];
         lastTaskListRef = null;
         document
-          .querySelectorAll(`.mwi-lite-task-toolbar, .mwi-lite-task-icon, .mwi-lite-task-stock-group, .mwi-lite-task-stock, #${TASK_N1_ID}`)
+          .querySelectorAll(
+            `.mwi-lite-task-toolbar, .mwi-lite-task-icon, .mwi-lite-task-stock-group, .mwi-lite-task-stock, .${TASK_QUEUE_BTN_CLASS}, #${TASK_N1_ID}, #${FREEZE_OVERLAY_ID}`
+          )
           .forEach((el) => el.remove());
         document.querySelectorAll("[data-mwi-task-icon]").forEach((el) => el.removeAttribute("data-mwi-task-icon"));
         document.querySelectorAll("[data-mwi-task-stock]").forEach((el) => el.removeAttribute("data-mwi-task-stock"));
@@ -1215,6 +1861,22 @@ export function createTaskBoardModule(): FeatureModule {
 
     onDom(_doc, route) {
       syncDom(route);
+    },
+  };
+}
+
+export function createTaskAutoMinusOneModule(): FeatureModule {
+  return {
+    id: TASK_AUTO_N1_MODULE_ID,
+    nameZh: "任务一键入队自动 (N-1)",
+    nameEn: "Task Quick-Queue: Auto (N-1)",
+    descriptionZh: "点击任务界面「添加到队列」时自动将次数减 1（N≤1 时保持不变，默认关闭）",
+    descriptionEn: "Automatically apply (N-1) count when using Quick-Queue on task cards (keeps 1 if N≤1)",
+    category: "planner",
+    defaultEnabled: false,
+
+    init() {
+      // Setting-only toggle consumed by planner-task-board
     },
   };
 }
