@@ -210,7 +210,6 @@ function resolveActionOutputHrids(actionHrid: string, clientData: any): string[]
   if (outputs.length === 0 && Array.isArray(action.dropTable)) {
     for (const drop of action.dropTable) {
       pushUnique(drop?.itemHrid);
-      if (outputs.length >= 2) break;
     }
   }
   if (outputs.length === 0) {
@@ -495,7 +494,7 @@ export function createTaskBoardModule(): FeatureModule {
     for (const card of cards) {
       const parsed = parseCard(card);
       if (!parsed || parsed.isCombat) {
-        card.querySelector(".mwi-lite-task-stock")?.remove();
+        card.querySelector(".mwi-lite-task-stock-group, .mwi-lite-task-stock")?.remove();
         card.removeAttribute("data-mwi-task-stock");
         continue;
       }
@@ -503,7 +502,7 @@ export function createTaskBoardModule(): FeatureModule {
       const actionHrid = resolveActionHridByTarget(parsed.taskTarget, clientData);
       const outputHrids = actionHrid ? resolveActionOutputHrids(actionHrid, clientData) : [];
       if (!outputHrids.length) {
-        card.querySelector(".mwi-lite-task-stock")?.remove();
+        card.querySelector(".mwi-lite-task-stock-group, .mwi-lite-task-stock")?.remove();
         card.removeAttribute("data-mwi-task-stock");
         continue;
       }
@@ -517,36 +516,39 @@ export function createTaskBoardModule(): FeatureModule {
       const entries = outputHrids.map((hrid) => {
         const count = invCounts.get(hrid) || 0;
         const itemName = ctx!.i18n.getItemName(hrid);
-        return { hrid, itemName, count };
+        const text =
+          outputHrids.length === 1 && itemName.trim().toLowerCase() === targetLower
+            ? `${ctx!.i18n.t("库存", "Stock")} ${formatActionCount(count)}`
+            : `${itemName} ${formatActionCount(count)}`;
+        const title = `${ctx!.i18n.t("仓库库存", "Inventory stock")}: ${itemName} ${count.toLocaleString()}`;
+        return { hrid, itemName, count, text, title };
       });
 
-      const allZero = entries.every((e) => e.count === 0);
-      let badgeText = "";
-      if (entries.length === 1 && entries[0].itemName.trim().toLowerCase() === targetLower) {
-        badgeText = `${ctx.i18n.t("库存", "Stock")} ${formatActionCount(entries[0].count)}`;
-      } else {
-        badgeText = entries.map((e) => `${e.itemName} ${formatActionCount(e.count)}`).join(" · ");
-      }
-      const titleText = `${ctx.i18n.t("仓库库存", "Inventory stock")}: ${entries
-        .map((e) => `${e.itemName} ${e.count.toLocaleString()}`)
-        .join(" / ")}`;
-      const sig = `${parsed.fullText}|${badgeText}|${titleText}`;
-      const existingBadge = card.querySelector<HTMLElement>(".mwi-lite-task-stock");
-      if (existingBadge && card.getAttribute("data-mwi-task-stock") === sig) {
+      const sig = `${parsed.fullText}|${entries.map((e) => `${e.hrid}:${e.count}:${e.text}`).join(";")}`;
+      const existingGroup = card.querySelector<HTMLElement>(".mwi-lite-task-stock-group");
+      if (existingGroup && card.getAttribute("data-mwi-task-stock") === sig) {
         continue;
       }
 
       const host = card.querySelector(TASK_ACTION_SEL) || parsed.nameEl.parentElement;
       if (!host) continue;
 
-      const badge = existingBadge || document.createElement("span");
-      badge.className = "mwi-lite-task-stock";
-      badge.setAttribute("data-mwi-lite", "1");
-      badge.dataset.level = allZero ? "zero" : "ok";
-      badge.textContent = badgeText;
-      badge.title = titleText;
-      if (!existingBadge) {
-        host.appendChild(badge);
+      const group = existingGroup || document.createElement("span");
+      group.className = "mwi-lite-task-stock-group";
+      group.setAttribute("data-mwi-lite", "1");
+      group.replaceChildren(
+        ...entries.map((e) => {
+          const badge = document.createElement("span");
+          badge.className = "mwi-lite-task-stock";
+          badge.setAttribute("data-mwi-lite", "1");
+          badge.dataset.level = e.count === 0 ? "zero" : "ok";
+          badge.textContent = e.text;
+          badge.title = e.title;
+          return badge;
+        })
+      );
+      if (!existingGroup) {
+        host.appendChild(group);
       }
       card.setAttribute("data-mwi-task-stock", sig);
     }
@@ -1109,6 +1111,15 @@ export function createTaskBoardModule(): FeatureModule {
           flex-wrap: wrap !important;
           gap: 4px 8px !important;
         }
+        .mwi-lite-task-stock-group {
+          display: inline-flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 4px;
+          max-width: 100%;
+          margin-left: auto;
+        }
         .mwi-lite-task-stock {
           display: inline-flex;
           align-items: center;
@@ -1125,8 +1136,6 @@ export function createTaskBoardModule(): FeatureModule {
           box-shadow: 0 0 0 1px #070b16;
           color: var(--mwi-px-accent, #93c5fd);
           white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
           flex-shrink: 0;
         }
         .mwi-lite-task-stock[data-level="zero"] {
@@ -1197,7 +1206,7 @@ export function createTaskBoardModule(): FeatureModule {
         timers = [];
         lastTaskListRef = null;
         document
-          .querySelectorAll(`.mwi-lite-task-toolbar, .mwi-lite-task-icon, .mwi-lite-task-stock, #${TASK_N1_ID}`)
+          .querySelectorAll(`.mwi-lite-task-toolbar, .mwi-lite-task-icon, .mwi-lite-task-stock-group, .mwi-lite-task-stock, #${TASK_N1_ID}`)
           .forEach((el) => el.remove());
         document.querySelectorAll("[data-mwi-task-icon]").forEach((el) => el.removeAttribute("data-mwi-task-icon"));
         document.querySelectorAll("[data-mwi-task-stock]").forEach((el) => el.removeAttribute("data-mwi-task-stock"));
