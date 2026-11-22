@@ -19,8 +19,8 @@ const banner = `// ==UserScript==
 // @name:zh-CN   MWI · Hugunn
 // @namespace    https://milkywayidle.com/mwi-hugunn
 // @version      1.1.0
-// @description  MWI · Hugunn — Lightweight high-performance userscript for Milky Way Idle: market shortcuts & quick ops, volume & magic sort, item planner, queue next, lazy Monte-Carlo labyrinth calculator & light combat stats.
-// @description:zh-CN MWI · Hugunn — 高性能轻量 MWI 聚合增强插件：市场快捷导航与强化档位跳转、挂单魔法排序、交易量均价、市场快捷操作、悬浮窗估价/净资产、完成倒计时、队列设为下一步、物品规划计算器、按需蒙特卡洛迷宫胜率与轻量战斗统计。
+// @description  Fast! Lightweight! One script is all you need—come fight me if it's not awesome! 15-in-1 MWI suite (market, planner, labyrinth & combat), zero deps & 100% read-only.
+// @description:zh-CN 快速！轻量！一个就够！不好用你来打我！15合1银河奶牛聚合增强插件（市场/规划/迷宫/战斗），零依赖、纯只读、16-bit星光像素风。
 // @author       xhy
 // @license      MIT
 // @homepageURL  https://github.com/xiahuaaaa/mwi-hugunn
