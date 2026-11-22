@@ -22918,19 +22918,18 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
           if (timeoutId !== null) clearTimeout(timeoutId);
           resolve();
         };
-        unsubWs = ctx?.wsBus.on("quests_updated", () => {
-          const t = window.setTimeout(() => {
-            if (destroyed || !isClaimingAll || !card.isConnected || !findClaimButton(card)) {
-              finish();
-            }
-          }, 40);
-          timers.push(t);
-        }) ?? null;
-        pollId = window.setInterval(() => {
+        const checkCleared = () => {
           if (destroyed || !isClaimingAll || !card.isConnected || !findClaimButton(card)) {
             finish();
+            return true;
           }
-        }, 60);
+          return false;
+        };
+        pollId = window.setInterval(checkCleared, 25);
+        unsubWs = ctx?.wsBus.on("quests_updated", () => {
+          const t = window.setTimeout(checkCleared, 16);
+          timers.push(t);
+        }) ?? null;
         timeoutId = window.setTimeout(finish, timeoutMs);
         timers.push(timeoutId);
       });
@@ -22973,7 +22972,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
           if (!targetCard || !targetBtn) {
             if (!hasPendingCooldownCard) break;
             await new Promise((resolve) => {
-              const t = window.setTimeout(resolve, 200);
+              const t = window.setTimeout(resolve, 90);
               timers.push(t);
             });
             continue;
@@ -22990,25 +22989,37 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
               `Claiming (${progressDone}/${total})`
             );
           }
-          const waitConfirm = waitForNextClaimEvent(targetCard, 1800);
+          const clickTs = Date.now();
+          const waitConfirm = waitForNextClaimEvent(targetCard, 1100);
           targetBtn.click();
           await waitConfirm;
           if (!targetCard.isConnected || !findClaimButton(targetCard)) {
             claimed++;
           }
+          const remainingCards = getTaskCards();
+          const hasMore = remainingCards.some(
+            (c) => (attempts.get(c) || 0) < 2 && Boolean(findClaimButton(c))
+          );
+          if (!hasMore) {
+            const hasCooling = remainingCards.some((c) => {
+              if ((attempts.get(c) || 0) >= 2) return false;
+              return Array.from(c.querySelectorAll("button")).some(
+                (rb) => CLAIM_REWARD_BTN_RE.test(rb.textContent || "")
+              );
+            });
+            if (!hasCooling) break;
+          }
+          const restMs = Math.max(24, 180 - (Date.now() - clickTs));
           await new Promise((resolve) => {
-            const t = window.setTimeout(resolve, 280);
+            const t = window.setTimeout(resolve, restMs);
             timers.push(t);
           });
         }
       } finally {
         isClaimingAll = false;
-        claimingFreezeUntil = Date.now() + 220;
+        claimingFreezeUntil = 0;
         syncClaimAllButton();
-        const t = window.setTimeout(() => {
-          if (!destroyed) ctx?.domScheduler.scheduleRun(false);
-        }, 240);
-        timers.push(t);
+        sortTaskCards(false);
       }
     };
     const injectToolbar = () => {
@@ -23188,6 +23199,9 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         .mwi-lite-task-auto[data-active="0"] {
           background: linear-gradient(180deg, #27324a 0%, #1a2235 100%) !important;
           border-color: #64748b !important;
+        }
+        .mwi-lite-task-claim-all {
+          font-variant-numeric: tabular-nums !important;
         }
         .mwi-lite-task-claim-all[data-ready="1"] {
           border-color: var(--mwi-px-gold, #fde047) !important;

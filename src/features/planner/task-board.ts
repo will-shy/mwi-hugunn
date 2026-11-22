@@ -518,21 +518,21 @@ export function createTaskBoardModule(): FeatureModule {
         resolve();
       };
 
-      // Wake up right after React commits quests_updated that actually cleared this card
-      unsubWs = ctx?.wsBus.on("quests_updated", () => {
-        const t = window.setTimeout(() => {
-          if (destroyed || !isClaimingAll || !card.isConnected || !findClaimButton(card)) {
-            finish();
-          }
-        }, 40);
-        timers.push(t);
-      }) ?? null;
-
-      pollId = window.setInterval(() => {
+      const checkCleared = () => {
         if (destroyed || !isClaimingAll || !card.isConnected || !findClaimButton(card)) {
           finish();
+          return true;
         }
-      }, 60);
+        return false;
+      };
+
+      // Use timer polling + WS wakeup rather than rAF so occluded/unfocused windows never throttle to 1000ms
+      pollId = window.setInterval(checkCleared, 25);
+
+      unsubWs = ctx?.wsBus.on("quests_updated", () => {
+        const t = window.setTimeout(checkCleared, 16);
+        timers.push(t);
+      }) ?? null;
 
       timeoutId = window.setTimeout(finish, timeoutMs);
       timers.push(timeoutId);
@@ -570,7 +570,6 @@ export function createTaskBoardModule(): FeatureModule {
             targetBtn = btn;
             break;
           }
-          // Detect card still in 600ms button cooldown if it still shows a claim button
           const rawBtns = c.querySelectorAll<HTMLButtonElement>("button");
           for (const rb of rawBtns) {
             if (CLAIM_REWARD_BTN_RE.test(rb.textContent || "")) {
@@ -583,7 +582,7 @@ export function createTaskBoardModule(): FeatureModule {
         if (!targetCard || !targetBtn) {
           if (!hasPendingCooldownCard) break;
           await new Promise<void>((resolve) => {
-            const t = window.setTimeout(resolve, 200);
+            const t = window.setTimeout(resolve, 90);
             timers.push(t);
           });
           continue;
@@ -603,7 +602,8 @@ export function createTaskBoardModule(): FeatureModule {
           );
         }
 
-        const waitConfirm = waitForNextClaimEvent(targetCard, 1800);
+        const clickTs = Date.now();
+        const waitConfirm = waitForNextClaimEvent(targetCard, 1100);
         targetBtn.click();
         await waitConfirm;
 
@@ -611,20 +611,33 @@ export function createTaskBoardModule(): FeatureModule {
           claimed++;
         }
 
-        // Polite serial delay between claim requests so server never rate-limits concurrent claims
+        // Skip trailing gap if no claimable tasks remain
+        const remainingCards = getTaskCards();
+        const hasMore = remainingCards.some(
+          (c) => (attempts.get(c) || 0) < 2 && Boolean(findClaimButton(c))
+        );
+        if (!hasMore) {
+          const hasCooling = remainingCards.some((c) => {
+            if ((attempts.get(c) || 0) >= 2) return false;
+            return Array.from(c.querySelectorAll("button")).some((rb) =>
+              CLAIM_REWARD_BTN_RE.test(rb.textContent || "")
+            );
+          });
+          if (!hasCooling) break;
+        }
+
+        // Keep at least 180ms total spacing per claim without wasting 280ms dead wait after ack
+        const restMs = Math.max(24, 180 - (Date.now() - clickTs));
         await new Promise<void>((resolve) => {
-          const t = window.setTimeout(resolve, 280);
+          const t = window.setTimeout(resolve, restMs);
           timers.push(t);
         });
       }
     } finally {
       isClaimingAll = false;
-      claimingFreezeUntil = Date.now() + 220;
+      claimingFreezeUntil = 0;
       syncClaimAllButton();
-      const t = window.setTimeout(() => {
-        if (!destroyed) ctx?.domScheduler.scheduleRun(false);
-      }, 240);
-      timers.push(t);
+      sortTaskCards(false);
     }
   };
 
@@ -834,6 +847,9 @@ export function createTaskBoardModule(): FeatureModule {
         .mwi-lite-task-auto[data-active="0"] {
           background: linear-gradient(180deg, #27324a 0%, #1a2235 100%) !important;
           border-color: #64748b !important;
+        }
+        .mwi-lite-task-claim-all {
+          font-variant-numeric: tabular-nums !important;
         }
         .mwi-lite-task-claim-all[data-ready="1"] {
           border-color: var(--mwi-px-gold, #fde047) !important;
