@@ -22478,17 +22478,27 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
   var TASK_SORT_PREF_KEY = "task_board_sort_pref_v1";
   var TASK_LIST_SEL = '[class*="TasksPanel_taskList"]';
   var TASK_CARD_SEL = '[class*="RandomTask_randomTask"]';
+  var TASK_ACTION_SEL = '[class*="RandomTask_action"]';
   var TASK_NAME_SEL = '[class*="RandomTask_name"]';
   var SLOT_COUNT_SEL = '[class*="TasksPanel_taskSlotCount"]';
   var TASK_N1_ID = "mwi-lite-task-n1";
   var CLAIM_REWARD_BTN_RE = /领取奖励|Claim\s*Reward/i;
-  function findClaimButton(card) {
+  var MAX_CLAIM_BATCH = 10;
+  var SYNC_CLICK_BUDGET_MS = 70;
+  function findAnyClaimButton(card) {
     const btns = card.querySelectorAll("button");
     for (const btn of btns) {
-      if (btn.disabled || btn.className.includes("Button_disabled")) continue;
+      if (btn.disabled) continue;
       if (CLAIM_REWARD_BTN_RE.test(btn.textContent || "")) return btn;
     }
     return null;
+  }
+  function isClaimButtonReady(btn) {
+    return !btn.disabled && !btn.className.includes("Button_disabled");
+  }
+  function findReadyClaimButton(card) {
+    const btn = findAnyClaimButton(card);
+    return btn && isClaimButtonReady(btn) ? btn : null;
   }
   function parseActionCount(raw) {
     if (raw == null) return null;
@@ -22620,15 +22630,55 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     }
     return orderMap;
   }
+  function resolveActionOutputHrids(actionHrid, clientData) {
+    const action = clientData?.actionDetailMap?.[actionHrid];
+    if (!action || action.type === "/action_types/combat") return [];
+    const itemMap = clientData?.itemDetailMap || {};
+    const outputs = [];
+    const pushUnique = (hrid) => {
+      if (typeof hrid === "string" && itemMap[hrid] && !outputs.includes(hrid)) {
+        outputs.push(hrid);
+      }
+    };
+    if (Array.isArray(action.outputItems)) {
+      for (const out of action.outputItems) {
+        pushUnique(out?.itemHrid);
+      }
+    }
+    if (outputs.length === 0 && Array.isArray(action.dropTable)) {
+      for (const drop of action.dropTable) {
+        pushUnique(drop?.itemHrid);
+        if (outputs.length >= 2) break;
+      }
+    }
+    if (outputs.length === 0) {
+      const actionKey = actionHrid.split("/").pop() || "";
+      if (actionKey) pushUnique(`/items/${actionKey}`);
+    }
+    return outputs;
+  }
+  function buildInventoryCountMap2(context) {
+    const counts = /* @__PURE__ */ new Map();
+    for (const item of context.gameData.getCharacterItems()) {
+      if (!item?.itemHrid || !item.count || item.count <= 0) continue;
+      if (item.itemLocationHrid && item.itemLocationHrid !== "/item_locations/inventory") continue;
+      counts.set(item.itemHrid, (counts.get(item.itemHrid) || 0) + item.count);
+    }
+    return counts;
+  }
   function createTaskBoardModule() {
     let ctx = null;
     let unregStyle = null;
     let unregQuests = null;
+    let unregItems = null;
+    let unregInit = null;
     let sortMode = "skill";
     let autoSort = true;
     let lastPointerDownTs = 0;
     let lastTaskListRef = null;
     let timers = [];
+    let cooldownSyncTimer = null;
+    let activeSettleCleanup = null;
     let isClaimingAll = false;
     let claimingFreezeUntil = 0;
     let destroyed = false;
@@ -22735,7 +22785,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       const skillType = match[1].trim();
       const taskTarget = match[2].trim();
       const isCombat = skillType === "Defeat" || skillType === "击败";
-      const isCompleted = Boolean(findClaimButton(card));
+      const isCompleted = Boolean(findAnyClaimButton(card));
       return { nameEl, fullText, skillType, taskTarget, isCombat, isCompleted };
     };
     const resolveIconForCard = (parsed) => {
@@ -22823,6 +22873,80 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         }
       }
     };
+    const resolveActionHridByTarget = (targetName, clientData) => {
+      const key = targetName.trim().toLowerCase();
+      if (!key) return null;
+      let actionHrid = actionNameToHrid?.get(key) || null;
+      if (actionHrid || !ctx) return actionHrid;
+      const actionMap = clientData?.actionDetailMap || {};
+      for (const hrid of Object.keys(actionMap)) {
+        const localized = ctx.i18n.getActionName(hrid).trim().toLowerCase();
+        if (localized && localized === key) {
+          actionHrid = hrid;
+          actionNameToHrid?.set(localized, hrid);
+          break;
+        }
+      }
+      return actionHrid;
+    };
+    const renderTaskStockBadges = (cards) => {
+      if (!ctx) return;
+      ensureLookupMaps();
+      const clientData = ctx.gameData.getClientData();
+      if (!clientData) return;
+      const invCounts = buildInventoryCountMap2(ctx);
+      const targetLowerCache = /* @__PURE__ */ new Map();
+      for (const card of cards) {
+        const parsed = parseCard(card);
+        if (!parsed || parsed.isCombat) {
+          card.querySelector(".mwi-lite-task-stock")?.remove();
+          card.removeAttribute("data-mwi-task-stock");
+          continue;
+        }
+        const actionHrid = resolveActionHridByTarget(parsed.taskTarget, clientData);
+        const outputHrids = actionHrid ? resolveActionOutputHrids(actionHrid, clientData) : [];
+        if (!outputHrids.length) {
+          card.querySelector(".mwi-lite-task-stock")?.remove();
+          card.removeAttribute("data-mwi-task-stock");
+          continue;
+        }
+        let targetLower = targetLowerCache.get(parsed.taskTarget);
+        if (targetLower === void 0) {
+          targetLower = parsed.taskTarget.trim().toLowerCase();
+          targetLowerCache.set(parsed.taskTarget, targetLower);
+        }
+        const entries = outputHrids.map((hrid) => {
+          const count = invCounts.get(hrid) || 0;
+          const itemName = ctx.i18n.getItemName(hrid);
+          return { hrid, itemName, count };
+        });
+        const allZero = entries.every((e) => e.count === 0);
+        let badgeText = "";
+        if (entries.length === 1 && entries[0].itemName.trim().toLowerCase() === targetLower) {
+          badgeText = `${ctx.i18n.t("库存", "Stock")} ${formatActionCount(entries[0].count)}`;
+        } else {
+          badgeText = entries.map((e) => `${e.itemName} ${formatActionCount(e.count)}`).join(" · ");
+        }
+        const titleText = `${ctx.i18n.t("仓库库存", "Inventory stock")}: ${entries.map((e) => `${e.itemName} ${e.count.toLocaleString()}`).join(" / ")}`;
+        const sig = `${parsed.fullText}|${badgeText}|${titleText}`;
+        const existingBadge = card.querySelector(".mwi-lite-task-stock");
+        if (existingBadge && card.getAttribute("data-mwi-task-stock") === sig) {
+          continue;
+        }
+        const host = card.querySelector(TASK_ACTION_SEL) || parsed.nameEl.parentElement;
+        if (!host) continue;
+        const badge = existingBadge || document.createElement("span");
+        badge.className = "mwi-lite-task-stock";
+        badge.setAttribute("data-mwi-lite", "1");
+        badge.dataset.level = allZero ? "zero" : "ok";
+        badge.textContent = badgeText;
+        badge.title = titleText;
+        if (!existingBadge) {
+          host.appendChild(badge);
+        }
+        card.setAttribute("data-mwi-task-stock", sig);
+      }
+    };
     const sortTaskCards = (force = false) => {
       if (!ctx) return;
       if (!force && !autoSort) return;
@@ -22883,29 +23007,65 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       if (!taskList) return [];
       return Array.from(taskList.children).filter((el) => el.matches(TASK_CARD_SEL));
     };
+    const scheduleCooldownResync = () => {
+      if (cooldownSyncTimer !== null || destroyed) return;
+      cooldownSyncTimer = window.setTimeout(() => {
+        cooldownSyncTimer = null;
+        if (!destroyed && !isClaimingAll) {
+          syncClaimAllButton();
+        }
+      }, 200);
+    };
     const syncClaimAllButton = (cards) => {
       if (!ctx) return;
       const btn = document.querySelector(".mwi-lite-task-claim-all");
       if (!btn || isClaimingAll) return;
       const list = cards ?? getTaskCards();
-      let claimableCount = 0;
+      let readyCount = 0;
+      let pendingCount = 0;
       for (const c of list) {
-        if (findClaimButton(c)) claimableCount++;
+        const claimBtn = findAnyClaimButton(c);
+        if (!claimBtn) continue;
+        pendingCount++;
+        if (isClaimButtonReady(claimBtn)) readyCount++;
       }
-      btn.disabled = claimableCount === 0;
-      btn.dataset.ready = claimableCount > 0 ? "1" : "0";
-      btn.textContent = claimableCount > 0 ? ctx.i18n.t(`一键领取 (${claimableCount})`, `Claim All (${claimableCount})`) : ctx.i18n.t("一键领取", "Claim All");
+      if (readyCount > 0) {
+        if (cooldownSyncTimer !== null) {
+          clearTimeout(cooldownSyncTimer);
+          cooldownSyncTimer = null;
+        }
+        btn.disabled = false;
+        btn.dataset.ready = "1";
+        btn.textContent = ctx.i18n.t(`一键领取 (${readyCount})`, `Claim All (${readyCount})`);
+      } else if (pendingCount > 0) {
+        btn.disabled = true;
+        btn.dataset.ready = "0";
+        btn.textContent = ctx.i18n.t(`冷却中 (${pendingCount})`, `Cooldown (${pendingCount})`);
+        scheduleCooldownResync();
+      } else {
+        if (cooldownSyncTimer !== null) {
+          clearTimeout(cooldownSyncTimer);
+          cooldownSyncTimer = null;
+        }
+        btn.disabled = true;
+        btn.dataset.ready = "0";
+        btn.textContent = ctx.i18n.t("一键领取", "Claim All");
+      }
       btn.title = ctx.i18n.t(
-        "依次领取所有已完成任务的积分奖励",
+        "领取所有已完成任务的积分奖励",
         "Claim rewards from all completed tasks"
       );
     };
-    const waitForNextClaimEvent = (card, timeoutMs) => {
+    const waitForBatchSettlement = (dispatchedCards) => {
       return new Promise((resolve) => {
-        if (destroyed || !isClaimingAll || !card.isConnected || !findClaimButton(card)) {
+        const total = dispatchedCards.length;
+        if (destroyed || !isClaimingAll || total === 0) {
           resolve();
           return;
         }
+        const startTs = Date.now();
+        let lastProgressTs = startTs;
+        let lastSettledCount = -1;
         let settled = false;
         let unsubWs = null;
         let pollId = null;
@@ -22916,111 +23076,105 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
           unsubWs?.();
           if (pollId !== null) clearInterval(pollId);
           if (timeoutId !== null) clearTimeout(timeoutId);
+          activeSettleCleanup = null;
           resolve();
         };
-        const checkCleared = () => {
-          if (destroyed || !isClaimingAll || !card.isConnected || !findClaimButton(card)) {
+        activeSettleCleanup = finish;
+        const checkProgress = () => {
+          if (destroyed || !isClaimingAll) {
             finish();
-            return true;
+            return;
           }
-          return false;
+          let settledCount = 0;
+          for (const card of dispatchedCards) {
+            if (!card.isConnected || !findAnyClaimButton(card)) {
+              settledCount++;
+            }
+          }
+          if (settledCount !== lastSettledCount) {
+            lastSettledCount = settledCount;
+            lastProgressTs = Date.now();
+            const claimAllBtn = document.querySelector(".mwi-lite-task-claim-all");
+            if (claimAllBtn && claimAllBtn.isConnected) {
+              claimAllBtn.disabled = true;
+              const shown = Math.min(total, Math.max(1, settledCount));
+              claimAllBtn.textContent = ctx.i18n.t(
+                `领取中 (${shown}/${total})`,
+                `Claiming (${shown}/${total})`
+              );
+            }
+          }
+          if (settledCount >= total) {
+            finish();
+            return;
+          }
+          const now = Date.now();
+          if (now - startTs >= 750 && now - lastProgressTs >= 250) {
+            finish();
+          }
         };
-        pollId = window.setInterval(checkCleared, 25);
+        checkProgress();
+        pollId = window.setInterval(checkProgress, 25);
         unsubWs = ctx?.wsBus.on("quests_updated", () => {
-          const t = window.setTimeout(checkCleared, 16);
+          lastProgressTs = Date.now();
+          const t = window.setTimeout(checkProgress, 16);
           timers.push(t);
         }) ?? null;
-        timeoutId = window.setTimeout(finish, timeoutMs);
+        timeoutId = window.setTimeout(finish, 1800);
         timers.push(timeoutId);
       });
     };
-    const claimAllCompletedTasks = async () => {
+    const claimAllCompletedTasks = () => {
       if (!ctx || isClaimingAll || destroyed) return;
-      const initialCards = getTaskCards();
-      const total = initialCards.reduce((sum, c) => sum + (findClaimButton(c) ? 1 : 0), 0);
-      if (total === 0) {
-        syncClaimAllButton(initialCards);
+      const cards = getTaskCards();
+      const targets = [];
+      for (const c of cards) {
+        const btn = findReadyClaimButton(c);
+        if (btn) targets.push({ card: c, btn });
+      }
+      if (targets.length === 0) {
+        syncClaimAllButton(cards);
         return;
       }
+      const batch = targets.slice(0, MAX_CLAIM_BATCH);
       isClaimingAll = true;
-      const attempts = /* @__PURE__ */ new WeakMap();
-      let claimed = 0;
-      try {
-        for (let guard = 0; guard < total * 4 + 20; guard++) {
-          if (destroyed || !isClaimingAll) break;
-          const cards = getTaskCards();
-          let targetCard = null;
-          let targetBtn = null;
-          let hasPendingCooldownCard = false;
-          for (const c of cards) {
-            const cardAttempts = attempts.get(c) || 0;
-            if (cardAttempts >= 2) continue;
-            const btn = findClaimButton(c);
-            if (btn) {
-              targetCard = c;
-              targetBtn = btn;
-              break;
-            }
-            const rawBtns = c.querySelectorAll("button");
-            for (const rb of rawBtns) {
-              if (CLAIM_REWARD_BTN_RE.test(rb.textContent || "")) {
-                hasPendingCooldownCard = true;
-                break;
-              }
-            }
-          }
-          if (!targetCard || !targetBtn) {
-            if (!hasPendingCooldownCard) break;
-            await new Promise((resolve) => {
-              const t = window.setTimeout(resolve, 90);
-              timers.push(t);
-            });
-            continue;
-          }
-          const attemptNo = (attempts.get(targetCard) || 0) + 1;
-          attempts.set(targetCard, attemptNo);
-          claimingFreezeUntil = Date.now() + 2500;
-          const progressDone = Math.min(total, claimed + 1);
-          const claimAllBtn = document.querySelector(".mwi-lite-task-claim-all");
-          if (claimAllBtn && claimAllBtn.isConnected) {
-            claimAllBtn.disabled = true;
-            claimAllBtn.textContent = ctx.i18n.t(
-              `领取中 (${progressDone}/${total})`,
-              `Claiming (${progressDone}/${total})`
-            );
-          }
-          const clickTs = Date.now();
-          const waitConfirm = waitForNextClaimEvent(targetCard, 1100);
-          targetBtn.click();
-          await waitConfirm;
-          if (!targetCard.isConnected || !findClaimButton(targetCard)) {
-            claimed++;
-          }
-          const remainingCards = getTaskCards();
-          const hasMore = remainingCards.some(
-            (c) => (attempts.get(c) || 0) < 2 && Boolean(findClaimButton(c))
-          );
-          if (!hasMore) {
-            const hasCooling = remainingCards.some((c) => {
-              if ((attempts.get(c) || 0) >= 2) return false;
-              return Array.from(c.querySelectorAll("button")).some(
-                (rb) => CLAIM_REWARD_BTN_RE.test(rb.textContent || "")
-              );
-            });
-            if (!hasCooling) break;
-          }
-          const restMs = Math.max(24, 180 - (Date.now() - clickTs));
-          await new Promise((resolve) => {
-            const t = window.setTimeout(resolve, restMs);
-            timers.push(t);
-          });
+      claimingFreezeUntil = Date.now() + 2500;
+      if (cooldownSyncTimer !== null) {
+        clearTimeout(cooldownSyncTimer);
+        cooldownSyncTimer = null;
+      }
+      const clickWindowStart = Date.now();
+      const dispatchedCards = [];
+      for (let i = 0; i < batch.length; i++) {
+        if (i > 0 && Date.now() - clickWindowStart >= SYNC_CLICK_BUDGET_MS) break;
+        const { card, btn } = batch[i];
+        if (!card.isConnected || !isClaimButtonReady(btn)) continue;
+        try {
+          btn.click();
+          dispatchedCards.push(card);
+        } catch {
         }
-      } finally {
+      }
+      if (dispatchedCards.length === 0) {
+        isClaimingAll = false;
+        claimingFreezeUntil = 0;
+        syncClaimAllButton();
+        return;
+      }
+      const claimAllBtn = document.querySelector(".mwi-lite-task-claim-all");
+      if (claimAllBtn && claimAllBtn.isConnected) {
+        claimAllBtn.disabled = true;
+        claimAllBtn.textContent = ctx.i18n.t(
+          `领取中 (1/${dispatchedCards.length})`,
+          `Claiming (1/${dispatchedCards.length})`
+        );
+      }
+      void waitForBatchSettlement(dispatchedCards).finally(() => {
         isClaimingAll = false;
         claimingFreezeUntil = 0;
         syncClaimAllButton();
         sortTaskCards(false);
-      }
+      });
     };
     const injectToolbar = () => {
       if (!ctx) return;
@@ -23035,7 +23189,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       claimAllBtn.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        void claimAllCompletedTasks();
+        claimAllCompletedTasks();
       });
       const sortBtn = document.createElement("button");
       sortBtn.type = "button";
@@ -23151,6 +23305,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       syncClaimAllButton(cards);
       if (!cards.length) return;
       renderTaskIcons(cards);
+      renderTaskStockBadges(cards);
       sortTaskCards(false);
     };
     return {
@@ -23234,6 +23389,38 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         .mwi-lite-task-icon svg {
           display: block;
         }
+        ${TASK_ACTION_SEL} {
+          display: flex !important;
+          align-items: center !important;
+          justify-content: space-between !important;
+          flex-wrap: wrap !important;
+          gap: 4px 8px !important;
+        }
+        .mwi-lite-task-stock {
+          display: inline-flex;
+          align-items: center;
+          max-width: 100%;
+          padding: 1px 6px;
+          border-radius: 0;
+          font-size: 11px;
+          font-weight: 700;
+          font-family: var(--mwi-px-mono, monospace);
+          font-variant-numeric: tabular-nums;
+          line-height: 1.35;
+          background: #0b1228;
+          border: 1px solid var(--mwi-px-border-inner, #4f6fc4);
+          box-shadow: 0 0 0 1px #070b16;
+          color: var(--mwi-px-accent, #93c5fd);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          flex-shrink: 0;
+        }
+        .mwi-lite-task-stock[data-level="zero"] {
+          background: #3d2a06;
+          border-color: var(--mwi-px-gold, #fde047);
+          color: var(--mwi-px-gold, #fde047);
+        }
         #${TASK_N1_ID} {
           display: inline-flex;
           align-items: center;
@@ -23260,26 +23447,40 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         }
         `
         );
-        unregQuests = ctx.gameData.on("quests_updated", () => {
+        const scheduleTasksRefresh = () => {
           if (ctx?.domScheduler.getActiveRoute() === "tasks") {
             const id = window.setTimeout(() => {
               ctx?.domScheduler.scheduleRun(false);
             }, 120);
             timers.push(id);
           }
-        });
+        };
+        unregQuests = ctx.gameData.on("quests_updated", scheduleTasksRefresh);
+        unregItems = ctx.gameData.on("items_updated", scheduleTasksRefresh);
+        unregInit = ctx.gameData.on("character_initialized", scheduleTasksRefresh);
         return () => {
           destroyed = true;
           isClaimingAll = false;
+          activeSettleCleanup?.();
+          activeSettleCleanup = null;
+          if (cooldownSyncTimer !== null) {
+            clearTimeout(cooldownSyncTimer);
+            cooldownSyncTimer = null;
+          }
           unregStyle?.();
           unregStyle = null;
           unregQuests?.();
           unregQuests = null;
+          unregItems?.();
+          unregItems = null;
+          unregInit?.();
+          unregInit = null;
           timers.forEach((t) => clearTimeout(t));
           timers = [];
           lastTaskListRef = null;
-          document.querySelectorAll(`.mwi-lite-task-toolbar, .mwi-lite-task-icon, #${TASK_N1_ID}`).forEach((el) => el.remove());
+          document.querySelectorAll(`.mwi-lite-task-toolbar, .mwi-lite-task-icon, .mwi-lite-task-stock, #${TASK_N1_ID}`).forEach((el) => el.remove());
           document.querySelectorAll("[data-mwi-task-icon]").forEach((el) => el.removeAttribute("data-mwi-task-icon"));
+          document.querySelectorAll("[data-mwi-task-stock]").forEach((el) => el.removeAttribute("data-mwi-task-stock"));
         };
       },
       onDom(_doc, route) {

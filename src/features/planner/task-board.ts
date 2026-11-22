@@ -3,18 +3,30 @@ import type { FeatureModule, KernelContext } from "../../core/types";
 const TASK_SORT_PREF_KEY = "task_board_sort_pref_v1";
 const TASK_LIST_SEL = '[class*="TasksPanel_taskList"]';
 const TASK_CARD_SEL = '[class*="RandomTask_randomTask"]';
+const TASK_ACTION_SEL = '[class*="RandomTask_action"]';
 const TASK_NAME_SEL = '[class*="RandomTask_name"]';
 const SLOT_COUNT_SEL = '[class*="TasksPanel_taskSlotCount"]';
 const TASK_N1_ID = "mwi-lite-task-n1";
 const CLAIM_REWARD_BTN_RE = /领取奖励|Claim\s*Reward/i;
+const MAX_CLAIM_BATCH = 10;
+const SYNC_CLICK_BUDGET_MS = 70;
 
-function findClaimButton(card: Element): HTMLButtonElement | null {
+function findAnyClaimButton(card: Element): HTMLButtonElement | null {
   const btns = card.querySelectorAll<HTMLButtonElement>("button");
   for (const btn of btns) {
-    if (btn.disabled || btn.className.includes("Button_disabled")) continue;
+    if (btn.disabled) continue;
     if (CLAIM_REWARD_BTN_RE.test(btn.textContent || "")) return btn;
   }
   return null;
+}
+
+function isClaimButtonReady(btn: HTMLButtonElement): boolean {
+  return !btn.disabled && !btn.className.includes("Button_disabled");
+}
+
+function findReadyClaimButton(card: Element): HTMLButtonElement | null {
+  const btn = findAnyClaimButton(card);
+  return btn && isClaimButtonReady(btn) ? btn : null;
 }
 
 function parseActionCount(raw: string | null | undefined): number | null {
@@ -179,17 +191,61 @@ function buildMonsterZoneOrderMap(clientData: any): Map<string, number> {
   return orderMap;
 }
 
+function resolveActionOutputHrids(actionHrid: string, clientData: any): string[] {
+  const action = clientData?.actionDetailMap?.[actionHrid];
+  if (!action || action.type === "/action_types/combat") return [];
+  const itemMap = clientData?.itemDetailMap || {};
+  const outputs: string[] = [];
+  const pushUnique = (hrid: unknown) => {
+    if (typeof hrid === "string" && itemMap[hrid] && !outputs.includes(hrid)) {
+      outputs.push(hrid);
+    }
+  };
+
+  if (Array.isArray(action.outputItems)) {
+    for (const out of action.outputItems) {
+      pushUnique(out?.itemHrid);
+    }
+  }
+  // Gathering actions (milking/foraging/woodcutting) store outputs in dropTable
+  if (outputs.length === 0 && Array.isArray(action.dropTable)) {
+    for (const drop of action.dropTable) {
+      pushUnique(drop?.itemHrid);
+      if (outputs.length >= 2) break;
+    }
+  }
+  if (outputs.length === 0) {
+    const actionKey = actionHrid.split("/").pop() || "";
+    if (actionKey) pushUnique(`/items/${actionKey}`);
+  }
+  return outputs;
+}
+
+function buildInventoryCountMap(context: KernelContext): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const item of context.gameData.getCharacterItems()) {
+    if (!item?.itemHrid || !item.count || item.count <= 0) continue;
+    if (item.itemLocationHrid && item.itemLocationHrid !== "/item_locations/inventory") continue;
+    counts.set(item.itemHrid, (counts.get(item.itemHrid) || 0) + item.count);
+  }
+  return counts;
+}
+
 type SpriteType = "items" | "actions" | "monsters";
 
 export function createTaskBoardModule(): FeatureModule {
   let ctx: KernelContext | null = null;
   let unregStyle: (() => void) | null = null;
   let unregQuests: (() => void) | null = null;
+  let unregItems: (() => void) | null = null;
+  let unregInit: (() => void) | null = null;
   let sortMode: TaskSortMode = "skill";
   let autoSort = true;
   let lastPointerDownTs = 0;
   let lastTaskListRef: Element | null = null;
   let timers: number[] = [];
+  let cooldownSyncTimer: number | null = null;
+  let activeSettleCleanup: (() => void) | null = null;
   let isClaimingAll = false;
   let claimingFreezeUntil = 0;
   let destroyed = false;
@@ -308,7 +364,7 @@ export function createTaskBoardModule(): FeatureModule {
     const skillType = match[1].trim();
     const taskTarget = match[2].trim();
     const isCombat = skillType === "Defeat" || skillType === "击败";
-    const isCompleted = Boolean(findClaimButton(card));
+    const isCompleted = Boolean(findAnyClaimButton(card));
     return { nameEl, fullText, skillType, taskTarget, isCombat, isCompleted };
   };
 
@@ -409,6 +465,92 @@ export function createTaskBoardModule(): FeatureModule {
     }
   };
 
+  const resolveActionHridByTarget = (targetName: string, clientData: any): string | null => {
+    const key = targetName.trim().toLowerCase();
+    if (!key) return null;
+    let actionHrid = actionNameToHrid?.get(key) || null;
+    if (actionHrid || !ctx) return actionHrid;
+    const actionMap = clientData?.actionDetailMap || {};
+    for (const hrid of Object.keys(actionMap)) {
+      const localized = ctx.i18n.getActionName(hrid).trim().toLowerCase();
+      if (localized && localized === key) {
+        actionHrid = hrid;
+        actionNameToHrid?.set(localized, hrid);
+        break;
+      }
+    }
+    return actionHrid;
+  };
+
+  const renderTaskStockBadges = (cards: HTMLElement[]) => {
+    if (!ctx) return;
+    ensureLookupMaps();
+    const clientData = ctx.gameData.getClientData();
+    if (!clientData) return;
+
+    const invCounts = buildInventoryCountMap(ctx);
+    const targetLowerCache = new Map<string, string>();
+
+    for (const card of cards) {
+      const parsed = parseCard(card);
+      if (!parsed || parsed.isCombat) {
+        card.querySelector(".mwi-lite-task-stock")?.remove();
+        card.removeAttribute("data-mwi-task-stock");
+        continue;
+      }
+
+      const actionHrid = resolveActionHridByTarget(parsed.taskTarget, clientData);
+      const outputHrids = actionHrid ? resolveActionOutputHrids(actionHrid, clientData) : [];
+      if (!outputHrids.length) {
+        card.querySelector(".mwi-lite-task-stock")?.remove();
+        card.removeAttribute("data-mwi-task-stock");
+        continue;
+      }
+
+      let targetLower = targetLowerCache.get(parsed.taskTarget);
+      if (targetLower === undefined) {
+        targetLower = parsed.taskTarget.trim().toLowerCase();
+        targetLowerCache.set(parsed.taskTarget, targetLower);
+      }
+
+      const entries = outputHrids.map((hrid) => {
+        const count = invCounts.get(hrid) || 0;
+        const itemName = ctx!.i18n.getItemName(hrid);
+        return { hrid, itemName, count };
+      });
+
+      const allZero = entries.every((e) => e.count === 0);
+      let badgeText = "";
+      if (entries.length === 1 && entries[0].itemName.trim().toLowerCase() === targetLower) {
+        badgeText = `${ctx.i18n.t("库存", "Stock")} ${formatActionCount(entries[0].count)}`;
+      } else {
+        badgeText = entries.map((e) => `${e.itemName} ${formatActionCount(e.count)}`).join(" · ");
+      }
+      const titleText = `${ctx.i18n.t("仓库库存", "Inventory stock")}: ${entries
+        .map((e) => `${e.itemName} ${e.count.toLocaleString()}`)
+        .join(" / ")}`;
+      const sig = `${parsed.fullText}|${badgeText}|${titleText}`;
+      const existingBadge = card.querySelector<HTMLElement>(".mwi-lite-task-stock");
+      if (existingBadge && card.getAttribute("data-mwi-task-stock") === sig) {
+        continue;
+      }
+
+      const host = card.querySelector(TASK_ACTION_SEL) || parsed.nameEl.parentElement;
+      if (!host) continue;
+
+      const badge = existingBadge || document.createElement("span");
+      badge.className = "mwi-lite-task-stock";
+      badge.setAttribute("data-mwi-lite", "1");
+      badge.dataset.level = allZero ? "zero" : "ok";
+      badge.textContent = badgeText;
+      badge.title = titleText;
+      if (!existingBadge) {
+        host.appendChild(badge);
+      }
+      card.setAttribute("data-mwi-task-stock", sig);
+    }
+  };
+
   const sortTaskCards = (force = false) => {
     if (!ctx) return;
     if (!force && !autoSort) return;
@@ -477,33 +619,70 @@ export function createTaskBoardModule(): FeatureModule {
     return Array.from(taskList.children).filter((el): el is HTMLElement => el.matches(TASK_CARD_SEL));
   };
 
+  const scheduleCooldownResync = () => {
+    if (cooldownSyncTimer !== null || destroyed) return;
+    cooldownSyncTimer = window.setTimeout(() => {
+      cooldownSyncTimer = null;
+      if (!destroyed && !isClaimingAll) {
+        syncClaimAllButton();
+      }
+    }, 200);
+  };
+
   const syncClaimAllButton = (cards?: Element[]) => {
     if (!ctx) return;
     const btn = document.querySelector<HTMLButtonElement>(".mwi-lite-task-claim-all");
     if (!btn || isClaimingAll) return;
     const list = cards ?? getTaskCards();
-    let claimableCount = 0;
+    let readyCount = 0;
+    let pendingCount = 0;
     for (const c of list) {
-      if (findClaimButton(c)) claimableCount++;
+      const claimBtn = findAnyClaimButton(c);
+      if (!claimBtn) continue;
+      pendingCount++;
+      if (isClaimButtonReady(claimBtn)) readyCount++;
     }
-    btn.disabled = claimableCount === 0;
-    btn.dataset.ready = claimableCount > 0 ? "1" : "0";
-    btn.textContent =
-      claimableCount > 0
-        ? ctx.i18n.t(`一键领取 (${claimableCount})`, `Claim All (${claimableCount})`)
-        : ctx.i18n.t("一键领取", "Claim All");
+
+    if (readyCount > 0) {
+      if (cooldownSyncTimer !== null) {
+        clearTimeout(cooldownSyncTimer);
+        cooldownSyncTimer = null;
+      }
+      btn.disabled = false;
+      btn.dataset.ready = "1";
+      btn.textContent = ctx.i18n.t(`一键领取 (${readyCount})`, `Claim All (${readyCount})`);
+    } else if (pendingCount > 0) {
+      btn.disabled = true;
+      btn.dataset.ready = "0";
+      btn.textContent = ctx.i18n.t(`冷却中 (${pendingCount})`, `Cooldown (${pendingCount})`);
+      scheduleCooldownResync();
+    } else {
+      if (cooldownSyncTimer !== null) {
+        clearTimeout(cooldownSyncTimer);
+        cooldownSyncTimer = null;
+      }
+      btn.disabled = true;
+      btn.dataset.ready = "0";
+      btn.textContent = ctx.i18n.t("一键领取", "Claim All");
+    }
+
     btn.title = ctx.i18n.t(
-      "依次领取所有已完成任务的积分奖励",
+      "领取所有已完成任务的积分奖励",
       "Claim rewards from all completed tasks"
     );
   };
 
-  const waitForNextClaimEvent = (card: Element, timeoutMs: number): Promise<void> => {
+  const waitForBatchSettlement = (dispatchedCards: HTMLElement[]): Promise<void> => {
     return new Promise<void>((resolve) => {
-      if (destroyed || !isClaimingAll || !card.isConnected || !findClaimButton(card)) {
+      const total = dispatchedCards.length;
+      if (destroyed || !isClaimingAll || total === 0) {
         resolve();
         return;
       }
+
+      const startTs = Date.now();
+      let lastProgressTs = startTs;
+      let lastSettledCount = -1;
       let settled = false;
       let unsubWs: (() => void) | null = null;
       let pollId: number | null = null;
@@ -515,130 +694,121 @@ export function createTaskBoardModule(): FeatureModule {
         unsubWs?.();
         if (pollId !== null) clearInterval(pollId);
         if (timeoutId !== null) clearTimeout(timeoutId);
+        activeSettleCleanup = null;
         resolve();
       };
+      activeSettleCleanup = finish;
 
-      const checkCleared = () => {
-        if (destroyed || !isClaimingAll || !card.isConnected || !findClaimButton(card)) {
+      const checkProgress = () => {
+        if (destroyed || !isClaimingAll) {
           finish();
-          return true;
+          return;
         }
-        return false;
+        let settledCount = 0;
+        for (const card of dispatchedCards) {
+          if (!card.isConnected || !findAnyClaimButton(card)) {
+            settledCount++;
+          }
+        }
+        if (settledCount !== lastSettledCount) {
+          lastSettledCount = settledCount;
+          lastProgressTs = Date.now();
+          const claimAllBtn = document.querySelector<HTMLButtonElement>(".mwi-lite-task-claim-all");
+          if (claimAllBtn && claimAllBtn.isConnected) {
+            claimAllBtn.disabled = true;
+            const shown = Math.min(total, Math.max(1, settledCount));
+            claimAllBtn.textContent = ctx!.i18n.t(
+              `领取中 (${shown}/${total})`,
+              `Claiming (${shown}/${total})`
+            );
+          }
+        }
+
+        if (settledCount >= total) {
+          finish();
+          return;
+        }
+
+        const now = Date.now();
+        // Wait past the game button's 600ms cooldown and a quiet window before treating leftovers as un-claimed
+        if (now - startTs >= 750 && now - lastProgressTs >= 250) {
+          finish();
+        }
       };
 
-      // Use timer polling + WS wakeup rather than rAF so occluded/unfocused windows never throttle to 1000ms
-      pollId = window.setInterval(checkCleared, 25);
+      checkProgress();
+      pollId = window.setInterval(checkProgress, 25);
+      unsubWs =
+        ctx?.wsBus.on("quests_updated", () => {
+          lastProgressTs = Date.now();
+          const t = window.setTimeout(checkProgress, 16);
+          timers.push(t);
+        }) ?? null;
 
-      unsubWs = ctx?.wsBus.on("quests_updated", () => {
-        const t = window.setTimeout(checkCleared, 16);
-        timers.push(t);
-      }) ?? null;
-
-      timeoutId = window.setTimeout(finish, timeoutMs);
+      timeoutId = window.setTimeout(finish, 1800);
       timers.push(timeoutId);
     });
   };
 
-  const claimAllCompletedTasks = async () => {
+  const claimAllCompletedTasks = () => {
     if (!ctx || isClaimingAll || destroyed) return;
-    const initialCards = getTaskCards();
-    const total = initialCards.reduce((sum, c) => sum + (findClaimButton(c) ? 1 : 0), 0);
-    if (total === 0) {
-      syncClaimAllButton(initialCards);
+    const cards = getTaskCards();
+    const targets: Array<{ card: HTMLElement; btn: HTMLButtonElement }> = [];
+    for (const c of cards) {
+      const btn = findReadyClaimButton(c);
+      if (btn) targets.push({ card: c, btn });
+    }
+    if (targets.length === 0) {
+      syncClaimAllButton(cards);
       return;
     }
 
+    const batch = targets.slice(0, MAX_CLAIM_BATCH);
     isClaimingAll = true;
-    const attempts = new WeakMap<Element, number>();
-    let claimed = 0;
+    claimingFreezeUntil = Date.now() + 2500;
+    if (cooldownSyncTimer !== null) {
+      clearTimeout(cooldownSyncTimer);
+      cooldownSyncTimer = null;
+    }
 
-    try {
-      for (let guard = 0; guard < total * 4 + 20; guard++) {
-        if (destroyed || !isClaimingAll) break;
+    const clickWindowStart = Date.now();
+    const dispatchedCards: HTMLElement[] = [];
 
-        const cards = getTaskCards();
-        let targetCard: HTMLElement | null = null;
-        let targetBtn: HTMLButtonElement | null = null;
-        let hasPendingCooldownCard = false;
-
-        for (const c of cards) {
-          const cardAttempts = attempts.get(c) || 0;
-          if (cardAttempts >= 2) continue;
-          const btn = findClaimButton(c);
-          if (btn) {
-            targetCard = c;
-            targetBtn = btn;
-            break;
-          }
-          const rawBtns = c.querySelectorAll<HTMLButtonElement>("button");
-          for (const rb of rawBtns) {
-            if (CLAIM_REWARD_BTN_RE.test(rb.textContent || "")) {
-              hasPendingCooldownCard = true;
-              break;
-            }
-          }
-        }
-
-        if (!targetCard || !targetBtn) {
-          if (!hasPendingCooldownCard) break;
-          await new Promise<void>((resolve) => {
-            const t = window.setTimeout(resolve, 90);
-            timers.push(t);
-          });
-          continue;
-        }
-
-        const attemptNo = (attempts.get(targetCard) || 0) + 1;
-        attempts.set(targetCard, attemptNo);
-        claimingFreezeUntil = Date.now() + 2500;
-
-        const progressDone = Math.min(total, claimed + 1);
-        const claimAllBtn = document.querySelector<HTMLButtonElement>(".mwi-lite-task-claim-all");
-        if (claimAllBtn && claimAllBtn.isConnected) {
-          claimAllBtn.disabled = true;
-          claimAllBtn.textContent = ctx.i18n.t(
-            `领取中 (${progressDone}/${total})`,
-            `Claiming (${progressDone}/${total})`
-          );
-        }
-
-        const clickTs = Date.now();
-        const waitConfirm = waitForNextClaimEvent(targetCard, 1100);
-        targetBtn.click();
-        await waitConfirm;
-
-        if (!targetCard.isConnected || !findClaimButton(targetCard)) {
-          claimed++;
-        }
-
-        // Skip trailing gap if no claimable tasks remain
-        const remainingCards = getTaskCards();
-        const hasMore = remainingCards.some(
-          (c) => (attempts.get(c) || 0) < 2 && Boolean(findClaimButton(c))
-        );
-        if (!hasMore) {
-          const hasCooling = remainingCards.some((c) => {
-            if ((attempts.get(c) || 0) >= 2) return false;
-            return Array.from(c.querySelectorAll("button")).some((rb) =>
-              CLAIM_REWARD_BTN_RE.test(rb.textContent || "")
-            );
-          });
-          if (!hasCooling) break;
-        }
-
-        // Keep at least 180ms total spacing per claim without wasting 280ms dead wait after ack
-        const restMs = Math.max(24, 180 - (Date.now() - clickTs));
-        await new Promise<void>((resolve) => {
-          const t = window.setTimeout(resolve, restMs);
-          timers.push(t);
-        });
+    // Must run synchronously within the user's trusted click (<100ms) so the game client does not flag isAuto=true
+    for (let i = 0; i < batch.length; i++) {
+      if (i > 0 && Date.now() - clickWindowStart >= SYNC_CLICK_BUDGET_MS) break;
+      const { card, btn } = batch[i];
+      if (!card.isConnected || !isClaimButtonReady(btn)) continue;
+      try {
+        btn.click();
+        dispatchedCards.push(card);
+      } catch {
+        // Ignore individual click errors and continue remaining cards
       }
-    } finally {
+    }
+
+    if (dispatchedCards.length === 0) {
+      isClaimingAll = false;
+      claimingFreezeUntil = 0;
+      syncClaimAllButton();
+      return;
+    }
+
+    const claimAllBtn = document.querySelector<HTMLButtonElement>(".mwi-lite-task-claim-all");
+    if (claimAllBtn && claimAllBtn.isConnected) {
+      claimAllBtn.disabled = true;
+      claimAllBtn.textContent = ctx.i18n.t(
+        `领取中 (1/${dispatchedCards.length})`,
+        `Claiming (1/${dispatchedCards.length})`
+      );
+    }
+
+    void waitForBatchSettlement(dispatchedCards).finally(() => {
       isClaimingAll = false;
       claimingFreezeUntil = 0;
       syncClaimAllButton();
       sortTaskCards(false);
-    }
+    });
   };
 
   const injectToolbar = () => {
@@ -656,7 +826,7 @@ export function createTaskBoardModule(): FeatureModule {
     claimAllBtn.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      void claimAllCompletedTasks();
+      claimAllCompletedTasks();
     });
 
     const sortBtn = document.createElement("button");
@@ -796,6 +966,7 @@ export function createTaskBoardModule(): FeatureModule {
     if (!cards.length) return;
 
     renderTaskIcons(cards);
+    renderTaskStockBadges(cards);
     sortTaskCards(false);
   };
 
@@ -882,6 +1053,38 @@ export function createTaskBoardModule(): FeatureModule {
         .mwi-lite-task-icon svg {
           display: block;
         }
+        ${TASK_ACTION_SEL} {
+          display: flex !important;
+          align-items: center !important;
+          justify-content: space-between !important;
+          flex-wrap: wrap !important;
+          gap: 4px 8px !important;
+        }
+        .mwi-lite-task-stock {
+          display: inline-flex;
+          align-items: center;
+          max-width: 100%;
+          padding: 1px 6px;
+          border-radius: 0;
+          font-size: 11px;
+          font-weight: 700;
+          font-family: var(--mwi-px-mono, monospace);
+          font-variant-numeric: tabular-nums;
+          line-height: 1.35;
+          background: #0b1228;
+          border: 1px solid var(--mwi-px-border-inner, #4f6fc4);
+          box-shadow: 0 0 0 1px #070b16;
+          color: var(--mwi-px-accent, #93c5fd);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          flex-shrink: 0;
+        }
+        .mwi-lite-task-stock[data-level="zero"] {
+          background: #3d2a06;
+          border-color: var(--mwi-px-gold, #fde047);
+          color: var(--mwi-px-gold, #fde047);
+        }
         #${TASK_N1_ID} {
           display: inline-flex;
           align-items: center;
@@ -909,29 +1112,44 @@ export function createTaskBoardModule(): FeatureModule {
         `
       );
 
-      unregQuests = ctx.gameData.on("quests_updated", () => {
+      const scheduleTasksRefresh = () => {
         if (ctx?.domScheduler.getActiveRoute() === "tasks") {
           const id = window.setTimeout(() => {
             ctx?.domScheduler.scheduleRun(false);
           }, 120);
           timers.push(id);
         }
-      });
+      };
+
+      unregQuests = ctx.gameData.on("quests_updated", scheduleTasksRefresh);
+      unregItems = ctx.gameData.on("items_updated", scheduleTasksRefresh);
+      unregInit = ctx.gameData.on("character_initialized", scheduleTasksRefresh);
 
       return () => {
         destroyed = true;
         isClaimingAll = false;
+        activeSettleCleanup?.();
+        activeSettleCleanup = null;
+        if (cooldownSyncTimer !== null) {
+          clearTimeout(cooldownSyncTimer);
+          cooldownSyncTimer = null;
+        }
         unregStyle?.();
         unregStyle = null;
         unregQuests?.();
         unregQuests = null;
+        unregItems?.();
+        unregItems = null;
+        unregInit?.();
+        unregInit = null;
         timers.forEach((t) => clearTimeout(t));
         timers = [];
         lastTaskListRef = null;
         document
-          .querySelectorAll(`.mwi-lite-task-toolbar, .mwi-lite-task-icon, #${TASK_N1_ID}`)
+          .querySelectorAll(`.mwi-lite-task-toolbar, .mwi-lite-task-icon, .mwi-lite-task-stock, #${TASK_N1_ID}`)
           .forEach((el) => el.remove());
         document.querySelectorAll("[data-mwi-task-icon]").forEach((el) => el.removeAttribute("data-mwi-task-icon"));
+        document.querySelectorAll("[data-mwi-task-stock]").forEach((el) => el.removeAttribute("data-mwi-task-stock"));
       };
     },
 
