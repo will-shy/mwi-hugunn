@@ -3,8 +3,8 @@
 // @name:zh-CN   MWI · Hugunn
 // @namespace    https://milkywayidle.com/mwi-hugunn
 // @version      1.1.0
-// @description  Fast! Lightweight! One script is all you need—come fight me if it's not awesome! 15-in-1 MWI suite (market, planner, labyrinth & combat), zero deps & 100% read-only.
-// @description:zh-CN 快速！轻量！一个就够！不好用你来打我！15合1银河奶牛聚合增强插件（市场/规划/迷宫/战斗），零依赖、纯只读、16-bit星光像素风。
+// @description  Tired of reinstalling a pile of laggy, mismatched scripts on every device? Fast! Lightweight! One script is all you need—come fight me if it's not! 15-in-1 MWI suite, zero deps & 100% read-only.
+// @description:zh-CN 受够了换设备就重装一堆卡顿又杂乱的脚本？快速！轻量！一个就够！不好用你来打我！15合1 MWI 聚合插件（市场/规划/迷宫/战斗），零依赖纯只读。
 // @author       xhy
 // @license      MIT
 // @homepageURL  https://github.com/xiahuaaaa/mwi-hugunn
