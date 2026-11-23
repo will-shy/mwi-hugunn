@@ -1,3 +1,4 @@
+// Credit: Action timing & tea/equipment buff calculation aligned with Toolasha (Celasha, CC-BY-NC-SA-4.0) & MWITools (bot7420, shykai).
 import type { ActionTypeBuffSources } from "../../core/types";
 
 export interface ActionEstimateInput {

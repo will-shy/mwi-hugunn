@@ -1,3 +1,4 @@
+// Credit: Market listing helpers & queue age estimation inspired by Sunny's MWI 增强 (Foreversunny, MIT License) & Toolasha (Celasha, CC-BY-NC-SA-4.0).
 import type { FeatureModule, KernelContext } from "../../core/types";
 import {
   computeEnhancementPlan,

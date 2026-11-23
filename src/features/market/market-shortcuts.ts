@@ -1,3 +1,4 @@
+// Credit: Market shortcuts bar & storage schema compatible with Sunny's MWI 增强 (Foreversunny, https://greasyfork.org/scripts/577171, MIT License).
 import type { FeatureModule, KernelContext } from "../../core/types";
 
 const SHORTCUTS_STORAGE_KEY = "sunnyMwi_market_shortcuts_v1";

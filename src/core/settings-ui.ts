@@ -156,6 +156,18 @@ export function mountSettingsUI(isWorkerActiveFn: () => boolean): void {
       cursor: pointer;
       flex-shrink: 0;
     }
+    #${SETTINGS_MODAL_ID} .mwi-lite-credits {
+      margin-top: 4px;
+      padding: 8px 11px;
+      background: #091024;
+      border: 1px solid var(--mwi-px-border-inner, #4f6fc4);
+      font-size: 10.5px;
+      line-height: 1.5;
+      color: var(--mwi-px-muted, #7f95cc);
+    }
+    #${SETTINGS_MODAL_ID} .mwi-lite-credits b {
+      color: var(--mwi-px-sub, #9dbbff);
+    }
     `
   );
 
@@ -215,7 +227,16 @@ export function mountSettingsUI(isWorkerActiveFn: () => boolean): void {
           </div>
           <button type="button" class="mwi-lite-close">${i18n.t("关闭", "Close")}</button>
         </div>
-        <div class="mwi-lite-body">${groupsHtml}</div>
+        <div class="mwi-lite-body">
+          ${groupsHtml}
+          <div class="mwi-lite-credits">
+            <b>${i18n.t("致谢与上游原作者 (CC-BY-NC-SA-4.0 / MIT)：", "Credits & Upstream Authors (CC-BY-NC-SA-4.0 / MIT):")}</b><br/>
+            ${i18n.t(
+              "迷宫胜率引擎：dakonglong (@dakonlong3, #566829) & shykai (MWICombatSimulatorTest)；经济/净资产/强化/规划算法：Toolasha (Celasha) & MWITools (bot7420, shykai, DrDucky, Frotty, Truth_Light 等)；市场快捷/排序：Foreversunny (#577171)、adudu；交易量显示：baozhi、perfectpure & Q7 行情 API；掉落运气统计：Weierstras (#536205)；动作与任务参考：zqzhang1996 (MWI_Toolkit)。",
+              "Labyrinth Clear Rate: dakonglong (@dakonlong3, #566829) & shykai (MWICombatSimulatorTest); Economy/Networth/Enhancing/Planner: Toolasha (Celasha) & MWITools (bot7420, shykai, DrDucky, Frotty, Truth_Light, et al.); Market Shortcuts/Sort: Foreversunny (#577171), adudu; Market Volume: baozhi, perfectpure & Q7 Market API; Loot Luck Stats: Weierstras (#536205); Task/Action helpers: zqzhang1996 (MWI_Toolkit)."
+            )}
+          </div>
+        </div>
       </div>
     `;
 

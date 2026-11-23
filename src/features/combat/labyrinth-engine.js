@@ -1,4 +1,6 @@
-// Extracted and refactored from Labyrinth Clear Rate Calculator 1.5.10 (LazyWorker + shared scheduler/WS)
+// Extracted and refactored from Labyrinth Clear Rate Calculator 1.5.10 (https://greasyfork.org/scripts/566829)
+// Original Author: dakonglong (@dakonlong3), MIT License
+// Combat simulation workers bridged from MWICombatSimulatorTest by shykai (with contributions from amvoidguy, truthligh, etc.)
 export function createLabyrinthEngine(adapters) {
     "use strict";
 

@@ -1,3 +1,4 @@
+// Credit: Task board helpers, icons, sorting & quick-queue inspired by MWI_Toolkit (zqzhang1996, MIT) & MWI Queue Planner.
 import type { FeatureModule, KernelContext } from "../../core/types";
 
 export const TASK_AUTO_N1_MODULE_ID = "planner-task-auto-n1";
@@ -28,9 +29,6 @@ const START_ONLY_BTN_RE = /^(开始|Start)$/i;
 const STOP_BTN_RE = /^(停止|Stop)$/i;
 const ACTION_DETAIL_MOUNTED_SEL =
   '[class*="enhancingComponent"], [class*="alchemyComponent"], [class*="primaryItemSelectorContainer"], [class*="buttonsContainer"]';
-const MAX_CLAIM_BATCH = 20;
-const SYNC_CLICK_BUDGET_MS = 55;
-const TRUSTED_CLICK_WINDOW_MS = 85;
 const QUICK_QUEUE_ASYNC_TIMEOUT_MS = 600;
 const QUEUE_FEEDBACK_TTL_MS = 1200;
 
@@ -176,31 +174,6 @@ function getDetailActionCount(detail: Element): number | null {
     }
   }
   return null;
-}
-
-function triggerButtonActionSafe(btn: HTMLElement, clickStartTs: number): boolean {
-  // Within trusted click window (<85ms), native .click() keeps game's ws.exceeded(100) false and runs full React handler
-  if (Date.now() - clickStartTs < TRUSTED_CLICK_WINDOW_MS) {
-    btn.click();
-    return true;
-  }
-  // Fallback when async render exceeded window: invoke inner React onClick without dispatching untrusted DOM click
-  const key = Reflect.ownKeys(btn).find(
-    (k) => typeof k === "string" && (k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"))
-  );
-  let fiber: any = key ? (btn as any)[key] : null;
-  const isButtonHost = btn.tagName === "BUTTON";
-  for (let depth = 0; fiber && depth < 8; depth++, fiber = fiber.return) {
-    const onClick = fiber.memoizedProps?.onClick;
-    if (typeof onClick === "function") {
-      const fnStr = Function.prototype.toString.call(onClick);
-      if (fnStr.includes("cooldownMs") || (isButtonHost && depth === 0)) continue;
-      onClick({ preventDefault() {}, stopPropagation() {}, isTrusted: true, currentTarget: btn, target: btn });
-      return true;
-    }
-  }
-  btn.click();
-  return true;
 }
 
 type TaskSortMode = "skill" | "name";
@@ -385,10 +358,6 @@ export function createTaskBoardModule(): FeatureModule {
   let timers: number[] = [];
   let cooldownSyncTimer: number | null = null;
   let cooldownWaitStartTs = 0;
-  let activeSettleCleanup: (() => void) | null = null;
-  let isClaimingAll = false;
-  let claimingStatusText = "";
-  let claimingFreezeUntil = 0;
   let isQuickQueueing = false;
   let manualSortedActive = false;
   let quickQueueAsyncCleanup: (() => void) | null = null;
@@ -782,7 +751,6 @@ export function createTaskBoardModule(): FeatureModule {
   const sortTaskCards = (force = false) => {
     if (!ctx) return;
     if (!force && !autoSort) return;
-    if (!force && (isClaimingAll || Date.now() < claimingFreezeUntil)) return;
     if (!force && Date.now() - lastPointerDownTs < 250) {
       const id = window.setTimeout(() => sortTaskCards(false), 260);
       timers.push(id);
@@ -853,13 +821,13 @@ export function createTaskBoardModule(): FeatureModule {
     if (Date.now() - cooldownWaitStartTs >= 2500) return;
     cooldownSyncTimer = window.setTimeout(() => {
       cooldownSyncTimer = null;
-      if (!destroyed && !isClaimingAll && ctx?.domScheduler.getActiveRoute() === "tasks") {
-        syncClaimAllButton();
+      if (!destroyed && ctx?.domScheduler.getActiveRoute() === "tasks") {
+        syncClaimNextButton();
       }
     }, 200);
   };
 
-  const applyClaimAllBtnState = (
+  const applyClaimNextBtnState = (
     btn: HTMLButtonElement,
     disabled: boolean,
     ready: "0" | "1",
@@ -872,20 +840,14 @@ export function createTaskBoardModule(): FeatureModule {
     if (btn.title !== title) btn.title = title;
   };
 
-  const syncClaimAllButton = (cards?: Element[]) => {
+  const syncClaimNextButton = (cards?: Element[]) => {
     if (!ctx) return;
-    const btn = document.querySelector<HTMLButtonElement>(".mwi-lite-task-claim-all");
+    const btn = document.querySelector<HTMLButtonElement>(".mwi-lite-task-claim-next");
     if (!btn) return;
     const title = ctx.i18n.t(
-      "领取所有已完成任务的积分奖励",
-      "Claim rewards from all completed tasks"
+      "领取下一个已完成任务的积分奖励（每次点击领取 1 个）",
+      "Claim reward from the next completed task (1 click = 1 claim)"
     );
-    if (isClaimingAll) {
-      if (claimingStatusText) {
-        applyClaimAllBtnState(btn, true, "0", claimingStatusText, title);
-      }
-      return;
-    }
     const list = cards ?? getTaskCards();
     let readyCount = 0;
     let pendingCount = 0;
@@ -902,15 +864,15 @@ export function createTaskBoardModule(): FeatureModule {
         clearTimeout(cooldownSyncTimer);
         cooldownSyncTimer = null;
       }
-      applyClaimAllBtnState(
+      applyClaimNextBtnState(
         btn,
         false,
         "1",
-        ctx.i18n.t(`一键领取 (${readyCount})`, `Claim All (${readyCount})`),
+        ctx.i18n.t(`领取下一个 (${readyCount})`, `Claim Next (${readyCount})`),
         title
       );
     } else if (pendingCount > 0) {
-      applyClaimAllBtnState(
+      applyClaimNextBtnState(
         btn,
         true,
         "0",
@@ -926,162 +888,39 @@ export function createTaskBoardModule(): FeatureModule {
         clearTimeout(cooldownSyncTimer);
         cooldownSyncTimer = null;
       }
-      applyClaimAllBtnState(btn, true, "0", ctx.i18n.t("一键领取", "Claim All"), title);
+      applyClaimNextBtnState(btn, true, "0", ctx.i18n.t("领取下一个", "Claim Next"), title);
     }
   };
 
-  const waitForBatchSettlement = (dispatchedCards: HTMLElement[]): Promise<void> => {
-    return new Promise<void>((resolve) => {
-      const total = dispatchedCards.length;
-      if (destroyed || !isClaimingAll || total === 0) {
-        resolve();
-        return;
-      }
-
-      const startTs = Date.now();
-      let lastProgressTs = startTs;
-      let lastSettledCount = -1;
-      let settled = false;
-      let unsubWs: (() => void) | null = null;
-      let pollId: number | null = null;
-      let timeoutId: number | null = null;
-      const wsCheckTimers: number[] = [];
-
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        unsubWs?.();
-        if (pollId !== null) clearInterval(pollId);
-        if (timeoutId !== null) clearTimeout(timeoutId);
-        for (const t of wsCheckTimers) clearTimeout(t);
-        wsCheckTimers.length = 0;
-        activeSettleCleanup = null;
-        resolve();
-      };
-      activeSettleCleanup = finish;
-
-      const checkProgress = () => {
-        if (destroyed || !isClaimingAll) {
-          finish();
-          return;
-        }
-        let settledCount = 0;
-        for (const card of dispatchedCards) {
-          if (!card.isConnected || !findAnyClaimButton(card)) {
-            settledCount++;
-          }
-        }
-        if (settledCount !== lastSettledCount) {
-          lastSettledCount = settledCount;
-          lastProgressTs = Date.now();
-          claimingStatusText = ctx!.i18n.t(
-            `领取中 (${settledCount}/${total})`,
-            `Claiming (${settledCount}/${total})`
-          );
-          const claimAllBtn = document.querySelector<HTMLButtonElement>(".mwi-lite-task-claim-all");
-          if (claimAllBtn && claimAllBtn.isConnected) {
-            if (!claimAllBtn.disabled) claimAllBtn.disabled = true;
-            if (claimAllBtn.dataset.ready !== "0") claimAllBtn.dataset.ready = "0";
-            if (claimAllBtn.textContent !== claimingStatusText) {
-              claimAllBtn.textContent = claimingStatusText;
-            }
-          }
-        }
-
-        if (settledCount >= total) {
-          finish();
-          return;
-        }
-
-        const now = Date.now();
-        // Real test-server telemetry showed tail claim confirmations arriving up to ~636ms after prior frames (e.g. 462ms -> 1098ms).
-        // Wait >=1200ms overall and >=700ms quiet since last settled card before treating leftovers as un-claimed; full success exits immediately above.
-        if (now - startTs >= 1200 && now - lastProgressTs >= 700) {
-          finish();
-        }
-      };
-
-      checkProgress();
-      pollId = window.setInterval(checkProgress, 25);
-      unsubWs =
-        ctx?.wsBus.on("quests_updated", (msg: any) => {
-          const hasClaimed =
-            Array.isArray(msg?.endCharacterQuests) &&
-            msg.endCharacterQuests.some((q: any) => q?.status === "/quest_status/claimed");
-          if (hasClaimed) {
-            lastProgressTs = Date.now();
-          }
-          const t = window.setTimeout(checkProgress, 16);
-          wsCheckTimers.push(t);
-        }) ?? null;
-
-      timeoutId = window.setTimeout(finish, 2400);
-    });
-  };
-
-  const claimAllCompletedTasks = (clickStartTs = Date.now()) => {
-    if (!ctx || isClaimingAll || destroyed) return;
+  // Strictly 1 human click -> 1 native game claim button click
+  const claimNextCompletedTask = () => {
+    if (!ctx || destroyed) return;
     const cards = getTaskCards();
-    const targets: Array<{ card: HTMLElement; btn: HTMLButtonElement }> = [];
+    let targetBtn: HTMLButtonElement | null = null;
     for (const c of cards) {
       const btn = findReadyClaimButton(c);
-      if (btn) targets.push({ card: c, btn });
-    }
-    if (targets.length === 0) {
-      syncClaimAllButton(cards);
-      return;
-    }
-
-    const batch = targets.slice(0, MAX_CLAIM_BATCH);
-    isClaimingAll = true;
-    cooldownWaitStartTs = 0;
-    claimingFreezeUntil = Date.now() + 2600;
-    if (cooldownSyncTimer !== null) {
-      clearTimeout(cooldownSyncTimer);
-      cooldownSyncTimer = null;
-    }
-
-    const dispatchedCards: HTMLElement[] = [];
-
-    // Must run synchronously within the user's trusted click (<100ms) so the game client does not flag isAuto=true
-    for (let i = 0; i < batch.length; i++) {
-      if (i > 0 && Date.now() - clickStartTs >= SYNC_CLICK_BUDGET_MS) break;
-      const { card, btn } = batch[i];
-      if (!card.isConnected || !isClaimButtonReady(btn)) continue;
-      try {
-        btn.click();
-        dispatchedCards.push(card);
-      } catch {
-        // Ignore individual click errors and continue remaining cards
+      if (btn) {
+        targetBtn = btn;
+        break;
       }
     }
-
-    if (dispatchedCards.length === 0) {
-      isClaimingAll = false;
-      claimingStatusText = "";
-      claimingFreezeUntil = 0;
-      syncClaimAllButton();
+    if (!targetBtn) {
+      syncClaimNextButton(cards);
       return;
     }
 
-    claimingStatusText = ctx.i18n.t(
-      `领取中 (0/${dispatchedCards.length})`,
-      `Claiming (0/${dispatchedCards.length})`
-    );
-    const claimAllBtn = document.querySelector<HTMLButtonElement>(".mwi-lite-task-claim-all");
-    if (claimAllBtn && claimAllBtn.isConnected) {
-      claimAllBtn.disabled = true;
-      claimAllBtn.dataset.ready = "0";
-      claimAllBtn.textContent = claimingStatusText;
+    try {
+      targetBtn.click();
+    } catch {
+      // Ignore transient DOM click error
     }
-
-    void waitForBatchSettlement(dispatchedCards).finally(() => {
-      isClaimingAll = false;
-      claimingStatusText = "";
-      claimingFreezeUntil = 0;
-      syncClaimAllButton();
-      sortTaskCards(false);
-    });
+    syncClaimNextButton();
+    const tId = window.setTimeout(() => {
+      if (!destroyed && ctx?.domScheduler.getActiveRoute() === "tasks") {
+        syncClaimNextButton();
+      }
+    }, 120);
+    timers.push(tId);
   };
 
   const injectToolbar = () => {
@@ -1093,14 +932,13 @@ export function createTaskBoardModule(): FeatureModule {
     bar.className = "mwi-lite-task-toolbar";
     bar.setAttribute("data-mwi-lite", "1");
 
-    const claimAllBtn = document.createElement("button");
-    claimAllBtn.type = "button";
-    claimAllBtn.className = "Button_button__1Fe9z Button_small__3fqC7 mwi-lite-task-btn mwi-lite-task-claim-all";
-    claimAllBtn.addEventListener("click", (e) => {
-      const clickStartTs = Date.now();
+    const claimNextBtn = document.createElement("button");
+    claimNextBtn.type = "button";
+    claimNextBtn.className = "Button_button__1Fe9z Button_small__3fqC7 mwi-lite-task-btn mwi-lite-task-claim-next";
+    claimNextBtn.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      claimAllCompletedTasks(clickStartTs);
+      claimNextCompletedTask();
     });
 
     const sortBtn = document.createElement("button");
@@ -1146,9 +984,9 @@ export function createTaskBoardModule(): FeatureModule {
       if (autoSort) sortTaskCards(true);
     });
 
-    bar.append(claimAllBtn, sortBtn, autoBtn);
+    bar.append(claimNextBtn, sortBtn, autoBtn);
     slotCount.appendChild(bar);
-    syncClaimAllButton();
+    syncClaimNextButton();
   };
 
   const injectTaskMinusOneButton = () => {
@@ -1387,7 +1225,7 @@ export function createTaskBoardModule(): FeatureModule {
     goBtn: HTMLButtonElement,
     clickStartTs: number
   ) => {
-    if (!ctx || destroyed || isQuickQueueing || isClaimingAll) return;
+    if (!ctx || destroyed || isQuickQueueing) return;
     if (!goBtn.isConnected || goBtn.disabled) return;
 
     const cardsBefore = getTaskCards();
@@ -1405,7 +1243,7 @@ export function createTaskBoardModule(): FeatureModule {
     const navigateBackToTasks = () => {
       const navBtn = findTasksNavButton(document);
       if (navBtn) {
-        triggerButtonActionSafe(navBtn, clickStartTs);
+        navBtn.click();
       }
       if (!findRealGameElement(document, TASK_LIST_SEL)) {
         findReactNavCore(document)?.handleChangeNavTarget?.("tasks");
@@ -1437,7 +1275,10 @@ export function createTaskBoardModule(): FeatureModule {
       return true;
     };
 
-    const tryDetailStep = (detail: HTMLElement): { status: "done" | "retry"; feedback?: { label: string; tone: "ok" | "err" } } => {
+    const tryDetailStep = (
+      detail: HTMLElement,
+      isSync: boolean
+    ): { status: "done" | "retry" | "leave-on-detail"; feedback?: { label: string; tone: "ok" | "err" } } => {
       const inputSections = detail.querySelectorAll('[class*="maxActionCountInput"]');
       const mainInput = inputSections[0]?.querySelector<HTMLInputElement>('input[class*="Input_input"]') || null;
       const addQueueBtn = findButtonByTextRe(detail, ADD_TO_QUEUE_BTN_RE);
@@ -1471,6 +1312,11 @@ export function createTaskBoardModule(): FeatureModule {
         }
       }
 
+      // Never spoof isTrusted or dodge game cooldown/automation checks if detail rendered asynchronously
+      if (!isSync) {
+        return { status: "leave-on-detail" };
+      }
+
       const latestAddQueueBtn = findButtonByTextRe(detail, ADD_TO_QUEUE_BTN_RE);
       if (latestAddQueueBtn) {
         if (latestAddQueueBtn.disabled || latestAddQueueBtn.className.includes("Button_disabled")) {
@@ -1479,7 +1325,7 @@ export function createTaskBoardModule(): FeatureModule {
             feedback: { label: ctx!.i18n.t("无法入队", "Cannot Queue"), tone: "err" },
           };
         }
-        triggerButtonActionSafe(latestAddQueueBtn, clickStartTs);
+        latestAddQueueBtn.click();
         return {
           status: "done",
           feedback: { label: ctx!.i18n.t("✓ 已入队", "✓ Queued"), tone: "ok" },
@@ -1505,7 +1351,7 @@ export function createTaskBoardModule(): FeatureModule {
             feedback: { label: ctx!.i18n.t("无法开始", "Cannot Start"), tone: "err" },
           };
         }
-        triggerButtonActionSafe(latestStartBtn, clickStartTs);
+        latestStartBtn.click();
         return {
           status: "done",
           feedback: { label: ctx!.i18n.t("✓ 已开始", "✓ Started"), tone: "ok" },
@@ -1521,14 +1367,14 @@ export function createTaskBoardModule(): FeatureModule {
     // Step 1: trigger native [前往]
     goBtn.click();
 
-    // Step 2: fast synchronous path (React legacy mode completes inside this call stack with 0 paint frames)
+    // Step 2: fast synchronous path inside user's click event
     const syncDetail = findRealGameElement<HTMLElement>(document, SKILL_DETAIL_SEL);
     let pendingFeedback: { label: string; tone: "ok" | "err" } | undefined;
     let detailHandled = false;
     let backNavDispatchedTs = 0;
 
     if (syncDetail) {
-      const step = tryDetailStep(syncDetail);
+      const step = tryDetailStep(syncDetail, true);
       if (step.status === "done") {
         detailHandled = true;
         pendingFeedback = step.feedback;
@@ -1540,19 +1386,25 @@ export function createTaskBoardModule(): FeatureModule {
       }
     }
 
-    // Step 3: async fallback path (mount visual freeze overlay before browser paints intermediate screen)
+    // Step 3: async fallback path (if action page mounts later, prefill (N-1) locally and leave user on action view instead of spoofing clicks)
     freeze.mount();
     let pollTimerId: number | null = null;
     let guardTimerId: number | null = null;
     let restoreTimerId: number | null = null;
     let finished = false;
 
-    const cleanupAsync = (restoreFailFeedback?: { label: string; tone: "ok" | "err" }) => {
+    const cleanupAsync = (restoreFailFeedback?: { label: string; tone: "ok" | "err" }, keepOnDetail = false) => {
       if (finished) return;
       finished = true;
       if (pollTimerId !== null) clearTimeout(pollTimerId);
       if (guardTimerId !== null) clearTimeout(guardTimerId);
       if (restoreTimerId !== null) clearTimeout(restoreTimerId);
+      if (keepOnDetail) {
+        quickQueueAsyncCleanup = null;
+        freeze.remove();
+        isQuickQueueing = false;
+        return;
+      }
       const finalFeedback = restoreFailFeedback ?? pendingFeedback;
       if (!findRealGameElement(document, TASK_LIST_SEL)) {
         navigateBackToTasks();
@@ -1604,7 +1456,11 @@ export function createTaskBoardModule(): FeatureModule {
       if (!detailHandled) {
         const detail = findRealGameElement<HTMLElement>(document, SKILL_DETAIL_SEL);
         if (detail) {
-          const step = tryDetailStep(detail);
+          const step = tryDetailStep(detail, false);
+          if (step.status === "leave-on-detail") {
+            cleanupAsync(undefined, true);
+            return;
+          }
           if (step.status === "done") {
             detailHandled = true;
             pendingFeedback = step.feedback;
@@ -1707,7 +1563,7 @@ export function createTaskBoardModule(): FeatureModule {
     const cards = Array.from(taskList.children).filter(
       (el): el is HTMLElement => el.matches(TASK_CARD_SEL)
     );
-    syncClaimAllButton(cards);
+    syncClaimNextButton(cards);
     if (!cards.length) return;
 
     renderTaskIcons(cards);
@@ -1720,16 +1576,14 @@ export function createTaskBoardModule(): FeatureModule {
     id: "planner-task-board",
     nameZh: "任务图标、排序与快速入队",
     nameEn: "Task Icons, Sorter & Quick-Queue",
-    descriptionZh: "显示任务图标、库存与自动排序，在「前往」旁提供静默「添加到队列」按钮并在行动弹窗提供 (N-1) 按钮",
-    descriptionEn: "Task icons, stock badges, sorter, silent Quick-Queue beside Go, and (N-1) action helper",
+    descriptionZh: "显示任务图标、库存与自动排序，支持原地「领取下一个」（1:1 点击）、「前往」旁「添加到队列」及 (N-1) 按钮",
+    descriptionEn: "Task icons, stock badges, sorter, 1:1 Claim Next button, Quick-Queue beside Go, and (N-1) action helper",
     category: "planner",
     defaultEnabled: true,
 
     init(context) {
       ctx = context;
       destroyed = false;
-      isClaimingAll = false;
-      claimingStatusText = "";
       cooldownWaitStartTs = 0;
       const saved = ctx.storage.get<TaskSortPref | null>(TASK_SORT_PREF_KEY, null);
       if (saved) {
@@ -1767,16 +1621,16 @@ export function createTaskBoardModule(): FeatureModule {
           background: linear-gradient(180deg, #27324a 0%, #1a2235 100%) !important;
           border-color: #64748b !important;
         }
-        .mwi-lite-task-claim-all {
+        .mwi-lite-task-claim-next {
           font-variant-numeric: tabular-nums !important;
         }
-        .mwi-lite-task-claim-all[data-ready="1"] {
+        .mwi-lite-task-claim-next[data-ready="1"] {
           border-color: var(--mwi-px-gold, #fde047) !important;
           background: var(--mwi-px-btn-gold, linear-gradient(180deg, #7c580c 0%, #523907 100%)) !important;
           color: #fef08a !important;
           box-shadow: 0 0 0 1px #080d1a, inset 1px 1px 0 #eab308 !important;
         }
-        .mwi-lite-task-claim-all:disabled {
+        .mwi-lite-task-claim-next:disabled {
           opacity: 0.5;
           cursor: not-allowed !important;
           background: linear-gradient(180deg, #27324a 0%, #1a2235 100%) !important;
@@ -1930,14 +1784,10 @@ export function createTaskBoardModule(): FeatureModule {
 
       return () => {
         destroyed = true;
-        isClaimingAll = false;
         isQuickQueueing = false;
         manualSortedActive = false;
         clearRerollPins();
-        claimingStatusText = "";
         cooldownWaitStartTs = 0;
-        activeSettleCleanup?.();
-        activeSettleCleanup = null;
         quickQueueAsyncCleanup?.();
         quickQueueAsyncCleanup = null;
         queueFeedbackMap.clear();

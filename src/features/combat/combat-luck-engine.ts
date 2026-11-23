@@ -1,3 +1,4 @@
+// Credit: Loot luck & percentile CDF statistics inspired by [银河奶牛]康康运气 (Weierstras, https://greasyfork.org/scripts/536205, MIT License).
 import type { MarketStore } from "../../core/types";
 
 export type CombatPriceMode = "bid_net" | "ask";

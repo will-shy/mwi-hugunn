@@ -58,3 +58,18 @@ npm run build
   5. `[银河奶牛]康康运气_修复`
   6. `交易量显示`
   7. `MWI 我的挂单魔法排序`
+
+## 五、致谢、原作者与开源协议 (Credits & Licenses)
+
+本项目（**CC-BY-NC-SA-4.0**）的部分功能模块基于或对齐了 MWI 社区以下优秀开源脚本与作者的设计及公开算法，在此特别致谢并完整保留上游署名与协议声明：
+
+| 模块 / 功能 | 参考 / 改编脚本 | 原作者 / 致谢 | 原协议 |
+| :--- | :--- | :--- | :--- |
+| 迷宫胜率与期望耗时模拟 (`labyrinth-engine.js`) | [Labyrinth Clear Rate Calculator / 迷宫胜率计算器](https://greasyfork.org/scripts/566829) & [MWICombatSimulatorTest](https://shykai.github.io/MWICombatSimulatorTest/dist/) | **`dakonglong` (`@dakonlong3`)**、**`shykai`**（及 `amvoidguy`、`truthligh` 等战斗模拟器贡献者） | `MIT` |
+| 净资产估算、强化 Markov 期望、动作耗时与物品规划 | [Toolasha](https://greasyfork.org/scripts/562662) / [MWITools](https://greasyfork.org/scripts/494467) / [HouseCost](https://greasyfork.org/scripts/528870) | **`Celasha`**、`bot7420`、`shykai`、`DrDucky`、`Frotty`、`Truth_Light`、`AlphB`、`qu`、`sentientmilk` 等 | **`CC-BY-NC-SA-4.0`** |
+| 市场快捷栏、强化档位跳转、市场快捷操作与挂单排序 | [Sunny's MWI 增强](https://greasyfork.org/scripts/577171) / MWI 我的挂单魔法排序 | **`Foreversunny`**、`adudu` | `MIT` |
+| 市场交易量与 1/3/5 天均价 | [交易量显示](https://greasyfork.org/scripts/570243) & Q7 市场 API (`q7.nainai.eu.org`) | **`baozhi`**、`perfectpure`、感谢 **`Q7大厨神`** | **`CC-BY-NC-SA-4.0`** |
+| 战斗掉落运气值 CDF 与欧非统计 | [[银河奶牛]康康运气](https://greasyfork.org/scripts/536205) | **`Weierstras`**（及修复版贡献者） | `MIT` |
+| 任务/动作详情辅助设计参考 | [MWI_Toolkit](https://greasyfork.org/scripts/550483) | **`zqzhang1996`** | `MIT` |
+
+> **合规声明**：任务面板中的所有游戏操作严格遵循 `1 click ≤ 1 server action`（工具栏 **领取下一个 / Claim Next** 每次点击仅领取 1 个就绪任务），绝不注入或伪造 `isTrusted` 事件或刻意绕过游戏防自动化检测。

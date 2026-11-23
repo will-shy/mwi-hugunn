@@ -1,3 +1,4 @@
+// Credit: My Listings sorting & UX inspired by MWI 我的挂单魔法排序 (adudu / Foreversunny, MIT License).
 import type { FeatureModule, KernelContext } from "../../core/types";
 
 const SORT_STATE_KEY = "magic_sort_state_v1";

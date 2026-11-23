@@ -1,3 +1,4 @@
+// Credit: Market 1d/3d/5d volume & average price display inspired by 交易量显示 (baozhi & perfectpure, https://greasyfork.org/scripts/570243, CC-BY-NC-SA-4.0); market history API by Q7 (q7.nainai.eu.org).
 import type {
   FeatureModule,
   KernelContext,

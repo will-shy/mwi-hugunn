@@ -1,3 +1,4 @@
+// Credit: Recursive material & house upgrade cost planning inspired by MWI Market Planner, HouseCost (shykai, https://greasyfork.org/scripts/528870), and Toolasha (Celasha, CC-BY-NC-SA-4.0).
 import type { FeatureModule, KernelContext, PanelRoute } from "../../core/types";
 
 const STORAGE_KEY_TARGETS = "calc_targets_v1";

@@ -1,3 +1,4 @@
+// Credit: Net worth valuation algorithm aligned with Toolasha (Celasha, https://greasyfork.org/scripts/562662, CC-BY-NC-SA-4.0) & MWITools (bot7420, shykai).
 import type { GameDataAPI, MarketStore } from "../../core/types";
 import { getEnhancementStatMultiplier, solveEnhancementMarkov } from "./enhancement-math";
 

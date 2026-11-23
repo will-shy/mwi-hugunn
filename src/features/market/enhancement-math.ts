@@ -1,3 +1,4 @@
+// Credit: Markov enhancement expectation model aligned with Toolasha (Celasha, https://greasyfork.org/scripts/562662, CC-BY-NC-SA-4.0) & Enhancelator/MWITools.
 import type { GameDataAPI, MarketStore } from "../../core/types";
 
 export const BASE_SUCCESS_RATES = [
