@@ -1,5 +1,11 @@
 // Credit: Task board helpers, icons, sorting & quick-queue inspired by MWI_Toolkit (zqzhang1996, MIT) & MWI Queue Planner.
 import type { FeatureModule, KernelContext } from "../../core/types";
+import {
+  buildInventoryCountMap,
+  formatActionCount,
+  resolveActionOutputHrids,
+  setReactInputValue,
+} from "./planner-utils";
 
 export const TASK_AUTO_N1_MODULE_ID = "planner-task-auto-n1";
 
@@ -67,21 +73,6 @@ function parseActionCount(raw: string | null | undefined): number | null {
   }
   const n = Number(numStr);
   return Number.isFinite(n) ? Math.floor(n * mul) : null;
-}
-
-function formatActionCount(n: number): string {
-  if (n >= 1e9) return `${(n / 1e9).toFixed(1).replace(/\.0$/, "")}B`;
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1).replace(/\.0$/, "")}M`;
-  if (n >= 1e3) return `${(n / 1e3).toFixed(1).replace(/\.0$/, "")}K`;
-  return String(n);
-}
-
-function setReactInputValue(input: HTMLInputElement, value: number, focusInput = true): void {
-  const proto = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
-  proto?.set?.call(input, String(value));
-  input.dispatchEvent(new Event("input", { bubbles: true }));
-  input.dispatchEvent(new Event("change", { bubbles: true }));
-  if (focusInput) input.focus();
 }
 
 export function computeQuickQueueCount(baseCount: number | null, autoMinusOne: boolean): number | null {
@@ -301,45 +292,6 @@ function buildMonsterZoneOrderMap(clientData: any): Map<string, number> {
   }
 
   return orderMap;
-}
-
-function resolveActionOutputHrids(actionHrid: string, clientData: any): string[] {
-  const action = clientData?.actionDetailMap?.[actionHrid];
-  if (!action || action.type === "/action_types/combat") return [];
-  const itemMap = clientData?.itemDetailMap || {};
-  const outputs: string[] = [];
-  const pushUnique = (hrid: unknown) => {
-    if (typeof hrid === "string" && itemMap[hrid] && !outputs.includes(hrid)) {
-      outputs.push(hrid);
-    }
-  };
-
-  if (Array.isArray(action.outputItems)) {
-    for (const out of action.outputItems) {
-      pushUnique(out?.itemHrid);
-    }
-  }
-  // Gathering actions (milking/foraging/woodcutting) store outputs in dropTable
-  if (outputs.length === 0 && Array.isArray(action.dropTable)) {
-    for (const drop of action.dropTable) {
-      pushUnique(drop?.itemHrid);
-    }
-  }
-  if (outputs.length === 0) {
-    const actionKey = actionHrid.split("/").pop() || "";
-    if (actionKey) pushUnique(`/items/${actionKey}`);
-  }
-  return outputs;
-}
-
-function buildInventoryCountMap(context: KernelContext): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const item of context.gameData.getCharacterItems()) {
-    if (!item?.itemHrid || !item.count || item.count <= 0) continue;
-    if (item.itemLocationHrid && item.itemLocationHrid !== "/item_locations/inventory") continue;
-    counts.set(item.itemHrid, (counts.get(item.itemHrid) || 0) + item.count);
-  }
-  return counts;
 }
 
 type SpriteType = "items" | "actions" | "monsters";

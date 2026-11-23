@@ -22572,6 +22572,713 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     };
   }
 
+  // src/features/planner/planner-utils.ts
+  function formatActionCount(n) {
+    const v = Math.floor(n);
+    if (v >= 1e9) return `${(v / 1e9).toFixed(1).replace(/\.0$/, "")}B`;
+    if (v >= 1e6) return `${(v / 1e6).toFixed(1).replace(/\.0$/, "")}M`;
+    if (v >= 1e3) return `${(v / 1e3).toFixed(1).replace(/\.0$/, "")}K`;
+    return String(v);
+  }
+  function setReactInputValue2(input, value, focusInput = true) {
+    const proto = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+    proto?.set?.call(input, String(value));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    if (focusInput) input.focus();
+  }
+  function resolveActionOutputHrids(actionHrid, clientData) {
+    const action = clientData?.actionDetailMap?.[actionHrid];
+    if (!action || action.type === "/action_types/combat") return [];
+    const itemMap = clientData?.itemDetailMap || {};
+    const outputs = [];
+    const pushUnique = (hrid) => {
+      if (typeof hrid === "string" && itemMap[hrid] && !outputs.includes(hrid)) {
+        outputs.push(hrid);
+      }
+    };
+    if (Array.isArray(action.outputItems)) {
+      for (const out of action.outputItems) {
+        pushUnique(out?.itemHrid);
+      }
+    }
+    if (outputs.length === 0 && Array.isArray(action.dropTable)) {
+      for (const drop of action.dropTable) {
+        pushUnique(drop?.itemHrid);
+      }
+    }
+    if (outputs.length === 0) {
+      const actionKey = actionHrid.split("/").pop() || "";
+      if (actionKey) pushUnique(`/items/${actionKey}`);
+    }
+    return outputs;
+  }
+  function buildInventoryCountMap2(context) {
+    const counts = /* @__PURE__ */ new Map();
+    for (const item of context.gameData.getCharacterItems()) {
+      if (!item?.itemHrid || !item.count || item.count <= 0) continue;
+      if (item.itemLocationHrid && item.itemLocationHrid !== "/item_locations/inventory") continue;
+      counts.set(item.itemHrid, (counts.get(item.itemHrid) || 0) + item.count);
+    }
+    return counts;
+  }
+  function buildLocalizedNameLookup(context) {
+    const actionNameToHrids = /* @__PURE__ */ new Map();
+    const itemNameMap = /* @__PURE__ */ new Map();
+    const clientData = context.gameData.getClientData();
+    const addActionAlias = (rawName, hrid) => {
+      if (typeof rawName !== "string" || !hrid) return;
+      const key = rawName.trim().toLowerCase();
+      if (!key) return;
+      let list = actionNameToHrids.get(key);
+      if (!list) {
+        list = [];
+        actionNameToHrids.set(key, list);
+      }
+      if (!list.includes(hrid)) list.push(hrid);
+    };
+    if (clientData?.actionDetailMap) {
+      for (const [hrid, detail] of Object.entries(clientData.actionDetailMap)) {
+        addActionAlias(detail?.name, hrid);
+      }
+    }
+    const core = context.gameData.getReactGameCore();
+    const resources = core?.props?.i18n?.options?.resources;
+    const activeLang = core?.props?.i18n?.language;
+    if (resources) {
+      for (const [lang, bundle] of Object.entries(resources)) {
+        const trans = bundle?.translation;
+        if (trans?.actionNames) {
+          for (const [hrid, name] of Object.entries(trans.actionNames)) {
+            addActionAlias(name, hrid);
+          }
+        }
+        if (trans?.itemNames && (!activeLang || lang === activeLang)) {
+          for (const [hrid, name] of Object.entries(trans.itemNames)) {
+            if (typeof name === "string" && name.trim()) {
+              itemNameMap.set(hrid, name.trim());
+            }
+          }
+        }
+      }
+    }
+    const getItemName = (itemHrid) => {
+      return itemNameMap.get(itemHrid) || clientData?.itemDetailMap?.[itemHrid]?.name || itemHrid;
+    };
+    return { actionNameToHrids, getItemName };
+  }
+
+  // src/features/planner/quick-inputs.ts
+  var QUICK_INPUTS_ID = "mwi-lite-quick-inputs";
+  var ADD_MODE_STORAGE_KEY = "planner_quick_inputs_add_mode_v1";
+  var HOUR_PRESETS = [0.5, 1, 2, 4, 8, 12, 24];
+  var COUNT_PRESETS = [
+    { label: "1", value: 1 },
+    { label: "10", value: 10 },
+    { label: "100", value: 100 },
+    { label: "1K", value: 1e3 },
+    { label: "10K", value: 1e4 }
+  ];
+  function parseSpriteHint(detail) {
+    const uses = detail.querySelectorAll("use");
+    for (const u of uses) {
+      if (u.closest("[data-mwi-lite]")) continue;
+      const href = u.getAttribute("href") || u.getAttribute("xlink:href") || "";
+      const hashIdx = href.indexOf("#");
+      if (hashIdx < 0) continue;
+      const key = href.slice(hashIdx + 1).trim();
+      if (href.includes("skills_sprite") && key) {
+        return `/action_types/${key}`;
+      }
+    }
+    return "";
+  }
+  function resolveDetailAction(detail, clientData, lookup) {
+    const actionMap = clientData?.actionDetailMap || {};
+    const nameEl = detail.querySelector('[class*="SkillActionDetail_name"]');
+    const actionName = (nameEl?.textContent || "").trim();
+    if (!actionName) return null;
+    const isInCombatPanel = Boolean(detail.closest('[class*="CombatPanel_combatPanel"]'));
+    const typeHint = isInCombatPanel ? "/action_types/combat" : parseSpriteHint(detail);
+    const candidates = lookup.actionNameToHrids.get(actionName.toLowerCase()) || [];
+    if (typeHint) {
+      const exact = candidates.find((hrid) => actionMap[hrid]?.type === typeHint);
+      if (exact && actionMap[exact]) {
+        return {
+          actionHrid: exact,
+          action: actionMap[exact],
+          isCombat: actionMap[exact].type === "/action_types/combat" || isInCombatPanel
+        };
+      }
+    }
+    for (const hrid of candidates) {
+      const act = actionMap[hrid];
+      if (act) {
+        return {
+          actionHrid: hrid,
+          action: act,
+          isCombat: act.type === "/action_types/combat" || isInCombatPanel
+        };
+      }
+    }
+    return null;
+  }
+  function findSelectedLoadout(detail, actionType, characterLoadouts) {
+    const dropdowns = detail.querySelectorAll('[class*="SkillActionDetail_loadoutDropdown"]');
+    if (!dropdowns.length) return { loadoutId: null, loadout: null };
+    let targetDropdown = null;
+    for (const dd of dropdowns) {
+      const labelText = dd.querySelector('[class*="SkillActionDetail_label"]')?.textContent?.trim() || "";
+      if (/配装|loadout/i.test(labelText)) {
+        targetDropdown = dd;
+        break;
+      }
+    }
+    if (!targetDropdown) {
+      targetDropdown = dropdowns[dropdowns.length - 1];
+    }
+    const selectedName = targetDropdown.querySelector(".MuiSelect-select")?.textContent?.trim() || "";
+    if (!selectedName) return { loadoutId: null, loadout: null };
+    for (const [idStr, ld] of Object.entries(characterLoadouts || {})) {
+      if (!ld || ld.name !== selectedName) continue;
+      if (actionType && ld.actionTypeHrid && ld.actionTypeHrid !== actionType) continue;
+      const numId = Number(idStr || ld.id);
+      if (Number.isFinite(numId) && numId > 0) {
+        return { loadoutId: numId, loadout: ld };
+      }
+    }
+    return { loadoutId: null, loadout: null };
+  }
+  function parseLoadoutItemSpec(raw) {
+    if (typeof raw !== "string" || !raw) return null;
+    const parts = raw.split("::");
+    const hrid = parts.find((p) => p.startsWith("/items/"));
+    if (!hrid) return null;
+    const enh = Number(parts[parts.length - 1]);
+    return { itemHrid: hrid, enhancementLevel: Number.isFinite(enh) && enh >= 0 ? enh : 0 };
+  }
+  function computeDrinkConcentration(clientData, characterItems, selectedLoadout) {
+    const itemDetailMap = clientData?.itemDetailMap || {};
+    const multTable = clientData?.enhancementLevelTotalBonusMultiplierTable || [];
+    let conc = 0;
+    if (selectedLoadout?.wearableMap && typeof selectedLoadout.wearableMap === "object") {
+      for (const raw of Object.values(selectedLoadout.wearableMap)) {
+        const parsed = parseLoadoutItemSpec(raw);
+        if (!parsed) continue;
+        const eq = itemDetailMap[parsed.itemHrid]?.equipmentDetail;
+        if (!eq) continue;
+        const base = eq.noncombatStats?.drinkConcentration || 0;
+        const enh = (eq.noncombatEnhancementBonuses?.drinkConcentration || 0) * (multTable[parsed.enhancementLevel] || 0);
+        conc += base + enh;
+      }
+      return 1 + Math.max(0, conc);
+    }
+    for (const item of characterItems) {
+      if (!item?.itemHrid || !item.itemLocationHrid || item.itemLocationHrid === "/item_locations/inventory") {
+        continue;
+      }
+      const eq = itemDetailMap[item.itemHrid]?.equipmentDetail;
+      if (!eq) continue;
+      const base = eq.noncombatStats?.drinkConcentration || 0;
+      const enh = (eq.noncombatEnhancementBonuses?.drinkConcentration || 0) * (multTable[item.enhancementLevel || 0] || 0);
+      conc += base + enh;
+    }
+    return 1 + Math.max(0, conc);
+  }
+  function computeMaxCraftable(ctx, action, selectedLoadout, lookup) {
+    const inputItems = Array.isArray(action?.inputItems) ? action.inputItems : [];
+    const upgradeHrid = typeof action?.upgradeItemHrid === "string" ? action.upgradeItemHrid : "";
+    if (inputItems.length === 0 && !upgradeHrid) {
+      return { isInfinite: true, max: Infinity, bottleneck: "" };
+    }
+    const clientData = ctx.gameData.getClientData();
+    const characterItems = ctx.gameData.getCharacterItems();
+    const drinkSlotsMap = ctx.gameData.getActionTypeDrinkSlots();
+    const invAll = /* @__PURE__ */ new Map();
+    const invZeroEnh = /* @__PURE__ */ new Map();
+    for (const item of characterItems) {
+      if (!item?.itemHrid || !item.count || item.count <= 0) continue;
+      if (item.itemLocationHrid && item.itemLocationHrid !== "/item_locations/inventory") continue;
+      invAll.set(item.itemHrid, (invAll.get(item.itemHrid) || 0) + item.count);
+      if ((item.enhancementLevel || 0) === 0) {
+        invZeroEnh.set(item.itemHrid, (invZeroEnh.get(item.itemHrid) || 0) + item.count);
+      }
+    }
+    const loadoutDrinks = Array.isArray(selectedLoadout?.drinkItemHrids) ? selectedLoadout.drinkItemHrids.filter((h) => typeof h === "string" && h.length > 0) : [];
+    const slotDrinks = loadoutDrinks.length > 0 ? loadoutDrinks : (drinkSlotsMap.get(action.type) || []).map((d) => d?.itemHrid).filter(Boolean);
+    const hasArtisan = slotDrinks.includes("/items/artisan_tea");
+    const conc = hasArtisan ? computeDrinkConcentration(clientData, characterItems, selectedLoadout) : 1;
+    const artisanSaving = hasArtisan ? 0.1 * conc : 0;
+    let minMax = Infinity;
+    let bottleneck = "";
+    for (const inp of inputItems) {
+      const hrid = inp?.itemHrid;
+      const baseCount = Number(inp?.count) || 0;
+      if (!hrid || baseCount <= 0) continue;
+      const effNeed = baseCount * (1 - artisanSaving);
+      const have = invAll.get(hrid) || 0;
+      const canDo = effNeed > 0 ? Math.floor(have / effNeed) : Infinity;
+      if (canDo < minMax) {
+        minMax = canDo;
+        bottleneck = lookup.getItemName(hrid);
+      }
+    }
+    if (upgradeHrid) {
+      const haveBase = invZeroEnh.get(upgradeHrid) || 0;
+      if (haveBase < minMax) {
+        minMax = haveBase;
+        bottleneck = lookup.getItemName(upgradeHrid);
+      }
+    }
+    return {
+      isInfinite: !Number.isFinite(minMax),
+      max: Number.isFinite(minMax) ? Math.max(0, minMax) : Infinity,
+      bottleneck
+    };
+  }
+  function parseCurrentInputCount(input) {
+    const raw = input.value.trim();
+    if (!raw || raw === "∞" || raw.toLowerCase() === "infinity") return 0;
+    const n = Number(raw.replace(/[,\s]/g, ""));
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+  }
+  function createQuickInputsModule() {
+    let ctx = null;
+    let addMode = false;
+    let refreshTimer = null;
+    let cachedClientRef = null;
+    let cachedLookup = null;
+    const getLookup = () => {
+      if (!ctx) return null;
+      const clientData = ctx.gameData.getClientData();
+      if (!clientData) return null;
+      if (!cachedLookup || cachedClientRef !== clientData) {
+        cachedClientRef = clientData;
+        cachedLookup = buildLocalizedNameLookup(ctx);
+      }
+      return cachedLookup;
+    };
+    const injectOrRefresh = () => {
+      if (!ctx) return;
+      const detail = document.querySelector('[class*="SkillActionDetail_skillActionDetail"]');
+      if (!detail) return;
+      const firstSection = detail.querySelector('[class*="maxActionCountInput"]');
+      const mainInput = firstSection?.querySelector('input[class*="Input_input"]');
+      if (!firstSection || !mainInput) return;
+      const clientData = ctx.gameData.getClientData();
+      const lookup = getLookup();
+      const resolved = clientData && lookup ? resolveDetailAction(detail, clientData, lookup) : null;
+      const actionHrid = resolved?.actionHrid || "";
+      const action = resolved?.action || null;
+      const isCombat = resolved ? resolved.isCombat : Boolean(detail.closest('[class*="CombatPanel_combatPanel"]'));
+      const characterLoadouts = ctx.gameData.getCharacterLoadouts();
+      const { loadoutId, loadout } = findSelectedLoadout(detail, action?.type || "", characterLoadouts);
+      let effectiveSecPerCount = 0;
+      if (!isCombat && actionHrid && clientData) {
+        const currentActions = [...ctx.gameData.getCharacterActions()].sort(
+          (a, b) => (a.ordinal ?? 0) - (b.ordinal ?? 0)
+        );
+        const currentFirstLoadoutId = currentActions[0]?.characterLoadoutID ?? null;
+        const est = estimateActionTiming({
+          action: loadoutId ? { actionHrid, characterLoadoutID: loadoutId } : { actionHrid },
+          actionIndex: loadoutId ? 1 : 0,
+          currentActionLoadoutId: currentFirstLoadoutId,
+          clientData,
+          buffSources: ctx.gameData.getActionTypeBuffSources(),
+          characterSkills: ctx.gameData.getCharacterSkills(),
+          characterItems: ctx.gameData.getCharacterItems(),
+          characterQuests: ctx.gameData.getCharacterQuests(),
+          characterLoadouts,
+          drinkSlotsMap: ctx.gameData.getActionTypeDrinkSlots()
+        });
+        effectiveSecPerCount = est.effectiveSecPerCount;
+      }
+      const maxResult = action && !isCombat && lookup ? computeMaxCraftable(ctx, action, loadout, lookup) : { isInfinite: true, max: Infinity, bottleneck: "" };
+      const sig = `${actionHrid}|${loadoutId ?? ""}|${effectiveSecPerCount.toFixed(3)}|${maxResult.isInfinite ? "inf" : maxResult.max}|${addMode ? 1 : 0}|${ctx.i18n.getLang()}`;
+      let container = detail.querySelector(`#${QUICK_INPUTS_ID}`);
+      if (container && container.dataset.mwiSig === sig) {
+        return;
+      }
+      if (!container) {
+        container = document.createElement("div");
+        container.id = QUICK_INPUTS_ID;
+        container.setAttribute("data-mwi-lite", "1");
+        firstSection.insertAdjacentElement("afterend", container);
+      }
+      container.dataset.mwiSig = sig;
+      container.textContent = "";
+      const applyValue = (deltaOrTarget) => {
+        const target = addMode ? parseCurrentInputCount(mainInput) + deltaOrTarget : deltaOrTarget;
+        setReactInputValue2(mainInput, Math.max(0, Math.floor(target)), false);
+      };
+      if (!isCombat && effectiveSecPerCount > 0) {
+        const hoursRow = document.createElement("div");
+        hoursRow.className = "mwi-lite-qi-row";
+        for (const h of HOUR_PRESETS) {
+          const count = Math.max(1, Math.round(h * 3600 / effectiveSecPerCount));
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "Button_button__1Fe9z Button_small__3fqC7 mwi-lite-qi-btn mwi-lite-qi-hour";
+          btn.textContent = `${h}h`;
+          btn.title = `${h}h ≈ ${count.toLocaleString()} ${ctx.i18n.t("次", "acts")} (${effectiveSecPerCount.toFixed(2)}s/${ctx.i18n.t("次", "act")})`;
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            applyValue(count);
+          });
+          hoursRow.appendChild(btn);
+        }
+        container.appendChild(hoursRow);
+      }
+      const countRow = document.createElement("div");
+      countRow.className = "mwi-lite-qi-row";
+      const addToggle = document.createElement("button");
+      addToggle.type = "button";
+      addToggle.className = "Button_button__1Fe9z Button_small__3fqC7 mwi-lite-qi-btn mwi-lite-qi-add";
+      addToggle.textContent = "+";
+      addToggle.dataset.active = addMode ? "1" : "0";
+      addToggle.title = addMode ? ctx.i18n.t("累加模式已开启：点击按钮累加数量", "Add Mode ON: click presets to add to current value") : ctx.i18n.t("点击开启累加模式 (+)", "Click to enable Add Mode (+)");
+      addToggle.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        addMode = !addMode;
+        ctx?.storage.set(ADD_MODE_STORAGE_KEY, addMode);
+        injectOrRefresh();
+      });
+      countRow.appendChild(addToggle);
+      for (const preset of COUNT_PRESETS) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "Button_button__1Fe9z Button_small__3fqC7 mwi-lite-qi-btn";
+        btn.textContent = addMode ? `+${preset.label}` : preset.label;
+        btn.title = `${addMode ? "+" : ""}${preset.value.toLocaleString()}`;
+        btn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          applyValue(preset.value);
+        });
+        countRow.appendChild(btn);
+      }
+      const maxBtn = document.createElement("button");
+      maxBtn.type = "button";
+      maxBtn.className = "Button_button__1Fe9z Button_small__3fqC7 mwi-lite-qi-btn mwi-lite-qi-max";
+      if (maxResult.isInfinite) {
+        maxBtn.textContent = "∞";
+        maxBtn.title = ctx.i18n.t("设为无限次 (∞)", "Set unlimited (∞)");
+      } else {
+        const formatted = formatActionCount(maxResult.max);
+        maxBtn.textContent = `Max(${formatted})`;
+        maxBtn.title = maxResult.bottleneck ? `${ctx.i18n.t("最大可做", "Max craftable")}: ${maxResult.max.toLocaleString()} · ${ctx.i18n.t("受限材料", "Bottleneck")}: ${maxResult.bottleneck}` : `${ctx.i18n.t("最大可做", "Max craftable")}: ${maxResult.max.toLocaleString()}`;
+      }
+      maxBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (maxResult.isInfinite) {
+          const infBtn = firstSection.querySelector('button:has([aria-label="Unlimited"])');
+          if (infBtn && !infBtn.disabled) {
+            infBtn.click();
+          } else {
+            setReactInputValue2(mainInput, "∞", false);
+          }
+          return;
+        }
+        applyValue(maxResult.max);
+      });
+      countRow.appendChild(maxBtn);
+      container.appendChild(countRow);
+    };
+    const scheduleRefresh = () => {
+      if (refreshTimer !== null) return;
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = null;
+        injectOrRefresh();
+      }, 60);
+    };
+    return {
+      id: "planner-quick-inputs",
+      nameZh: "动作快捷数量输入",
+      nameEn: "Quick Input Buttons",
+      descriptionZh: "在技能/战斗详情数量框下方添加快捷小时(0.5h~24h)、固定次数(1~10K)、累加(+)与最大可做(Max)按钮。",
+      descriptionEn: "Adds preset hour (0.5h–24h), count (1–10K), add (+) mode, and Max craftable buttons to action details.",
+      category: "planner",
+      defaultEnabled: true,
+      routes: ["production", "combat", "tasks"],
+      init(context) {
+        ctx = context;
+        addMode = context.storage.get(ADD_MODE_STORAGE_KEY, false);
+        const unregStyle = context.addStyle(
+          "planner-quick-inputs-css",
+          `
+        #${QUICK_INPUTS_ID} {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          margin: 4px 0 6px 0;
+        }
+        #${QUICK_INPUTS_ID} .mwi-lite-qi-row {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 4px;
+        }
+        #${QUICK_INPUTS_ID} .mwi-lite-qi-btn {
+          height: 22px !important;
+          min-width: 26px !important;
+          padding: 0 7px !important;
+          font-size: 11px !important;
+          font-weight: 700 !important;
+          font-family: var(--mwi-px-mono, monospace) !important;
+          line-height: 20px !important;
+          border-radius: 0 !important;
+          border: 1px solid var(--mwi-px-border, #9dbbff) !important;
+          background: var(--mwi-px-btn-bg, linear-gradient(180deg, #324a8f 0%, #22356b 100%)) !important;
+          color: var(--mwi-px-text, #e2e8f0) !important;
+          box-shadow: 0 0 0 1px #080d1a !important;
+          cursor: pointer !important;
+        }
+        #${QUICK_INPUTS_ID} .mwi-lite-qi-btn:hover {
+          background: var(--mwi-px-btn-hover, linear-gradient(180deg, #405eb3 0%, #2b4385 100%)) !important;
+          border-color: var(--mwi-px-border-bright, #d5e5ff) !important;
+        }
+        #${QUICK_INPUTS_ID} .mwi-lite-qi-hour {
+          border-color: #60a5fa !important;
+          color: #dbeafe !important;
+        }
+        #${QUICK_INPUTS_ID} .mwi-lite-qi-add[data-active="1"] {
+          background: var(--mwi-px-btn-green, linear-gradient(180deg, #1f6d43 0%, #165132 100%)) !important;
+          border-color: var(--mwi-px-green, #4ade80) !important;
+          color: #f0fdf4 !important;
+        }
+        #${QUICK_INPUTS_ID} .mwi-lite-qi-max {
+          background: var(--mwi-px-btn-gold, linear-gradient(180deg, #7c580c 0%, #523907 100%)) !important;
+          border-color: var(--mwi-px-gold, #fde047) !important;
+          color: #fef08a !important;
+        }
+        `
+        );
+        const unsubs = [
+          context.gameData.on("items_updated", scheduleRefresh),
+          context.gameData.on("character_initialized", () => {
+            cachedLookup = null;
+            scheduleRefresh();
+          }),
+          context.wsBus.on("actions_updated", scheduleRefresh),
+          context.wsBus.on("consumable_buffs_updated", scheduleRefresh)
+        ];
+        return () => {
+          if (refreshTimer !== null) {
+            window.clearTimeout(refreshTimer);
+            refreshTimer = null;
+          }
+          unsubs.forEach((u) => u());
+          unregStyle();
+          cachedClientRef = null;
+          cachedLookup = null;
+          document.getElementById(QUICK_INPUTS_ID)?.remove();
+          ctx = null;
+        };
+      },
+      onDom() {
+        injectOrRefresh();
+      }
+    };
+  }
+
+  // src/features/planner/skill-stock.ts
+  var STOCK_BADGE_CLASS = "mwi-lite-skill-stock";
+  function buildSkillActionCache(ctx, clientData) {
+    const byKey = /* @__PURE__ */ new Map();
+    const actionMap = clientData?.actionDetailMap || {};
+    for (const [hrid, act] of Object.entries(actionMap)) {
+      if (!act || act.type === "/action_types/combat") continue;
+      const key = hrid.split("/").pop() || "";
+      if (key && !byKey.has(key)) byKey.set(key, hrid);
+    }
+    return {
+      clientRef: clientData,
+      byKey,
+      lookup: buildLocalizedNameLookup(ctx)
+    };
+  }
+  function resolveTileOutputs(tile, clientData, cache) {
+    const itemMap = clientData?.itemDetailMap || {};
+    const uses = tile.querySelectorAll("use");
+    let spriteType = "";
+    let key = "";
+    for (const u of uses) {
+      if (u.closest("[data-mwi-lite]")) continue;
+      const href = u.getAttribute("href") || u.getAttribute("xlink:href") || "";
+      const hashIdx = href.indexOf("#");
+      if (hashIdx < 0) continue;
+      key = href.slice(hashIdx + 1).trim();
+      if (href.includes("items_sprite")) spriteType = "items";
+      else if (href.includes("actions_sprite")) spriteType = "actions";
+      if (key) break;
+    }
+    if (spriteType === "items" && key) {
+      const actionHrid = cache.byKey.get(key);
+      if (actionHrid) {
+        const outs = resolveActionOutputHrids(actionHrid, clientData);
+        if (outs.length > 0) return outs;
+      }
+      const itemHrid = `/items/${key}`;
+      return itemMap[itemHrid] ? [itemHrid] : [];
+    }
+    if (spriteType === "actions" && key) {
+      const actionHrid = cache.byKey.get(key);
+      if (actionHrid) return resolveActionOutputHrids(actionHrid, clientData);
+    }
+    const name = tile.querySelector('[class*="SkillAction_name"]')?.textContent?.trim() || "";
+    if (name) {
+      const candidates = cache.lookup.actionNameToHrids.get(name.toLowerCase()) || [];
+      for (const hrid of candidates) {
+        const outs = resolveActionOutputHrids(hrid, clientData);
+        if (outs.length > 0) return outs;
+      }
+    }
+    return [];
+  }
+  function createSkillStockModule() {
+    let ctx = null;
+    let cache = null;
+    let refreshTimer = null;
+    const updateBadges = () => {
+      if (!ctx) return;
+      const tiles = document.querySelectorAll(
+        '[class*="GatheringProductionSkillPanel_"] [class*="SkillAction_skillAction"]'
+      );
+      if (!tiles.length) return;
+      const clientData = ctx.gameData.getClientData();
+      if (!clientData) return;
+      if (!cache || cache.clientRef !== clientData) {
+        cache = buildSkillActionCache(ctx, clientData);
+      }
+      const invCounts = buildInventoryCountMap2(ctx);
+      for (const tile of tiles) {
+        const outputHrids = resolveTileOutputs(tile, clientData, cache);
+        const existing = tile.querySelector(`.${STOCK_BADGE_CLASS}`);
+        if (outputHrids.length === 0) {
+          existing?.remove();
+          continue;
+        }
+        let text = "";
+        let tooltip = "";
+        let isMulti = false;
+        let isZero = false;
+        if (outputHrids.length === 1) {
+          const hrid = outputHrids[0];
+          const count = invCounts.get(hrid) || 0;
+          const itemName = cache.lookup.getItemName(hrid);
+          text = formatActionCount(count);
+          tooltip = `${itemName}: ${count.toLocaleString()}`;
+          isZero = count === 0;
+        } else {
+          isMulti = true;
+          let total = 0;
+          const lines = [];
+          for (const hrid of outputHrids) {
+            const count = invCounts.get(hrid) || 0;
+            total += count;
+            lines.push(`${cache.lookup.getItemName(hrid)}: ${count.toLocaleString()}`);
+          }
+          text = `Σ${formatActionCount(total)}`;
+          tooltip = lines.join("\n");
+          isZero = total === 0;
+        }
+        const sig = `${text}|${isMulti ? 1 : 0}|${isZero ? 1 : 0}|${tooltip}`;
+        if (existing && existing.dataset.mwiStockSig === sig) {
+          continue;
+        }
+        const badge = existing || document.createElement("div");
+        if (!existing) {
+          badge.className = STOCK_BADGE_CLASS;
+          badge.setAttribute("data-mwi-lite", "1");
+          tile.appendChild(badge);
+        }
+        badge.dataset.mwiStockSig = sig;
+        badge.dataset.multi = isMulti ? "1" : "0";
+        badge.dataset.zero = isZero ? "1" : "0";
+        badge.textContent = text;
+        badge.title = tooltip;
+      }
+    };
+    const scheduleUpdate = () => {
+      if (refreshTimer !== null) return;
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = null;
+        updateBadges();
+      }, 80);
+    };
+    return {
+      id: "planner-skill-stock",
+      nameZh: "技能页仓库库存显示",
+      nameEn: "Skill Page Item Count",
+      descriptionZh: "在挤奶、采摘、伐木、制作等技能页每个动作卡片右下角直接显示仓库现有产物数量（多掉落区显示总计与明细提示）。",
+      descriptionEn: "Displays current inventory stock badges directly on skill action tiles (with breakdown tooltip for multi-drop zones).",
+      category: "planner",
+      defaultEnabled: true,
+      routes: ["production"],
+      init(context) {
+        ctx = context;
+        const unregStyle = context.addStyle(
+          "planner-skill-stock-css",
+          `
+        [class*="GatheringProductionSkillPanel_"] [class*="SkillAction_skillAction"]:has(.${STOCK_BADGE_CLASS}) {
+          position: relative !important;
+        }
+        .${STOCK_BADGE_CLASS} {
+          position: absolute;
+          right: 4px;
+          bottom: 4px;
+          z-index: 2;
+          pointer-events: auto;
+          padding: 1px 5px;
+          font-size: 11px;
+          font-weight: 700;
+          line-height: 1.3;
+          font-family: var(--mwi-px-mono, monospace);
+          background: rgba(12, 18, 40, 0.88);
+          border: 1px solid var(--mwi-px-border, #9dbbff);
+          color: #a5f3fc;
+          box-shadow: 0 0 0 1px #060913;
+          white-space: nowrap;
+        }
+        .${STOCK_BADGE_CLASS}[data-multi="1"] {
+          border-color: var(--mwi-px-gold, #fde047);
+          color: #fef08a;
+        }
+        .${STOCK_BADGE_CLASS}[data-zero="1"] {
+          border-color: #475569;
+          color: #64748b;
+          opacity: 0.78;
+        }
+        `
+        );
+        const unsubs = [
+          context.gameData.on("items_updated", scheduleUpdate),
+          context.gameData.on("character_initialized", () => {
+            cache = null;
+            scheduleUpdate();
+          })
+        ];
+        return () => {
+          if (refreshTimer !== null) {
+            window.clearTimeout(refreshTimer);
+            refreshTimer = null;
+          }
+          unsubs.forEach((u) => u());
+          unregStyle();
+          cache = null;
+          document.querySelectorAll(`.${STOCK_BADGE_CLASS}`).forEach((el) => el.remove());
+          ctx = null;
+        };
+      },
+      onDom() {
+        updateBadges();
+      }
+    };
+  }
+
   // src/features/planner/task-board.ts
   var TASK_AUTO_N1_MODULE_ID = "planner-task-auto-n1";
   var TASK_SORT_PREF_KEY = "task_board_sort_pref_v1";
@@ -22633,19 +23340,6 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     }
     const n = Number(numStr);
     return Number.isFinite(n) ? Math.floor(n * mul) : null;
-  }
-  function formatActionCount(n) {
-    if (n >= 1e9) return `${(n / 1e9).toFixed(1).replace(/\.0$/, "")}B`;
-    if (n >= 1e6) return `${(n / 1e6).toFixed(1).replace(/\.0$/, "")}M`;
-    if (n >= 1e3) return `${(n / 1e3).toFixed(1).replace(/\.0$/, "")}K`;
-    return String(n);
-  }
-  function setReactInputValue2(input, value, focusInput = true) {
-    const proto = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
-    proto?.set?.call(input, String(value));
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-    if (focusInput) input.focus();
   }
   function computeQuickQueueCount(baseCount, autoMinusOne) {
     if (baseCount === null || !Number.isFinite(baseCount) || baseCount <= 0) return null;
@@ -22828,41 +23522,6 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       orderMap.set(hrid, 9e8 + (Number.isFinite(lvl) ? Math.round(lvl * 100) : 999999));
     }
     return orderMap;
-  }
-  function resolveActionOutputHrids(actionHrid, clientData) {
-    const action = clientData?.actionDetailMap?.[actionHrid];
-    if (!action || action.type === "/action_types/combat") return [];
-    const itemMap = clientData?.itemDetailMap || {};
-    const outputs = [];
-    const pushUnique = (hrid) => {
-      if (typeof hrid === "string" && itemMap[hrid] && !outputs.includes(hrid)) {
-        outputs.push(hrid);
-      }
-    };
-    if (Array.isArray(action.outputItems)) {
-      for (const out of action.outputItems) {
-        pushUnique(out?.itemHrid);
-      }
-    }
-    if (outputs.length === 0 && Array.isArray(action.dropTable)) {
-      for (const drop of action.dropTable) {
-        pushUnique(drop?.itemHrid);
-      }
-    }
-    if (outputs.length === 0) {
-      const actionKey = actionHrid.split("/").pop() || "";
-      if (actionKey) pushUnique(`/items/${actionKey}`);
-    }
-    return outputs;
-  }
-  function buildInventoryCountMap2(context) {
-    const counts = /* @__PURE__ */ new Map();
-    for (const item of context.gameData.getCharacterItems()) {
-      if (!item?.itemHrid || !item.count || item.count <= 0) continue;
-      if (item.itemLocationHrid && item.itemLocationHrid !== "/item_locations/inventory") continue;
-      counts.set(item.itemHrid, (counts.get(item.itemHrid) || 0) + item.count);
-    }
-    return counts;
   }
   function createTaskBoardModule() {
     let ctx = null;
@@ -24190,6 +24849,8 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     createActionTimerModule(),
     createQueueNextModule(),
     createItemCalculatorModule(),
+    createQuickInputsModule(),
+    createSkillStockModule(),
     createTaskBoardModule(),
     createTaskAutoMinusOneModule()
   ];
