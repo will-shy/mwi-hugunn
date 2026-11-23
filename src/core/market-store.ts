@@ -12,7 +12,10 @@ declare const GM_xmlhttpRequest:
     }) => void)
   | undefined;
 
-const MARKET_API_URL = "https://www.milkywayidle.com/game_data/marketplace.json";
+const MARKET_API_FALLBACK_URLS = [
+  "https://www.milkywayidlecn.com/game_data/marketplace.json",
+  "https://www.milkywayidle.com/game_data/marketplace.json",
+];
 const Q7_API_HOST = "https://q7.nainai.eu.org";
 const DB_NAME = "MWILiteMarketDB";
 const DB_VERSION = 1;
@@ -20,6 +23,26 @@ const STORE_PRICES = "prices";
 const STORE_VOLUME = "volume";
 const PRICES_TTL_MS = 30 * 60 * 1000;
 const VOLUME_TTL_MS = 5 * 60 * 1000;
+
+function getMarketApiUrls(): string[] {
+  const urls: string[] = [];
+  try {
+    const { protocol, origin, hostname } = window.location;
+    if ((protocol === "https:" || protocol === "http:") && hostname.includes("milkywayidle")) {
+      urls.push(`${origin}/game_data/marketplace.json`);
+    }
+  } catch {
+    // Ignore non-browser contexts
+  }
+  for (const fallback of MARKET_API_FALLBACK_URLS) {
+    if (!urls.includes(fallback)) urls.push(fallback);
+  }
+  return urls;
+}
+
+function isValidMarketData(marketData: unknown): marketData is Record<string, Record<string, { a: number; b: number }>> {
+  return !!marketData && typeof marketData === "object" && Object.keys(marketData).length > 0;
+}
 
 function normalizePrice(val: unknown): number | null {
   return typeof val === "number" && Number.isFinite(val) && val >= 0 ? val : null;
@@ -206,7 +229,7 @@ class LiteMarketStore implements MarketStore {
             STORE_PRICES,
             "snapshot"
           );
-          if (cached?.marketData && Date.now() - cached.fetchedAt < PRICES_TTL_MS) {
+          if (isValidMarketData(cached?.marketData) && Date.now() - cached.fetchedAt < PRICES_TTL_MS) {
             this.marketData = cached.marketData;
             this.lastFetchTs = cached.fetchedAt;
             this.notify();
@@ -214,31 +237,36 @@ class LiteMarketStore implements MarketStore {
           }
         }
 
-        const data = await requestJson(MARKET_API_URL, 10000);
-        if (data?.marketData && typeof data.marketData === "object") {
-          this.marketData = data.marketData;
-          this.lastFetchTs = Date.now();
-          void this.idbSet(STORE_PRICES, {
-            key: "snapshot",
-            marketData: data.marketData,
-            apiTimestamp: data.timestamp || 0,
-            fetchedAt: this.lastFetchTs,
-          });
-          this.notify();
-          return true;
+        for (const url of getMarketApiUrls()) {
+          try {
+            const data = await requestJson(url, 7000);
+            if (isValidMarketData(data?.marketData)) {
+              this.marketData = data.marketData;
+              this.lastFetchTs = Date.now();
+              void this.idbSet(STORE_PRICES, {
+                key: "snapshot",
+                marketData: data.marketData,
+                apiTimestamp: data.timestamp || 0,
+                fetchedAt: this.lastFetchTs,
+              });
+              this.notify();
+              return true;
+            }
+          } catch {
+            // Try next candidate URL
+          }
         }
       } catch {
-        // Fallback to stale cache if network failed
+        // Fallback below
+      } finally {
         if (!this.marketData) {
           const stale = await this.idbGet<{ marketData: any; fetchedAt: number }>(STORE_PRICES, "snapshot");
-          if (stale?.marketData) {
+          if (isValidMarketData(stale?.marketData)) {
             this.marketData = stale.marketData;
             this.lastFetchTs = stale.fetchedAt || 0;
             this.notify();
-            return true;
           }
         }
-      } finally {
         this.loadingPrices = null;
       }
       return this.marketData !== null;

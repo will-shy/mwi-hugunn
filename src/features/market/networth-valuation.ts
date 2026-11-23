@@ -298,7 +298,12 @@ export class ToolashaNetworthEvaluator {
     }
 
     const itemDetails = clientData?.itemDetailMap?.[itemHrid];
-    if (!itemDetails?.enhancementCosts?.length || targetLevel < 1 || targetLevel > 20) {
+    if (
+      !marketStore.isPricesLoaded() ||
+      !itemDetails?.enhancementCosts?.length ||
+      targetLevel < 1 ||
+      targetLevel > 20
+    ) {
       return null;
     }
 
@@ -323,9 +328,10 @@ export class ToolashaNetworthEvaluator {
           unitPrice = ask > 0 ? ask : 0;
         }
         if (unitPrice <= 0) {
+          const matDetail = clientData?.itemDetailMap?.[mat.itemHrid];
           unitPrice =
             this.getProductionCost(mat.itemHrid, clientData, marketStore) ||
-            itemDetails?.sellPrice ||
+            matDetail?.sellPrice ||
             0;
         }
       }
@@ -350,7 +356,9 @@ export class ToolashaNetworthEvaluator {
     for (let lvl = 1; lvl <= targetLevel; lvl++) {
       let bestCost = Infinity;
       const strategies = [0];
-      for (let p = 2; p <= lvl; p++) strategies.push(p);
+      if (protectPrice > 0) {
+        for (let p = 2; p <= lvl; p++) strategies.push(p);
+      }
 
       for (const protectFrom of strategies) {
         const res = solveEnhancementMarkov(

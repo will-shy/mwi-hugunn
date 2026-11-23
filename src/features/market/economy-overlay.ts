@@ -345,8 +345,16 @@ export function createNetworthModule(): FeatureModule {
       headerLevel.parentElement.insertBefore(badge, headerLevel.nextSibling);
     }
 
-    badge.textContent = `💰 ${formatCoins(lastBreakdown.total)}`;
-    badge.title = ctx.i18n.t("点击查看/收起净资产明细", "Click to toggle Net Worth breakdown");
+    const pricesLoaded = ctx.marketStore.isPricesLoaded();
+    badge.textContent = pricesLoaded
+      ? `💰 ${formatCoins(lastBreakdown.total)}`
+      : `💰 ${formatCoins(lastBreakdown.total)} (!)`;
+    badge.title = pricesLoaded
+      ? ctx.i18n.t("点击查看/收起净资产明细", "Click to toggle Net Worth breakdown")
+      : ctx.i18n.t(
+          "市场行情尚未加载完成或失败，估值仅含基础金币；点击查看并重试",
+          "Market data not loaded yet; click to view details or retry"
+        );
 
     if (popoverOpen) renderPopover();
   };
@@ -373,10 +381,17 @@ export function createNetworthModule(): FeatureModule {
       pop.style.right = `${right}px`;
     }
     const b = lastBreakdown;
+    const pricesLoaded = ctx.marketStore.isPricesLoaded();
     const modeLabel =
       b.pricingMode === "ask"
         ? ctx.i18n.t("卖一价 Ask", "Ask")
         : ctx.i18n.t("买一价 Bid", "Bid");
+    const warnBanner = pricesLoaded
+      ? ""
+      : `<div class="mwi-lite-nw-warn">
+          <span>${ctx.i18n.t("⚠ 行情数据未加载（可能因网络或跨域阻塞）", "⚠ Market prices not loaded")}</span>
+          <button type="button" class="mwi-lite-nw-retry">${ctx.i18n.t("重试", "Retry")}</button>
+        </div>`;
     pop.innerHTML = `
       <div class="mwi-lite-nw-header">
         <span class="mwi-lite-nw-title">${ctx.i18n.t("净资产估算 (Toolasha 对齐)", "Net Worth Breakdown")}</span>
@@ -385,6 +400,7 @@ export function createNetworthModule(): FeatureModule {
           <button type="button" class="mwi-lite-nw-close" aria-label="Close">✕</button>
         </div>
       </div>
+      ${warnBanner}
       <div class="mwi-lite-nw-section">${ctx.i18n.t("流动资产 (Current Assets)", "Current Assets")}</div>
       <div class="mwi-lite-nw-row"><span>${ctx.i18n.t("现金金币", "Coins")}</span><b>${formatCoins(b.coins)}</b></div>
       <div class="mwi-lite-nw-row"><span>${ctx.i18n.t("仓库库存", "Inventory")}</span><b>${formatCoins(b.inventory)}</b></div>
@@ -398,6 +414,18 @@ export function createNetworthModule(): FeatureModule {
       <div class="mwi-lite-nw-subtotal"><span>${ctx.i18n.t("固定资产小计", "Fixed Subtotal")}</span><b>${formatCoins(b.fixedAssets)}</b></div>
       <div class="mwi-lite-nw-total"><span>${ctx.i18n.t("净资产总计", "Total Net Worth")}</span><b>${formatCoins(b.total)}</b></div>
     `;
+
+    pop.querySelector(".mwi-lite-nw-retry")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!ctx) return;
+      const btn = e.currentTarget as HTMLButtonElement;
+      btn.disabled = true;
+      btn.textContent = ctx.i18n.t("加载中...", "Loading...");
+      void ctx.marketStore.ensurePricesLoaded(true).finally(() => {
+        evaluator.invalidate();
+        computeNetWorth();
+      });
+    });
 
     pop.querySelector(".mwi-lite-nw-close")?.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -514,6 +542,29 @@ export function createNetworthModule(): FeatureModule {
           font-size: 11px;
           font-weight: 800;
           color: var(--mwi-px-sub, #9dbbff);
+        }
+        #${NW_POPOVER_ID} .mwi-lite-nw-warn {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          margin-bottom: 6px;
+          padding: 5px 7px;
+          background: #3d2a06;
+          border: 1px solid var(--mwi-px-gold, #fde047);
+          color: var(--mwi-px-gold, #fde047);
+          font-size: 11px;
+        }
+        #${NW_POPOVER_ID} .mwi-lite-nw-retry {
+          background: var(--mwi-px-btn-gold, linear-gradient(180deg, #7c580c 0%, #523907 100%));
+          border: 1px solid var(--mwi-px-gold, #fde047);
+          color: #fef08a;
+          font-family: inherit;
+          font-size: 10.5px;
+          font-weight: 700;
+          padding: 1px 6px;
+          cursor: pointer;
+          flex-shrink: 0;
         }
         #${NW_POPOVER_ID} .mwi-lite-nw-row,
         #${NW_POPOVER_ID} .mwi-lite-nw-subtotal,

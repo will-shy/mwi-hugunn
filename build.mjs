@@ -44,6 +44,10 @@ const banner = `// ==UserScript==
 // @connect      q7.nainai.eu.org
 // @connect      milkywayidle.com
 // @connect      www.milkywayidle.com
+// @connect      test.milkywayidle.com
+// @connect      milkywayidlecn.com
+// @connect      www.milkywayidlecn.com
+// @connect      test.milkywayidlecn.com
 // @connect      raw.githubusercontent.com
 // @connect      shykai.github.io
 // ==/UserScript==

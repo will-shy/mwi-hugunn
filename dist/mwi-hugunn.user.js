@@ -28,6 +28,10 @@
 // @connect      q7.nainai.eu.org
 // @connect      milkywayidle.com
 // @connect      www.milkywayidle.com
+// @connect      test.milkywayidle.com
+// @connect      milkywayidlecn.com
+// @connect      www.milkywayidlecn.com
+// @connect      test.milkywayidlecn.com
 // @connect      raw.githubusercontent.com
 // @connect      shykai.github.io
 // ==/UserScript==
@@ -1037,7 +1041,10 @@
   var i18n = new LiteI18n();
 
   // src/core/market-store.ts
-  var MARKET_API_URL = "https://www.milkywayidle.com/game_data/marketplace.json";
+  var MARKET_API_FALLBACK_URLS = [
+    "https://www.milkywayidlecn.com/game_data/marketplace.json",
+    "https://www.milkywayidle.com/game_data/marketplace.json"
+  ];
   var Q7_API_HOST = "https://q7.nainai.eu.org";
   var DB_NAME = "MWILiteMarketDB";
   var DB_VERSION = 1;
@@ -1045,6 +1052,23 @@
   var STORE_VOLUME = "volume";
   var PRICES_TTL_MS = 30 * 60 * 1e3;
   var VOLUME_TTL_MS = 5 * 60 * 1e3;
+  function getMarketApiUrls() {
+    const urls = [];
+    try {
+      const { protocol, origin, hostname } = window.location;
+      if ((protocol === "https:" || protocol === "http:") && hostname.includes("milkywayidle")) {
+        urls.push(`${origin}/game_data/marketplace.json`);
+      }
+    } catch {
+    }
+    for (const fallback of MARKET_API_FALLBACK_URLS) {
+      if (!urls.includes(fallback)) urls.push(fallback);
+    }
+    return urls;
+  }
+  function isValidMarketData(marketData) {
+    return !!marketData && typeof marketData === "object" && Object.keys(marketData).length > 0;
+  }
   function normalizePrice(val) {
     return typeof val === "number" && Number.isFinite(val) && val >= 0 ? val : null;
   }
@@ -1207,37 +1231,41 @@
               STORE_PRICES,
               "snapshot"
             );
-            if (cached?.marketData && Date.now() - cached.fetchedAt < PRICES_TTL_MS) {
+            if (isValidMarketData(cached?.marketData) && Date.now() - cached.fetchedAt < PRICES_TTL_MS) {
               this.marketData = cached.marketData;
               this.lastFetchTs = cached.fetchedAt;
               this.notify();
               return true;
             }
           }
-          const data = await requestJson(MARKET_API_URL, 1e4);
-          if (data?.marketData && typeof data.marketData === "object") {
-            this.marketData = data.marketData;
-            this.lastFetchTs = Date.now();
-            void this.idbSet(STORE_PRICES, {
-              key: "snapshot",
-              marketData: data.marketData,
-              apiTimestamp: data.timestamp || 0,
-              fetchedAt: this.lastFetchTs
-            });
-            this.notify();
-            return true;
+          for (const url of getMarketApiUrls()) {
+            try {
+              const data = await requestJson(url, 7e3);
+              if (isValidMarketData(data?.marketData)) {
+                this.marketData = data.marketData;
+                this.lastFetchTs = Date.now();
+                void this.idbSet(STORE_PRICES, {
+                  key: "snapshot",
+                  marketData: data.marketData,
+                  apiTimestamp: data.timestamp || 0,
+                  fetchedAt: this.lastFetchTs
+                });
+                this.notify();
+                return true;
+              }
+            } catch {
+            }
           }
         } catch {
+        } finally {
           if (!this.marketData) {
             const stale = await this.idbGet(STORE_PRICES, "snapshot");
-            if (stale?.marketData) {
+            if (isValidMarketData(stale?.marketData)) {
               this.marketData = stale.marketData;
               this.lastFetchTs = stale.fetchedAt || 0;
               this.notify();
-              return true;
             }
           }
-        } finally {
           this.loadingPrices = null;
         }
         return this.marketData !== null;
@@ -16637,7 +16665,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         return this.enhancementCostCache.get(cacheKey);
       }
       const itemDetails = clientData?.itemDetailMap?.[itemHrid];
-      if (!itemDetails?.enhancementCosts?.length || targetLevel < 1 || targetLevel > 20) {
+      if (!marketStore2.isPricesLoaded() || !itemDetails?.enhancementCosts?.length || targetLevel < 1 || targetLevel > 20) {
         return null;
       }
       const itemLevel = itemDetails.itemLevel || 1;
@@ -16659,7 +16687,8 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
             unitPrice = ask > 0 ? ask : 0;
           }
           if (unitPrice <= 0) {
-            unitPrice = this.getProductionCost(mat.itemHrid, clientData, marketStore2) || itemDetails?.sellPrice || 0;
+            const matDetail = clientData?.itemDetailMap?.[mat.itemHrid];
+            unitPrice = this.getProductionCost(mat.itemHrid, clientData, marketStore2) || matDetail?.sellPrice || 0;
           }
         }
         perActionCost += unitPrice * (mat.count || 0);
@@ -16679,7 +16708,9 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       for (let lvl = 1; lvl <= targetLevel; lvl++) {
         let bestCost = Infinity;
         const strategies = [0];
-        for (let p = 2; p <= lvl; p++) strategies.push(p);
+        if (protectPrice > 0) {
+          for (let p = 2; p <= lvl; p++) strategies.push(p);
+        }
         for (const protectFrom of strategies) {
           const res = solveEnhancementMarkov(
             setup.enhancingLevel,
@@ -17150,8 +17181,12 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         });
         headerLevel.parentElement.insertBefore(badge, headerLevel.nextSibling);
       }
-      badge.textContent = `💰 ${formatCoins(lastBreakdown.total)}`;
-      badge.title = ctx.i18n.t("点击查看/收起净资产明细", "Click to toggle Net Worth breakdown");
+      const pricesLoaded = ctx.marketStore.isPricesLoaded();
+      badge.textContent = pricesLoaded ? `💰 ${formatCoins(lastBreakdown.total)}` : `💰 ${formatCoins(lastBreakdown.total)} (!)`;
+      badge.title = pricesLoaded ? ctx.i18n.t("点击查看/收起净资产明细", "Click to toggle Net Worth breakdown") : ctx.i18n.t(
+        "市场行情尚未加载完成或失败，估值仅含基础金币；点击查看并重试",
+        "Market data not loaded yet; click to view details or retry"
+      );
       if (popoverOpen) renderPopover();
     };
     const renderPopover = () => {
@@ -17176,7 +17211,12 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         pop.style.right = `${right}px`;
       }
       const b = lastBreakdown;
+      const pricesLoaded = ctx.marketStore.isPricesLoaded();
       const modeLabel = b.pricingMode === "ask" ? ctx.i18n.t("卖一价 Ask", "Ask") : ctx.i18n.t("买一价 Bid", "Bid");
+      const warnBanner = pricesLoaded ? "" : `<div class="mwi-lite-nw-warn">
+          <span>${ctx.i18n.t("⚠ 行情数据未加载（可能因网络或跨域阻塞）", "⚠ Market prices not loaded")}</span>
+          <button type="button" class="mwi-lite-nw-retry">${ctx.i18n.t("重试", "Retry")}</button>
+        </div>`;
       pop.innerHTML = `
       <div class="mwi-lite-nw-header">
         <span class="mwi-lite-nw-title">${ctx.i18n.t("净资产估算 (Toolasha 对齐)", "Net Worth Breakdown")}</span>
@@ -17185,6 +17225,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
           <button type="button" class="mwi-lite-nw-close" aria-label="Close">✕</button>
         </div>
       </div>
+      ${warnBanner}
       <div class="mwi-lite-nw-section">${ctx.i18n.t("流动资产 (Current Assets)", "Current Assets")}</div>
       <div class="mwi-lite-nw-row"><span>${ctx.i18n.t("现金金币", "Coins")}</span><b>${formatCoins(b.coins)}</b></div>
       <div class="mwi-lite-nw-row"><span>${ctx.i18n.t("仓库库存", "Inventory")}</span><b>${formatCoins(b.inventory)}</b></div>
@@ -17198,6 +17239,17 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       <div class="mwi-lite-nw-subtotal"><span>${ctx.i18n.t("固定资产小计", "Fixed Subtotal")}</span><b>${formatCoins(b.fixedAssets)}</b></div>
       <div class="mwi-lite-nw-total"><span>${ctx.i18n.t("净资产总计", "Total Net Worth")}</span><b>${formatCoins(b.total)}</b></div>
     `;
+      pop.querySelector(".mwi-lite-nw-retry")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!ctx) return;
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        btn.textContent = ctx.i18n.t("加载中...", "Loading...");
+        void ctx.marketStore.ensurePricesLoaded(true).finally(() => {
+          evaluator.invalidate();
+          computeNetWorth();
+        });
+      });
       pop.querySelector(".mwi-lite-nw-close")?.addEventListener("click", (e) => {
         e.stopPropagation();
         setPopoverOpen(false);
@@ -17311,6 +17363,29 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
           font-size: 11px;
           font-weight: 800;
           color: var(--mwi-px-sub, #9dbbff);
+        }
+        #${NW_POPOVER_ID} .mwi-lite-nw-warn {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          margin-bottom: 6px;
+          padding: 5px 7px;
+          background: #3d2a06;
+          border: 1px solid var(--mwi-px-gold, #fde047);
+          color: var(--mwi-px-gold, #fde047);
+          font-size: 11px;
+        }
+        #${NW_POPOVER_ID} .mwi-lite-nw-retry {
+          background: var(--mwi-px-btn-gold, linear-gradient(180deg, #7c580c 0%, #523907 100%));
+          border: 1px solid var(--mwi-px-gold, #fde047);
+          color: #fef08a;
+          font-family: inherit;
+          font-size: 10.5px;
+          font-weight: 700;
+          padding: 1px 6px;
+          cursor: pointer;
+          flex-shrink: 0;
         }
         #${NW_POPOVER_ID} .mwi-lite-nw-row,
         #${NW_POPOVER_ID} .mwi-lite-nw-subtotal,
