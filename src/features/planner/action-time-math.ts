@@ -13,6 +13,8 @@ export interface ActionEstimateInput {
   readonly characterLoadouts: Record<string, any>;
   readonly drinkSlotsMap: ReadonlyMap<string, readonly any[]>;
   readonly nowMs?: number;
+  /** For infinite (no max count) actions: runs allowed by materials; turns ∞ into a finite estimate. */
+  readonly materialLimit?: number | null;
 }
 
 export interface ActionTimingEstimate {
@@ -24,6 +26,8 @@ export interface ActionTimingEstimate {
   readonly remainingActions: number;
   readonly totalSec: number;
   readonly isInfinite: boolean;
+  /** True when an infinite action's duration is bounded by `materialLimit`. */
+  readonly materialLimited: boolean;
 }
 
 const EFFICIENCY_FUNCTIONS = new Set([
@@ -220,6 +224,7 @@ export function estimateActionTiming(input: ActionEstimateInput): ActionTimingEs
     characterLoadouts,
     drinkSlotsMap,
     nowMs = Date.now(),
+    materialLimit = null,
   } = input;
 
   const detail = clientData?.actionDetailMap?.[action?.actionHrid];
@@ -233,6 +238,7 @@ export function estimateActionTiming(input: ActionEstimateInput): ActionTimingEs
       remainingActions: 0,
       totalSec: 0,
       isInfinite: false,
+      materialLimited: false,
     };
   }
 
@@ -335,7 +341,14 @@ export function estimateActionTiming(input: ActionEstimateInput): ActionTimingEs
   const effectiveSecPerCount = perAttemptSec / effectiveRate;
 
   const hasMax = Boolean(action?.hasMaxCount && (action?.maxCount || 0) > 0);
-  const remainingActions = hasMax ? Math.max(0, action.maxCount - (action.currentCount || 0)) : 0;
+  const matLimit =
+    !hasMax && typeof materialLimit === "number" && Number.isFinite(materialLimit)
+      ? Math.max(0, Math.floor(materialLimit))
+      : null;
+  const bounded = hasMax || matLimit !== null;
+  const remainingActions = hasMax
+    ? Math.max(0, action.maxCount - (action.currentCount || 0))
+    : (matLimit ?? 0);
 
   let elapsedFraction = 0;
   if (actionIndex === 0 && action?.startTime) {
@@ -346,7 +359,7 @@ export function estimateActionTiming(input: ActionEstimateInput): ActionTimingEs
     }
   }
 
-  const totalSec = hasMax
+  const totalSec = bounded
     ? Math.max(0, remainingActions * effectiveSecPerCount - elapsedFraction)
     : 0;
 
@@ -358,6 +371,7 @@ export function estimateActionTiming(input: ActionEstimateInput): ActionTimingEs
     efficiency,
     remainingActions,
     totalSec,
-    isInfinite: !hasMax,
+    isInfinite: !bounded,
+    materialLimited: matLimit !== null,
   };
 }
