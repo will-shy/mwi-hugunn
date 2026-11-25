@@ -2,7 +2,7 @@
 // @name         MWI · Hugunn
 // @name:zh-CN   MWI · Hugunn
 // @namespace    https://milkywayidle.com/mwi-hugunn
-// @version      1.5.1
+// @version      1.5.2
 // @description  Tired of reinstalling a pile of laggy, mismatched scripts on every device? Fast! Lightweight! One script is all you need—come fight me if it's not! 15-in-1 MWI suite, zero deps & 100% read-only.
 // @description:zh-CN 受够了换设备就重装一堆卡顿又杂乱的脚本？快速！轻量！一个就够！不好用你来打我！15合1 MWI 聚合插件（市场/规划/迷宫/战斗），零依赖纯只读。
 // @author       adudu
@@ -1797,7 +1797,7 @@
   }
 
   // src/core/version.ts
-  var HUGUNN_VERSION = true ? "1.5.1" : "dev";
+  var HUGUNN_VERSION = true ? "1.5.2" : "dev";
 
   // src/core/settings-ui.ts
   var SETTINGS_BTN_ID = "mwi-lite-settings-btn";
@@ -1961,20 +1961,49 @@
     }
     `
     );
-    const renderModal = () => {
-      let modal = document.getElementById(SETTINGS_MODAL_ID);
-      if (!modal) {
-        modal = document.createElement("div");
-        modal.id = SETTINGS_MODAL_ID;
-        modal.setAttribute("data-mwi-lite", "1");
-        modal.addEventListener("click", (ev) => {
-          if (ev.target === modal) modal?.classList.remove("open");
-        });
-        document.body.appendChild(modal);
-      }
+    const statusHtml = () => {
       const items = registry.list();
       const enabledCount = items.filter((i) => i.enabled).length;
       const workerTxt = isWorkerActiveFn() ? i18n.t("迷宫 Worker 运行中 (1 线程)", "Labyrinth Worker Active (1 thread)") : i18n.t("迷宫 Worker 休眠 (0 线程)", "Labyrinth Worker Idle (0 threads)");
+      return `
+              ${i18n.t(`已启用 ${enabledCount}/${items.length} 模块`, `${enabledCount}/${items.length} modules enabled`)}
+              · ${i18n.t("当前路由", "Route")}: <b>${domScheduler.getActiveRoute()}</b>
+              · ${workerTxt}
+            `;
+    };
+    const refreshModalInPlace = (modal) => {
+      const status = modal.querySelector(".mwi-lite-status");
+      if (status) {
+        const next = statusHtml();
+        if (status.innerHTML !== next) status.innerHTML = next;
+      }
+      const enabledById = new Map(registry.list().map(({ module, enabled }) => [module.id, enabled]));
+      modal.querySelectorAll("input[data-mwi-lite-toggle]").forEach((cb) => {
+        const enabled = enabledById.get(cb.getAttribute("data-mwi-lite-toggle") || "");
+        if (enabled !== void 0 && cb.checked !== enabled) cb.checked = enabled;
+      });
+    };
+    const renderModal = () => {
+      let modal = document.getElementById(SETTINGS_MODAL_ID);
+      if (!modal) {
+        const el = document.createElement("div");
+        el.id = SETTINGS_MODAL_ID;
+        el.setAttribute("data-mwi-lite", "1");
+        el.addEventListener("click", (ev) => {
+          const target = ev.target;
+          if (target === el || target?.closest(".mwi-lite-close")) el.classList.remove("open");
+        });
+        el.addEventListener("change", (ev) => {
+          const cb = ev.target;
+          const id = cb?.getAttribute?.("data-mwi-lite-toggle");
+          if (!cb || !id) return;
+          registry.setEnabled(id, cb.checked);
+          refreshModalInPlace(el);
+        });
+        document.body.appendChild(el);
+        modal = el;
+      }
+      const items = registry.list();
       const groups = ["market", "planner", "combat"];
       const groupsHtml = groups.map((cat) => {
         const list = items.filter((x) => x.module.category === cat);
@@ -2000,11 +2029,7 @@
         <div class="mwi-lite-header">
           <div>
             <div class="mwi-lite-title">${getHugunnIconSvg(18)}<span>MWI · Hugunn v${HUGUNN_VERSION}</span></div>
-            <div class="mwi-lite-status">
-              ${i18n.t(`已启用 ${enabledCount}/${items.length} 模块`, `${enabledCount}/${items.length} modules enabled`)}
-              · ${i18n.t("当前路由", "Route")}: <b>${domScheduler.getActiveRoute()}</b>
-              · ${workerTxt}
-            </div>
+            <div class="mwi-lite-status">${statusHtml()}</div>
           </div>
           <button type="button" class="mwi-lite-close">${i18n.t("关闭", "Close")}</button>
         </div>
@@ -2020,18 +2045,6 @@
         </div>
       </div>
     `;
-      modal.querySelector(".mwi-lite-close")?.addEventListener("click", () => {
-        modal?.classList.remove("open");
-      });
-      modal.querySelectorAll("input[data-mwi-lite-toggle]").forEach((cb) => {
-        cb.addEventListener("change", () => {
-          const id = cb.getAttribute("data-mwi-lite-toggle");
-          if (id) {
-            registry.setEnabled(id, cb.checked);
-            renderModal();
-          }
-        });
-      });
       return modal;
     };
     const openSettings = () => {
