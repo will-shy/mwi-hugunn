@@ -33,7 +33,7 @@
 12. **开箱/技能书自动全部 (`planner-loot-box-auto-all`)**：开启战利品箱（宝箱/箱子/储藏箱）或使用技能书时自动点击游戏原生「全部」按钮预填数量，跳过「卷轴」类物品（`Scroll of…`）；仅填数量，仍需手动点击「开启」/「学习」（0 次服务器操作）。
 
 ### 战斗与迷宫 (`combat`)
-10. **迷宫胜率与耗时模拟 (`combat-labyrinth-rate`)**：真实蒙特卡洛战斗模拟 + 生活/强化房胜率与含失败期望耗时、推层估算（按需 LazyWorker）。
+10. **迷宫胜率与耗时模拟 (`combat-labyrinth-rate`)**：真实蒙特卡洛战斗模拟 + 生活/强化房胜率与含失败期望耗时、推层估算（按需 LazyWorker）。**默认构建不包含**，需 `npm run build:full`（见「开发与构建」）。
 11. **战斗波次与轻量收益统计 (`combat-light-tracker`)**：战斗波次/场次、XP/h 与掉落估值（无 Chart.js）。
 12. **配装强化等级角标 (`combat-loadout-badge`)**：配装图标显示 `+N` 强化等级。
 13. **角色战斗评分 (`combat-score`)**：角色资料面板显示综合战力评分（战斗房屋 + 技能书 + 装备价值）。
@@ -45,6 +45,9 @@ npm install
 npm run typecheck
 npm run build
 # 生成产物：dist/mwi-hugunn.user.js（单文件零 @require，直接安装进 Tampermonkey）
+# 默认不含迷宫模拟（combat-labyrinth-rate + labyrinth-engine.js，约 430 KB）
+npm run build:full
+# 含迷宫模拟的完整构建（等同 node build.mjs --with-labyrinth 或 HUGUNN_LABYRINTH=1）
 ```
 
 ## 四、Tampermonkey 切换清单

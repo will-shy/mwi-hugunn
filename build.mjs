@@ -13,6 +13,9 @@ function buildHugunnIconDataUri() {
 }
 
 const iconDataUri = buildHugunnIconDataUri();
+// The Labyrinth simulator (combat-labyrinth-rate + labyrinth-engine.js, ~430 KB) is left out by default.
+// Include it with `npm run build:full` (or `node build.mjs --with-labyrinth`, or HUGUNN_LABYRINTH=1).
+const withLabyrinth = process.argv.includes("--with-labyrinth") || process.env.HUGUNN_LABYRINTH === "1";
 // Single source of truth for the userscript / Greasy Fork @version and the in-app version label.
 const { version } = JSON.parse(fs.readFileSync(path.resolve("package.json"), "utf8"));
 if (!/^\d+\.\d+\.\d+/.test(version || "")) {
@@ -54,8 +57,7 @@ const banner = `// ==UserScript==
 // @connect      www.milkywayidlecn.com
 // @connect      test.milkywayidlecn.com
 // @connect      raw.githubusercontent.com
-// @connect      shykai.github.io
-// ==/UserScript==
+${withLabyrinth ? "// @connect      shykai.github.io\n" : ""}// ==/UserScript==
 `;
 
 fs.mkdirSync(path.resolve("dist"), { recursive: true });
@@ -70,9 +72,14 @@ await build({
   legalComments: "none",
   minify: false,
   banner: { js: banner },
-  define: { __HUGUNN_VERSION__: JSON.stringify(version) },
+  define: {
+    __HUGUNN_VERSION__: JSON.stringify(version),
+    __HUGUNN_LABYRINTH__: JSON.stringify(withLabyrinth),
+  },
 });
 
 const outPath = path.resolve("dist/mwi-hugunn.user.js");
 const stat = fs.statSync(outPath);
-console.log(`Built ${outPath} v${version} (${(stat.size / 1024).toFixed(1)} KB)`);
+console.log(
+  `Built ${outPath} v${version} (${(stat.size / 1024).toFixed(1)} KB, Labyrinth ${withLabyrinth ? "included" : "excluded"})`
+);
