@@ -75,6 +75,10 @@ function parseActionCount(raw: string | null | undefined): number | null {
   return Number.isFinite(n) ? Math.floor(n * mul) : null;
 }
 
+/** Action detail components for skills that never appear as tasks (alchemy, enhancing). */
+const NO_TASK_PANEL_SEL =
+  '[class*="SkillActionDetail_alchemyComponent"], [class*="SkillActionDetail_enhancingComponent"]';
+
 export function computeQuickQueueCount(baseCount: number | null, autoMinusOne: boolean): number | null {
   if (baseCount === null || !Number.isFinite(baseCount) || baseCount <= 0) return null;
   const normalized = Math.floor(baseCount);
@@ -944,7 +948,15 @@ export function createTaskBoardModule(): FeatureModule {
   const injectTaskMinusOneButton = () => {
     if (!ctx) return;
     const panel = document.querySelector('[class*="SkillActionDetail_skillActionDetail"]');
-    if (!panel || panel.querySelector(`#${TASK_N1_ID}`)) return;
+    if (!panel) return;
+    const existing = panel.querySelector(`#${TASK_N1_ID}`);
+    // Alchemy and enhancing have no tasks, so no task (N-1) count there. The game renders these
+    // actions with their own component inside the same detail panel (reused when switching actions).
+    if (panel.querySelector(NO_TASK_PANEL_SEL)) {
+      existing?.remove();
+      return;
+    }
+    if (existing) return;
 
     const inputSections = panel.querySelectorAll('[class*="maxActionCountInput"]');
     if (!inputSections.length) return;
