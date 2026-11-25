@@ -2,7 +2,7 @@
 // @name         MWI · Hugunn
 // @name:zh-CN   MWI · Hugunn
 // @namespace    https://milkywayidle.com/mwi-hugunn
-// @version      1.5.0
+// @version      1.5.1
 // @description  Tired of reinstalling a pile of laggy, mismatched scripts on every device? Fast! Lightweight! One script is all you need—come fight me if it's not! 15-in-1 MWI suite, zero deps & 100% read-only.
 // @description:zh-CN 受够了换设备就重装一堆卡顿又杂乱的脚本？快速！轻量！一个就够！不好用你来打我！15合1 MWI 聚合插件（市场/规划/迷宫/战斗），零依赖纯只读。
 // @author       adudu
@@ -584,8 +584,10 @@
             }
           }
         }
+        const questsChanged = this.mergeQuests(data?.endCharacterQuests);
         if (Array.isArray(data?.endCharacterItems)) this.emit("items_updated", data);
         if (Array.isArray(data?.endCharacterSkills)) this.emit("skills_updated", data);
+        if (questsChanged) this.emit("quests_updated", data);
         this.emit("action_completed", data);
       });
       wsBus.on("items_updated", (data) => {
@@ -706,16 +708,7 @@
         this.emit("skills_updated", data);
       });
       wsBus.on("quests_updated", (data) => {
-        if (this.characterData && Array.isArray(data?.endCharacterQuests)) {
-          const map = /* @__PURE__ */ new Map();
-          for (const q of this.characterQuests) {
-            if (q?.id != null) map.set(q.id, q);
-          }
-          for (const q of data.endCharacterQuests) {
-            if (q?.id != null) map.set(q.id, q);
-          }
-          this.characterQuests = Array.from(map.values());
-        }
+        this.mergeQuests(data?.endCharacterQuests);
         this.emit("quests_updated", data);
       });
       wsBus.on("labyrinth_updated", (data) => {
@@ -796,6 +789,19 @@
       }
       if (Array.isArray(core?.state?.characterSkills)) return core.state.characterSkills;
       return [];
+    }
+    /** Upsert quests by id (server sends changed quests only); returns true when anything was merged. */
+    mergeQuests(endQuests) {
+      if (!this.characterData || !Array.isArray(endQuests) || endQuests.length === 0) return false;
+      const map = /* @__PURE__ */ new Map();
+      for (const q of this.characterQuests) {
+        if (q?.id != null) map.set(q.id, q);
+      }
+      for (const q of endQuests) {
+        if (q?.id != null) map.set(q.id, q);
+      }
+      this.characterQuests = Array.from(map.values());
+      return true;
     }
     getCharacterQuests() {
       if (this.characterData && this.characterQuests.length > 0) return this.characterQuests;
@@ -1791,7 +1797,7 @@
   }
 
   // src/core/version.ts
-  var HUGUNN_VERSION = true ? "1.5.0" : "dev";
+  var HUGUNN_VERSION = true ? "1.5.1" : "dev";
 
   // src/core/settings-ui.ts
   var SETTINGS_BTN_ID = "mwi-lite-settings-btn";
