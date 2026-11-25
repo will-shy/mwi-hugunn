@@ -2,7 +2,7 @@
 // @name         MWI · Hugunn
 // @name:zh-CN   MWI · Hugunn
 // @namespace    https://milkywayidle.com/mwi-hugunn
-// @version      1.4.1
+// @version      1.4.2
 // @description  Tired of reinstalling a pile of laggy, mismatched scripts on every device? Fast! Lightweight! One script is all you need—come fight me if it's not! 15-in-1 MWI suite, zero deps & 100% read-only.
 // @description:zh-CN 受够了换设备就重装一堆卡顿又杂乱的脚本？快速！轻量！一个就够！不好用你来打我！15合1 MWI 聚合插件（市场/规划/迷宫/战斗），零依赖纯只读。
 // @author       adudu
@@ -1791,7 +1791,7 @@
   }
 
   // src/core/version.ts
-  var HUGUNN_VERSION = true ? "1.4.1" : "dev";
+  var HUGUNN_VERSION = true ? "1.4.2" : "dev";
 
   // src/core/settings-ui.ts
   var SETTINGS_BTN_ID = "mwi-lite-settings-btn";
@@ -23644,6 +23644,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     const n = Number(numStr);
     return Number.isFinite(n) ? Math.floor(n * mul) : null;
   }
+  var NO_TASK_PANEL_SEL = '[class*="SkillActionDetail_alchemyComponent"], [class*="SkillActionDetail_enhancingComponent"]';
   function computeQuickQueueCount(baseCount, autoMinusOne) {
     if (baseCount === null || !Number.isFinite(baseCount) || baseCount <= 0) return null;
     const normalized = Math.floor(baseCount);
@@ -24391,7 +24392,13 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     const injectTaskMinusOneButton = () => {
       if (!ctx) return;
       const panel = document.querySelector('[class*="SkillActionDetail_skillActionDetail"]');
-      if (!panel || panel.querySelector(`#${TASK_N1_ID}`)) return;
+      if (!panel) return;
+      const existing = panel.querySelector(`#${TASK_N1_ID}`);
+      if (panel.querySelector(NO_TASK_PANEL_SEL)) {
+        existing?.remove();
+        return;
+      }
+      if (existing) return;
       const inputSections = panel.querySelectorAll('[class*="maxActionCountInput"]');
       if (!inputSections.length) return;
       const firstSection = inputSections[0];
