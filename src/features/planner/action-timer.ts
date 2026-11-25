@@ -237,16 +237,24 @@ export function createActionTimerModule(): FeatureModule {
           if (est.isInfinite) hasInf = true;
         }
 
+        // Render the time as the last line of the game's action text (not after the ✕ button), so the
+        // remove buttons stay aligned and the action name keeps the full row width on mobile.
+        const host = row.querySelector<HTMLElement>('[class*="QueuedActions_actionText"]');
         let tag = row.querySelector<HTMLElement>(`.${QUEUE_TAG_CLASS}`);
         if (!tag) {
-          tag = document.createElement("span");
+          tag = document.createElement("div");
           tag.className = QUEUE_TAG_CLASS;
           tag.setAttribute("data-mwi-lite", "1");
+        }
+        if (host) {
+          if (host.lastElementChild !== tag) host.appendChild(tag);
+        } else if (tag.parentElement !== row) {
           row.appendChild(tag);
         }
+        const clock = idx === 0 ? firstEst.totalSec : accSec;
         const txt = est.isInfinite
-          ? `∞ (${est.perAttemptSec.toFixed(2)}s)`
-          : `${durationText(est, est.totalSec)}${hasInf ? "" : ` (${formatFinishClock(idx === 0 ? firstEst.totalSec : accSec)})`}`;
+          ? `⏱ ∞ (${est.perAttemptSec.toFixed(2)}s)`
+          : `⏱ ${durationText(est, est.totalSec)}${hasInf ? "" : ` → ${formatFinishClock(clock)}`}`;
         if (tag.textContent !== txt) tag.textContent = txt;
         const tip = formatTimingTooltip(context, est, limitFor(actions[idx], idx));
         if (tag.title !== tip) tag.title = tip;
@@ -315,7 +323,12 @@ export function createActionTimerModule(): FeatureModule {
           white-space: nowrap;
         }
         .${QUEUE_TAG_CLASS} {
-          margin-left: 6px;
+          display: inline-block;
+          max-width: 100%;
+          margin-top: 2px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          vertical-align: top;
           padding: 0 4px;
           border-radius: 0;
           border: 1px solid #354c8c;

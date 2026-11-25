@@ -2,7 +2,7 @@
 // @name         MWI · Hugunn
 // @name:zh-CN   MWI · Hugunn
 // @namespace    https://milkywayidle.com/mwi-hugunn
-// @version      1.4.0
+// @version      1.4.1
 // @description  Tired of reinstalling a pile of laggy, mismatched scripts on every device? Fast! Lightweight! One script is all you need—come fight me if it's not! 15-in-1 MWI suite, zero deps & 100% read-only.
 // @description:zh-CN 受够了换设备就重装一堆卡顿又杂乱的脚本？快速！轻量！一个就够！不好用你来打我！15合1 MWI 聚合插件（市场/规划/迷宫/战斗），零依赖纯只读。
 // @author       adudu
@@ -1791,7 +1791,7 @@
   }
 
   // src/core/version.ts
-  var HUGUNN_VERSION = true ? "1.4.0" : "dev";
+  var HUGUNN_VERSION = true ? "1.4.1" : "dev";
 
   // src/core/settings-ui.ts
   var SETTINGS_BTN_ID = "mwi-lite-settings-btn";
@@ -21593,14 +21593,20 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
             accSec += est.totalSec;
             if (est.isInfinite) hasInf = true;
           }
+          const host = row.querySelector('[class*="QueuedActions_actionText"]');
           let tag = row.querySelector(`.${QUEUE_TAG_CLASS}`);
           if (!tag) {
-            tag = document.createElement("span");
+            tag = document.createElement("div");
             tag.className = QUEUE_TAG_CLASS;
             tag.setAttribute("data-mwi-lite", "1");
+          }
+          if (host) {
+            if (host.lastElementChild !== tag) host.appendChild(tag);
+          } else if (tag.parentElement !== row) {
             row.appendChild(tag);
           }
-          const txt = est.isInfinite ? `∞ (${est.perAttemptSec.toFixed(2)}s)` : `${durationText(est, est.totalSec)}${hasInf ? "" : ` (${formatFinishClock(idx === 0 ? firstEst.totalSec : accSec)})`}`;
+          const clock = idx === 0 ? firstEst.totalSec : accSec;
+          const txt = est.isInfinite ? `⏱ ∞ (${est.perAttemptSec.toFixed(2)}s)` : `⏱ ${durationText(est, est.totalSec)}${hasInf ? "" : ` → ${formatFinishClock(clock)}`}`;
           if (tag.textContent !== txt) tag.textContent = txt;
           const tip = formatTimingTooltip(context, est, limitFor(actions[idx], idx));
           if (tag.title !== tip) tag.title = tip;
@@ -21664,7 +21670,12 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
           white-space: nowrap;
         }
         .${QUEUE_TAG_CLASS} {
-          margin-left: 6px;
+          display: inline-block;
+          max-width: 100%;
+          margin-top: 2px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          vertical-align: top;
           padding: 0 4px;
           border-radius: 0;
           border: 1px solid #354c8c;
