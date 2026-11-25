@@ -2,7 +2,7 @@
 // @name         MWI · Hugunn
 // @name:zh-CN   MWI · Hugunn
 // @namespace    https://milkywayidle.com/mwi-hugunn
-// @version      1.2.0
+// @version      1.3.1
 // @description  Tired of reinstalling a pile of laggy, mismatched scripts on every device? Fast! Lightweight! One script is all you need—come fight me if it's not! 15-in-1 MWI suite, zero deps & 100% read-only.
 // @description:zh-CN 受够了换设备就重装一堆卡顿又杂乱的脚本？快速！轻量！一个就够！不好用你来打我！15合1 MWI 聚合插件（市场/规划/迷宫/战斗），零依赖纯只读。
 // @author       adudu
@@ -1791,7 +1791,7 @@
   }
 
   // src/core/version.ts
-  var HUGUNN_VERSION = true ? "1.2.0" : "dev";
+  var HUGUNN_VERSION = true ? "1.3.1" : "dev";
 
   // src/core/settings-ui.ts
   var SETTINGS_BTN_ID = "mwi-lite-settings-btn";
@@ -22621,6 +22621,84 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     };
   }
 
+  // src/features/planner/loot-box-auto-all.ts
+  var SCROLL_HRID_PREFIX = "/items/seal_of_";
+  var ABILITY_BOOK_CATEGORY = "/item_categories/ability_book";
+  var POPPER_SELECTOR = '[class*="MuiPopper"], [class*="MuiTooltip-popper"]';
+  var ALL_BUTTON_LABELS = /* @__PURE__ */ new Set(["All", "全部"]);
+  var MAX_ATTEMPTS = 20;
+  function createLootBoxAutoAllModule() {
+    let ctx = null;
+    let popperState = /* @__PURE__ */ new WeakMap();
+    const hridByName = /* @__PURE__ */ new Map();
+    const resolveHrid = (context, name) => {
+      if (hridByName.has(name)) return hridByName.get(name) ?? null;
+      const hrid = context.i18n.getItemHridByName(name);
+      if (hrid) hridByName.set(name, hrid);
+      return hrid;
+    };
+    const findAllButton = (popper) => {
+      const buttons = popper.querySelectorAll("button");
+      for (const btn of buttons) {
+        if (!btn.disabled && ALL_BUTTON_LABELS.has((btn.textContent || "").trim())) return btn;
+      }
+      return null;
+    };
+    const scan = () => {
+      const context = ctx;
+      if (!context) return;
+      const poppers = document.querySelectorAll(POPPER_SELECTOR);
+      if (poppers.length === 0) return;
+      const itemDetailMap = context.gameData.getClientData()?.itemDetailMap;
+      if (!itemDetailMap) return;
+      for (const popper of poppers) {
+        const name = (popper.querySelector('[class*="Item_name"]')?.textContent || "").trim();
+        if (!name) continue;
+        let state = popperState.get(popper);
+        if (!state || state.name !== name) {
+          state = { name, done: false, attempts: 0 };
+          popperState.set(popper, state);
+        }
+        if (state.done) continue;
+        const hrid = resolveHrid(context, name);
+        const detail = hrid ? itemDetailMap[hrid] : null;
+        const eligible = Boolean(detail?.isOpenable) || detail?.categoryHrid === ABILITY_BOOK_CATEGORY;
+        if (!hrid || !eligible || hrid.startsWith(SCROLL_HRID_PREFIX)) {
+          state.done = true;
+          continue;
+        }
+        const btn = findAllButton(popper);
+        if (btn) {
+          state.done = true;
+          btn.click();
+        } else if (++state.attempts >= MAX_ATTEMPTS) {
+          state.done = true;
+        }
+      }
+    };
+    return {
+      id: "planner-loot-box-auto-all",
+      nameZh: "开箱/技能书自动全部",
+      nameEn: 'Loot Box & Skill Book Auto "All"',
+      descriptionZh: "开启战利品箱或使用技能书时自动点击“全部”按钮预填数量（跳过“卷轴”类物品）",
+      descriptionEn: 'Auto-click the "All" button when opening loot boxes or using skill books to pre-fill the quantity (skips "Scroll of..." items)',
+      category: "planner",
+      defaultEnabled: true,
+      init(context) {
+        ctx = context;
+        popperState = /* @__PURE__ */ new WeakMap();
+        return () => {
+          ctx = null;
+          popperState = /* @__PURE__ */ new WeakMap();
+          hridByName.clear();
+        };
+      },
+      onDom() {
+        scan();
+      }
+    };
+  }
+
   // src/features/planner/queue-next.ts
   var MENU_SEL = '[class*="QueuedActions_queuedActionsEditMenu"]';
   var ROW_SEL = '[class*="QueuedActions_action__"][data-action-id]';
@@ -25002,6 +25080,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     createItemCalculatorModule(),
     createQuickInputsModule(),
     createSkillStockModule(),
+    createLootBoxAutoAllModule(),
     createTaskBoardModule(),
     createTaskAutoMinusOneModule()
   ];
