@@ -9,7 +9,7 @@ import {
 } from "./core";
 import { mountPixelTheme } from "./core/pixel-theme";
 import { HUGUNN_VERSION } from "./core/version";
-import { combatModules, isLabyrinthWorkerActive } from "./features/combat";
+import { combatModules, isLabyrinthWorkerActive, LABYRINTH_INCLUDED } from "./features/combat";
 import { marketModules } from "./features/market";
 import { plannerModules } from "./features/planner";
 
@@ -36,7 +36,7 @@ function bootstrap(): void {
 
   // 4. Start global single rAF-batched MutationObserver + route gate, pixel theme & settings drawer
   mountPixelTheme();
-  mountSettingsUI(isLabyrinthWorkerActive);
+  mountSettingsUI(LABYRINTH_INCLUDED ? isLabyrinthWorkerActive : null);
   domScheduler.start();
 
   // 5. Expose lightweight read-only diagnostic handle

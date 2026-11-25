@@ -36,7 +36,7 @@ Single-file, zero-`@require`, micro-kernel Tampermonkey userscript for Milky Way
 Run and verify all checks in `cd /Users/xhy/Developer/mwi-lite-suite && ...` before every commit:
 
 1. **Build & bundle checks**:
-   - `npm run typecheck && npm run build && node --check dist/mwi-hugunn.user.js` passes with zero errors;
+   - `npm run typecheck && npm run build && node --check dist/mwi-hugunn.user.js` passes with zero errors (the default build leaves out the Labyrinth simulator; `npm run build:full` includes it via the `__HUGUNN_LABYRINTH__` define — check both when touching combat code);
    - `dist/mwi-hugunn.user.js` satisfies `@require = 0`, `new MutationObserver = 1`, `ws.send = 0`, `new Worker <= 1`.
 2. **Dependency boundaries**:
    - `src/core/` contains zero imports from `features/`;

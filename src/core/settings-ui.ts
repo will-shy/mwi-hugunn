@@ -17,7 +17,8 @@ const CATEGORY_LABELS: Record<FeatureCategory, [string, string]> = {
   combat: ["战斗与迷宫", "Combat & Labyrinth"],
 };
 
-export function mountSettingsUI(isWorkerActiveFn: () => boolean): void {
+/** `isWorkerActiveFn` is null when the build leaves out the Labyrinth module (no worker to report). */
+export function mountSettingsUI(isWorkerActiveFn: (() => boolean) | null): void {
   addStyle(
     "settings-ui",
     `
@@ -175,13 +176,15 @@ export function mountSettingsUI(isWorkerActiveFn: () => boolean): void {
   const statusHtml = (): string => {
     const items = registry.list();
     const enabledCount = items.filter((i) => i.enabled).length;
-    const workerTxt = isWorkerActiveFn()
-      ? i18n.t("迷宫 Worker 运行中 (1 线程)", "Labyrinth Worker Active (1 thread)")
-      : i18n.t("迷宫 Worker 休眠 (0 线程)", "Labyrinth Worker Idle (0 threads)");
+    const workerTxt = !isWorkerActiveFn
+      ? ""
+      : isWorkerActiveFn()
+        ? i18n.t("迷宫 Worker 运行中 (1 线程)", "Labyrinth Worker Active (1 thread)")
+        : i18n.t("迷宫 Worker 休眠 (0 线程)", "Labyrinth Worker Idle (0 threads)");
     return `
               ${i18n.t(`已启用 ${enabledCount}/${items.length} 模块`, `${enabledCount}/${items.length} modules enabled`)}
               · ${i18n.t("当前路由", "Route")}: <b>${domScheduler.getActiveRoute()}</b>
-              · ${workerTxt}
+              ${workerTxt ? `· ${workerTxt}` : ""}
             `;
   };
 

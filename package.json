@@ -1,11 +1,12 @@
 {
   "name": "mwi-hugunn",
-  "version": "1.5.2",
+  "version": "1.6.0",
   "private": true,
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "node build.mjs"
+    "build": "node build.mjs",
+    "build:full": "node build.mjs --with-labyrinth"
   },
   "devDependencies": {
     "esbuild": "^0.24.0",
