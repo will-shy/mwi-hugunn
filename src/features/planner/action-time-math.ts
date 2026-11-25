@@ -1,5 +1,6 @@
 // Credit: Action timing & tea/equipment buff calculation aligned with Toolasha (Celasha, CC-BY-NC-SA-4.0) & MWITools (bot7420, shykai).
 import type { ActionTypeBuffSources } from "../../core/types";
+import { parseItemHash, resolveActionDrinks } from "./material-limit";
 
 export interface ActionEstimateInput {
   readonly action: any;
@@ -35,18 +36,6 @@ const EFFICIENCY_FUNCTIONS = new Set([
   "/action_functions/production",
   "/action_functions/alchemy",
 ]);
-
-function parseLoadoutWearable(raw: unknown): { itemHrid: string; enhancementLevel: number } | null {
-  if (typeof raw !== "string" || !raw) return null;
-  const parts = raw.split("::");
-  const hrid = parts.find((p) => p.startsWith("/items/"));
-  if (!hrid) return null;
-  const enh = Number(parts[parts.length - 1]);
-  return {
-    itemHrid: hrid,
-    enhancementLevel: Number.isFinite(enh) && enh >= 0 ? enh : 0,
-  };
-}
 
 function getItemLevelFromHash(
   itemHash: unknown,
@@ -153,7 +142,7 @@ function collectLoadoutBonuses(
   const wearables = loadout?.wearableMap;
   if (wearables && typeof wearables === "object") {
     for (const raw of Object.values(wearables)) {
-      const parsed = parseLoadoutWearable(raw);
+      const parsed = parseItemHash(raw);
       if (!parsed) continue;
       const eq = itemDetailMap[parsed.itemHrid]?.equipmentDetail;
       if (!eq) continue;
@@ -175,13 +164,7 @@ function collectLoadoutBonuses(
     }
   }
 
-  const loadoutDrinks = Array.isArray(loadout?.drinkItemHrids)
-    ? loadout.drinkItemHrids.filter((h: unknown) => typeof h === "string" && h.length > 0)
-    : [];
-  const slotDrinks =
-    loadoutDrinks.length > 0
-      ? loadoutDrinks
-      : (drinkSlotsMap.get(actionType) || []).map((d) => d?.itemHrid).filter(Boolean);
+  const slotDrinks = resolveActionDrinks(actionType, loadout, drinkSlotsMap);
 
   const teaScale = 1 + Math.max(0, drinkConcentration);
   for (const hrid of slotDrinks) {

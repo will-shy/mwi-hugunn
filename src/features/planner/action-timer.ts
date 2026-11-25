@@ -47,8 +47,7 @@ function formatTimingTooltip(
     parts.push(`${ctx.i18n.t("等效", "Eff")}: ${est.effectiveSecPerCount.toFixed(2)}s/${ctx.i18n.t("次", "act")}`);
   }
   if (est.materialLimited && limit && !limit.isInfinite) {
-    const clientData = ctx.gameData.getClientData();
-    const name = clientData?.itemDetailMap?.[limit.bottleneckHrid]?.name || limit.bottleneckHrid;
+    const name = limit.bottleneckHrid ? ctx.i18n.getItemName(limit.bottleneckHrid) : "";
     parts.push(
       `${ctx.i18n.t("材料可做", "Materials allow")}: ${est.remainingActions.toLocaleString()} ${ctx.i18n.t("次", "acts")}` +
         (name ? ` (${ctx.i18n.t("瓶颈", "bottleneck")}: ${name})` : "")
@@ -93,7 +92,7 @@ function buildActionEstimator(ctx: KernelContext, actions: readonly any[]) {
       characterLoadouts?.[loadoutId]
         ? characterLoadouts[loadoutId]
         : null;
-    const key = `${action.actionHrid}|${loadout ? loadoutId : 0}|${action.primaryItemHash || ""}|${action.secondaryItemHash || ""}`;
+    const key = `${action.actionHrid}|${loadout ? loadoutId : 0}|${action.primaryItemHash || ""}|${action.secondaryItemHash || ""}|${action.enhancingMaxLevel || 0}`;
     let res = materialLimitCache.get(key);
     if (!res) {
       res = computeMaterialLimit({
@@ -176,15 +175,17 @@ export function createActionTimerModule(): FeatureModule {
       queueTotal += est.totalSec;
     }
 
+    const curClock = formatFinishClock(curEst.totalSec);
     const curPart = curEst.isInfinite
       ? `∞ (${curEst.perAttemptSec.toFixed(2)}s)`
-      : `${durationText(curEst, curEst.totalSec)} → ${formatFinishClock(curEst.totalSec)}`;
+      : `${durationText(curEst, curEst.totalSec)}${curClock ? ` → ${curClock}` : ""}`;
 
+    const totalClock = formatFinishClock(queueTotal);
     const queuePart =
       actions.length > 1
         ? queueInf
           ? ` | ${ctx.i18n.t("队列", "Q")}: ∞`
-          : ` | ${ctx.i18n.t("总计", "Total")}: ${queueMat ? "~" : ""}${formatDuration(queueTotal)} (${formatFinishClock(queueTotal)})`
+          : ` | ${ctx.i18n.t("总计", "Total")}: ${queueMat ? "~" : ""}${formatDuration(queueTotal)}${totalClock ? ` (${totalClock})` : ""}`
         : "";
 
     const nextText = `⏱ ${curPart}${queuePart}`;
@@ -234,9 +235,10 @@ export function createActionTimerModule(): FeatureModule {
           tag.setAttribute("data-mwi-lite", "1");
           row.appendChild(tag);
         }
+        const rowClock = hasInf ? "" : formatFinishClock(idx === 0 ? firstEst.totalSec : accSec);
         const txt = est.isInfinite
           ? `∞ (${est.perAttemptSec.toFixed(2)}s)`
-          : `${durationText(est, est.totalSec)}${hasInf ? "" : ` (${formatFinishClock(idx === 0 ? firstEst.totalSec : accSec)})`}`;
+          : `${durationText(est, est.totalSec)}${rowClock ? ` (${rowClock})` : ""}`;
         if (tag.textContent !== txt) tag.textContent = txt;
         const tip = formatTimingTooltip(context, est, limitFor(actions[idx], idx));
         if (tag.title !== tip) tag.title = tip;

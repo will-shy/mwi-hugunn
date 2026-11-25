@@ -20929,23 +20929,169 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     createGuildShopRankModule()
   ];
 
+  // src/features/planner/material-limit.ts
+  var COIN_HRID = "/items/coin";
+  var UNLIMITED = Object.freeze({ isInfinite: true, max: Infinity, bottleneckHrid: "" });
+  function parseItemHash(hash) {
+    if (typeof hash !== "string" || !hash) return null;
+    const parts = hash.split("::");
+    const itemHrid = parts.find((p) => p.startsWith("/items/"));
+    if (!itemHrid) return null;
+    const enh = Number(parts[parts.length - 1]);
+    return { itemHrid, enhancementLevel: Number.isFinite(enh) && enh >= 0 ? Math.floor(enh) : 0 };
+  }
+  function computeDrinkConcentrationScale(clientData, characterItems, loadout) {
+    const itemDetailMap = clientData?.itemDetailMap || {};
+    const multTable = clientData?.enhancementLevelTotalBonusMultiplierTable || [];
+    const statOf = (itemHrid, enhancementLevel) => {
+      const eq = itemDetailMap[itemHrid]?.equipmentDetail;
+      if (!eq) return 0;
+      const base = eq.noncombatStats?.drinkConcentration || 0;
+      const enh = (eq.noncombatEnhancementBonuses?.drinkConcentration || 0) * (multTable[enhancementLevel] || 0);
+      return base + enh;
+    };
+    let conc = 0;
+    if (loadout?.wearableMap && typeof loadout.wearableMap === "object") {
+      for (const raw of Object.values(loadout.wearableMap)) {
+        const parsed = parseItemHash(raw);
+        if (parsed) conc += statOf(parsed.itemHrid, parsed.enhancementLevel);
+      }
+      return 1 + Math.max(0, conc);
+    }
+    for (const item of characterItems) {
+      if (!item?.itemHrid || !item.itemLocationHrid || item.itemLocationHrid === "/item_locations/inventory") {
+        continue;
+      }
+      conc += statOf(item.itemHrid, item.enhancementLevel || 0);
+    }
+    return 1 + Math.max(0, conc);
+  }
+  function resolveActionDrinks(actionType, loadout, drinkSlotsMap) {
+    if (loadout && Array.isArray(loadout.drinkItemHrids)) {
+      return loadout.drinkItemHrids.filter((h) => typeof h === "string" && h.length > 0);
+    }
+    return (drinkSlotsMap.get(actionType) || []).map((d) => d?.itemHrid).filter(Boolean);
+  }
+  function computeArtisanSaving(drinkHrids, clientData, characterItems, loadout) {
+    const itemDetailMap = clientData?.itemDetailMap || {};
+    let artisan = 0;
+    for (const hrid of drinkHrids) {
+      const buffs = itemDetailMap[hrid]?.consumableDetail?.buffs;
+      if (!Array.isArray(buffs)) continue;
+      for (const b of buffs) {
+        if (b?.typeHrid === "/buff_types/artisan") {
+          artisan += (Number(b.flatBoost) || 0) + (Number(b.ratioBoost) || 0);
+        }
+      }
+    }
+    if (artisan <= 0) return 0;
+    const scale = computeDrinkConcentrationScale(clientData, characterItems, loadout);
+    return Math.min(0.99, artisan * scale);
+  }
+  function buildInventory(characterItems) {
+    const byKey = /* @__PURE__ */ new Map();
+    const byHash = /* @__PURE__ */ new Map();
+    for (const item of characterItems) {
+      if (!item?.itemHrid || !item.count || item.count <= 0) continue;
+      if (item.itemLocationHrid && item.itemLocationHrid !== "/item_locations/inventory") continue;
+      const enhancementLevel = item.enhancementLevel || 0;
+      const k = `${item.itemHrid}::${enhancementLevel}`;
+      byKey.set(k, (byKey.get(k) || 0) + item.count);
+      if (typeof item.hash === "string" && item.hash) {
+        byHash.set(item.hash, { itemHrid: item.itemHrid, enhancementLevel, count: item.count, hash: item.hash });
+      }
+    }
+    return { byKey, byHash };
+  }
+  function resolveStack(inv, hash) {
+    if (typeof hash !== "string" || !hash) return null;
+    const direct = inv.byHash.get(hash);
+    if (direct) return direct;
+    const parsed = parseItemHash(hash);
+    if (!parsed) return null;
+    const count = inv.byKey.get(`${parsed.itemHrid}::${parsed.enhancementLevel}`) || 0;
+    return count > 0 ? { ...parsed, count, hash } : null;
+  }
+  function getAlchemyCoinCost(actionHrid, itemLevel, sellPrice) {
+    if (actionHrid === "/actions/alchemy/decompose" || actionHrid === "/actions/alchemy/unrefine") {
+      return Math.floor(5 * (10 + (itemLevel || 0)));
+    }
+    if (actionHrid === "/actions/alchemy/transmute") {
+      const fifth = (sellPrice || 0) / 5;
+      return fifth > 50 ? Math.floor(fifth) : 50;
+    }
+    return 0;
+  }
+  function computeMaterialLimit(input) {
+    const { actionDetail, clientData, characterItems, drinkSlotsMap, loadout, actionInstance } = input;
+    if (!actionDetail) return UNLIMITED;
+    const itemDetailMap = clientData?.itemDetailMap || {};
+    const actionFunc = actionDetail.function || "";
+    const isAlchemy = actionFunc === "/action_functions/alchemy";
+    const isEnhancing = actionFunc === "/action_functions/enhancing";
+    if ((isAlchemy || isEnhancing) && !actionInstance) return UNLIMITED;
+    const inv = buildInventory(characterItems);
+    let limit = Infinity;
+    let bottleneckHrid = "";
+    const cap = (value, hrid) => {
+      if (value < limit) {
+        limit = value;
+        bottleneckHrid = hrid;
+      }
+    };
+    const upgradeHrid = typeof actionDetail.upgradeItemHrid === "string" ? actionDetail.upgradeItemHrid : "";
+    if (upgradeHrid) {
+      const selected = resolveStack(inv, actionInstance?.primaryItemHash);
+      const count = actionInstance?.primaryItemHash ? selected?.count || 0 : inv.byKey.get(`${upgradeHrid}::0`) || 0;
+      cap(count, upgradeHrid);
+    }
+    const costs = [];
+    if (actionFunc === "/action_functions/production") {
+      for (const inp of Array.isArray(actionDetail.inputItems) ? actionDetail.inputItems : []) {
+        if (inp?.itemHrid) costs.push({ itemHrid: inp.itemHrid, enhancementLevel: 0, count: Number(inp.count) || 0 });
+      }
+    } else if (isAlchemy) {
+      const item = resolveStack(inv, actionInstance.primaryItemHash);
+      if (!item) return { isInfinite: false, max: 0, bottleneckHrid: parseItemHash(actionInstance.primaryItemHash)?.itemHrid || "" };
+      const detail = itemDetailMap[item.itemHrid] || {};
+      const bulk = Number(detail.alchemyDetail?.bulkMultiplier) || 1;
+      cap(Math.floor(item.count / bulk) || 0, item.itemHrid);
+      const catalyst = resolveStack(inv, actionInstance.secondaryItemHash);
+      if (catalyst) {
+        if (catalyst.hash === item.hash) cap(Math.floor(item.count / (bulk + 1)), item.itemHrid);
+        else cap(catalyst.count || 0, catalyst.itemHrid);
+      }
+      costs.push({ itemHrid: item.itemHrid, enhancementLevel: item.enhancementLevel, count: bulk });
+      const coin = getAlchemyCoinCost(actionDetail.hrid || "", Number(detail.itemLevel) || 0, Number(detail.sellPrice) || 0);
+      if (coin) costs.push({ itemHrid: COIN_HRID, enhancementLevel: 0, count: coin * bulk });
+    } else if (isEnhancing) {
+      if ((Number(actionInstance.enhancingMaxLevel) || 0) > 0) return UNLIMITED;
+      const item = resolveStack(inv, actionInstance.primaryItemHash);
+      if (!item) return { isInfinite: false, max: 0, bottleneckHrid: parseItemHash(actionInstance.primaryItemHash)?.itemHrid || "" };
+      for (const c of itemDetailMap[item.itemHrid]?.enhancementCosts || []) {
+        if (c?.itemHrid) costs.push({ itemHrid: c.itemHrid, enhancementLevel: c.enhancementLevel || 0, count: Number(c.count) || 0 });
+      }
+    }
+    if (costs.length > 0) {
+      const drinks = resolveActionDrinks(actionDetail.type || "", loadout, drinkSlotsMap);
+      const artisan = isAlchemy || isEnhancing ? 0 : computeArtisanSaving(drinks, clientData, characterItems, loadout);
+      for (const c of costs) {
+        const need = (1 - artisan) * c.count;
+        if (!(need > 0)) continue;
+        const have = inv.byKey.get(`${c.itemHrid}::${c.enhancementLevel}`) || 0;
+        cap(Math.floor(have / need), c.itemHrid);
+      }
+    }
+    if (!Number.isFinite(limit)) return UNLIMITED;
+    return { isInfinite: false, max: Math.max(0, limit), bottleneckHrid };
+  }
+
   // src/features/planner/action-time-math.ts
   var EFFICIENCY_FUNCTIONS = /* @__PURE__ */ new Set([
     "/action_functions/gathering",
     "/action_functions/production",
     "/action_functions/alchemy"
   ]);
-  function parseLoadoutWearable(raw) {
-    if (typeof raw !== "string" || !raw) return null;
-    const parts = raw.split("::");
-    const hrid = parts.find((p) => p.startsWith("/items/"));
-    if (!hrid) return null;
-    const enh = Number(parts[parts.length - 1]);
-    return {
-      itemHrid: hrid,
-      enhancementLevel: Number.isFinite(enh) && enh >= 0 ? enh : 0
-    };
-  }
   function getItemLevelFromHash(itemHash, characterItems, itemDetailMap) {
     if (typeof itemHash !== "string" || !itemHash) return null;
     for (let i = 0; i < characterItems.length; i++) {
@@ -21011,7 +21157,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     const wearables = loadout?.wearableMap;
     if (wearables && typeof wearables === "object") {
       for (const raw of Object.values(wearables)) {
-        const parsed = parseLoadoutWearable(raw);
+        const parsed = parseItemHash(raw);
         if (!parsed) continue;
         const eq = itemDetailMap[parsed.itemHrid]?.equipmentDetail;
         if (!eq) continue;
@@ -21030,8 +21176,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         drinkConcentration += addStat("drinkConcentration");
       }
     }
-    const loadoutDrinks = Array.isArray(loadout?.drinkItemHrids) ? loadout.drinkItemHrids.filter((h) => typeof h === "string" && h.length > 0) : [];
-    const slotDrinks = loadoutDrinks.length > 0 ? loadoutDrinks : (drinkSlotsMap.get(actionType) || []).map((d) => d?.itemHrid).filter(Boolean);
+    const slotDrinks = resolveActionDrinks(actionType, loadout, drinkSlotsMap);
     const teaScale = 1 + Math.max(0, drinkConcentration);
     for (const hrid of slotDrinks) {
       const buffs = itemDetailMap[hrid]?.consumableDetail?.buffs;
@@ -21185,169 +21330,6 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     };
   }
 
-  // src/features/planner/material-limit.ts
-  var COIN_HRID = "/items/coin";
-  var UNLIMITED = Object.freeze({ isInfinite: true, max: Infinity, bottleneckHrid: "" });
-  function parseLoadoutItemSpec(raw) {
-    if (typeof raw !== "string" || !raw) return null;
-    const parts = raw.split("::");
-    const hrid = parts.find((p) => p.startsWith("/items/"));
-    if (!hrid) return null;
-    const enh = Number(parts[parts.length - 1]);
-    return { itemHrid: hrid, enhancementLevel: Number.isFinite(enh) && enh >= 0 ? enh : 0 };
-  }
-  function parseItemHash(hash) {
-    if (typeof hash !== "string" || !hash) return null;
-    const parts = hash.split("::");
-    const itemHrid = parts.find((p) => p.startsWith("/items/"));
-    if (!itemHrid) return null;
-    const enh = Number(parts[parts.length - 1]);
-    return { itemHrid, enhancementLevel: Number.isFinite(enh) && enh >= 0 ? Math.floor(enh) : 0 };
-  }
-  function computeDrinkConcentrationScale(clientData, characterItems, loadout) {
-    const itemDetailMap = clientData?.itemDetailMap || {};
-    const multTable = clientData?.enhancementLevelTotalBonusMultiplierTable || [];
-    const statOf = (itemHrid, enhancementLevel) => {
-      const eq = itemDetailMap[itemHrid]?.equipmentDetail;
-      if (!eq) return 0;
-      const base = eq.noncombatStats?.drinkConcentration || 0;
-      const enh = (eq.noncombatEnhancementBonuses?.drinkConcentration || 0) * (multTable[enhancementLevel] || 0);
-      return base + enh;
-    };
-    let conc = 0;
-    if (loadout?.wearableMap && typeof loadout.wearableMap === "object") {
-      for (const raw of Object.values(loadout.wearableMap)) {
-        const parsed = parseLoadoutItemSpec(raw);
-        if (parsed) conc += statOf(parsed.itemHrid, parsed.enhancementLevel);
-      }
-      return 1 + Math.max(0, conc);
-    }
-    for (const item of characterItems) {
-      if (!item?.itemHrid || !item.itemLocationHrid || item.itemLocationHrid === "/item_locations/inventory") {
-        continue;
-      }
-      conc += statOf(item.itemHrid, item.enhancementLevel || 0);
-    }
-    return 1 + Math.max(0, conc);
-  }
-  function resolveActionDrinks(actionType, loadout, drinkSlotsMap) {
-    const loadoutDrinks = Array.isArray(loadout?.drinkItemHrids) ? loadout.drinkItemHrids.filter((h) => typeof h === "string" && h.length > 0) : [];
-    if (loadoutDrinks.length > 0) return loadoutDrinks;
-    return (drinkSlotsMap.get(actionType) || []).map((d) => d?.itemHrid).filter(Boolean);
-  }
-  function computeArtisanSaving(drinkHrids, clientData, characterItems, loadout) {
-    const itemDetailMap = clientData?.itemDetailMap || {};
-    let artisan = 0;
-    for (const hrid of drinkHrids) {
-      const buffs = itemDetailMap[hrid]?.consumableDetail?.buffs;
-      if (!Array.isArray(buffs)) continue;
-      for (const b of buffs) {
-        if (b?.typeHrid === "/buff_types/artisan") {
-          artisan += (Number(b.flatBoost) || 0) + (Number(b.ratioBoost) || 0);
-        }
-      }
-    }
-    if (artisan <= 0) return 0;
-    const scale = computeDrinkConcentrationScale(clientData, characterItems, loadout);
-    return Math.min(0.99, artisan * scale);
-  }
-  function buildInventory(characterItems) {
-    const byKey = /* @__PURE__ */ new Map();
-    const byHash = /* @__PURE__ */ new Map();
-    for (const item of characterItems) {
-      if (!item?.itemHrid || !item.count || item.count <= 0) continue;
-      if (item.itemLocationHrid && item.itemLocationHrid !== "/item_locations/inventory") continue;
-      const enhancementLevel = item.enhancementLevel || 0;
-      const k = `${item.itemHrid}::${enhancementLevel}`;
-      byKey.set(k, (byKey.get(k) || 0) + item.count);
-      if (typeof item.hash === "string" && item.hash) {
-        byHash.set(item.hash, { itemHrid: item.itemHrid, enhancementLevel, count: item.count, hash: item.hash });
-      }
-    }
-    return { byKey, byHash };
-  }
-  function resolveStack(inv, hash) {
-    if (typeof hash !== "string" || !hash) return null;
-    const direct = inv.byHash.get(hash);
-    if (direct) return direct;
-    const parsed = parseItemHash(hash);
-    if (!parsed) return null;
-    const count = inv.byKey.get(`${parsed.itemHrid}::${parsed.enhancementLevel}`) || 0;
-    return count > 0 ? { ...parsed, count, hash } : null;
-  }
-  function getAlchemyCoinCost(actionHrid, itemLevel, sellPrice) {
-    if (actionHrid === "/actions/alchemy/decompose" || actionHrid === "/actions/alchemy/unrefine") {
-      return Math.floor(5 * (10 + (itemLevel || 0)));
-    }
-    if (actionHrid === "/actions/alchemy/transmute") {
-      const fifth = (sellPrice || 0) / 5;
-      return fifth > 50 ? Math.floor(fifth) : 50;
-    }
-    return 0;
-  }
-  function computeMaterialLimit(input) {
-    const { actionDetail, clientData, characterItems, drinkSlotsMap, loadout, actionInstance } = input;
-    if (!actionDetail) return UNLIMITED;
-    const itemDetailMap = clientData?.itemDetailMap || {};
-    const actionFunc = actionDetail.function || "";
-    const isAlchemy = actionFunc === "/action_functions/alchemy";
-    const isEnhancing = actionFunc === "/action_functions/enhancing";
-    if ((isAlchemy || isEnhancing) && !actionInstance) return UNLIMITED;
-    const inv = buildInventory(characterItems);
-    let limit = Infinity;
-    let bottleneckHrid = "";
-    const cap = (value, hrid) => {
-      if (value < limit) {
-        limit = value;
-        bottleneckHrid = hrid;
-      }
-    };
-    const upgradeHrid = typeof actionDetail.upgradeItemHrid === "string" ? actionDetail.upgradeItemHrid : "";
-    if (upgradeHrid) {
-      const selected = resolveStack(inv, actionInstance?.primaryItemHash);
-      const count = actionInstance?.primaryItemHash ? selected?.count || 0 : inv.byKey.get(`${upgradeHrid}::0`) || 0;
-      cap(count, upgradeHrid);
-    }
-    const costs = [];
-    if (actionFunc === "/action_functions/production") {
-      for (const inp of Array.isArray(actionDetail.inputItems) ? actionDetail.inputItems : []) {
-        if (inp?.itemHrid) costs.push({ itemHrid: inp.itemHrid, enhancementLevel: 0, count: Number(inp.count) || 0 });
-      }
-    } else if (isAlchemy) {
-      const item = resolveStack(inv, actionInstance.primaryItemHash);
-      if (!item) return { isInfinite: false, max: 0, bottleneckHrid: parseItemHash(actionInstance.primaryItemHash)?.itemHrid || "" };
-      const detail = itemDetailMap[item.itemHrid] || {};
-      const bulk = Number(detail.alchemyDetail?.bulkMultiplier) || 1;
-      cap(Math.floor(item.count / bulk) || 0, item.itemHrid);
-      const catalyst = resolveStack(inv, actionInstance.secondaryItemHash);
-      if (catalyst) {
-        if (catalyst.hash === item.hash) cap(Math.floor(limit / (bulk + 1)), item.itemHrid);
-        else cap(catalyst.count || 0, catalyst.itemHrid);
-      }
-      costs.push({ itemHrid: item.itemHrid, enhancementLevel: item.enhancementLevel, count: bulk });
-      const coin = getAlchemyCoinCost(actionDetail.hrid || "", Number(detail.itemLevel) || 0, Number(detail.sellPrice) || 0);
-      if (coin) costs.push({ itemHrid: COIN_HRID, enhancementLevel: 0, count: coin * bulk });
-    } else if (isEnhancing) {
-      const item = resolveStack(inv, actionInstance.primaryItemHash);
-      if (!item) return { isInfinite: false, max: 0, bottleneckHrid: parseItemHash(actionInstance.primaryItemHash)?.itemHrid || "" };
-      for (const c of itemDetailMap[item.itemHrid]?.enhancementCosts || []) {
-        if (c?.itemHrid) costs.push({ itemHrid: c.itemHrid, enhancementLevel: c.enhancementLevel || 0, count: Number(c.count) || 0 });
-      }
-    }
-    if (costs.length > 0) {
-      const drinks = resolveActionDrinks(actionDetail.type || "", loadout, drinkSlotsMap);
-      const artisan = computeArtisanSaving(drinks, clientData, characterItems, loadout);
-      for (const c of costs) {
-        const need = (1 - artisan) * c.count;
-        if (!(need > 0)) continue;
-        const have = inv.byKey.get(`${c.itemHrid}::${c.enhancementLevel}`) || 0;
-        cap(Math.floor(have / need), c.itemHrid);
-      }
-    }
-    if (!Number.isFinite(limit)) return UNLIMITED;
-    return { isInfinite: false, max: Math.max(0, limit), bottleneckHrid };
-  }
-
   // src/features/planner/action-timer.ts
   var HEADER_TIMER_ID = "mwi-lite-action-timer";
   var QUEUE_TAG_CLASS = "mwi-lite-queue-time-tag";
@@ -21387,8 +21369,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       parts.push(`${ctx.i18n.t("等效", "Eff")}: ${est.effectiveSecPerCount.toFixed(2)}s/${ctx.i18n.t("次", "act")}`);
     }
     if (est.materialLimited && limit && !limit.isInfinite) {
-      const clientData = ctx.gameData.getClientData();
-      const name = clientData?.itemDetailMap?.[limit.bottleneckHrid]?.name || limit.bottleneckHrid;
+      const name = limit.bottleneckHrid ? ctx.i18n.getItemName(limit.bottleneckHrid) : "";
       parts.push(
         `${ctx.i18n.t("材料可做", "Materials allow")}: ${est.remainingActions.toLocaleString()} ${ctx.i18n.t("次", "acts")}` + (name ? ` (${ctx.i18n.t("瓶颈", "bottleneck")}: ${name})` : "")
       );
@@ -21418,7 +21399,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       if (!detail) return null;
       const loadoutId = action?.characterLoadoutID;
       const loadout = index > 0 && typeof loadoutId === "number" && loadoutId > 0 && loadoutId !== currentActionLoadoutId && characterLoadouts?.[loadoutId] ? characterLoadouts[loadoutId] : null;
-      const key = `${action.actionHrid}|${loadout ? loadoutId : 0}|${action.primaryItemHash || ""}|${action.secondaryItemHash || ""}`;
+      const key = `${action.actionHrid}|${loadout ? loadoutId : 0}|${action.primaryItemHash || ""}|${action.secondaryItemHash || ""}|${action.enhancingMaxLevel || 0}`;
       let res = materialLimitCache.get(key);
       if (!res) {
         res = computeMaterialLimit({
@@ -21492,8 +21473,10 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         if (est.materialLimited) queueMat = true;
         queueTotal += est.totalSec;
       }
-      const curPart = curEst.isInfinite ? `∞ (${curEst.perAttemptSec.toFixed(2)}s)` : `${durationText(curEst, curEst.totalSec)} → ${formatFinishClock(curEst.totalSec)}`;
-      const queuePart = actions.length > 1 ? queueInf ? ` | ${ctx.i18n.t("队列", "Q")}: ∞` : ` | ${ctx.i18n.t("总计", "Total")}: ${queueMat ? "~" : ""}${formatDuration(queueTotal)} (${formatFinishClock(queueTotal)})` : "";
+      const curClock = formatFinishClock(curEst.totalSec);
+      const curPart = curEst.isInfinite ? `∞ (${curEst.perAttemptSec.toFixed(2)}s)` : `${durationText(curEst, curEst.totalSec)}${curClock ? ` → ${curClock}` : ""}`;
+      const totalClock = formatFinishClock(queueTotal);
+      const queuePart = actions.length > 1 ? queueInf ? ` | ${ctx.i18n.t("队列", "Q")}: ∞` : ` | ${ctx.i18n.t("总计", "Total")}: ${queueMat ? "~" : ""}${formatDuration(queueTotal)}${totalClock ? ` (${totalClock})` : ""}` : "";
       const nextText = `⏱ ${curPart}${queuePart}`;
       if (timerEl.textContent !== nextText) {
         timerEl.textContent = nextText;
@@ -21537,7 +21520,8 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
             tag.setAttribute("data-mwi-lite", "1");
             row.appendChild(tag);
           }
-          const txt = est.isInfinite ? `∞ (${est.perAttemptSec.toFixed(2)}s)` : `${durationText(est, est.totalSec)}${hasInf ? "" : ` (${formatFinishClock(idx === 0 ? firstEst.totalSec : accSec)})`}`;
+          const rowClock = hasInf ? "" : formatFinishClock(idx === 0 ? firstEst.totalSec : accSec);
+          const txt = est.isInfinite ? `∞ (${est.perAttemptSec.toFixed(2)}s)` : `${durationText(est, est.totalSec)}${rowClock ? ` (${rowClock})` : ""}`;
           if (tag.textContent !== txt) tag.textContent = txt;
           const tip = formatTimingTooltip(context, est, limitFor(actions[idx], idx));
           if (tag.title !== tip) tag.title = tip;

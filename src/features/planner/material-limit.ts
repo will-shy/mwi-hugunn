@@ -27,15 +27,6 @@ const COIN_HRID = "/items/coin";
 
 const UNLIMITED: MaterialLimitResult = Object.freeze({ isInfinite: true, max: Infinity, bottleneckHrid: "" });
 
-function parseLoadoutItemSpec(raw: unknown): { itemHrid: string; enhancementLevel: number } | null {
-  if (typeof raw !== "string" || !raw) return null;
-  const parts = raw.split("::");
-  const hrid = parts.find((p) => p.startsWith("/items/"));
-  if (!hrid) return null;
-  const enh = Number(parts[parts.length - 1]);
-  return { itemHrid: hrid, enhancementLevel: Number.isFinite(enh) && enh >= 0 ? enh : 0 };
-}
-
 /** Parse "characterID::itemLocation::itemHrid::enhancementLevel" item hashes. */
 export function parseItemHash(hash: unknown): { itemHrid: string; enhancementLevel: number } | null {
   if (typeof hash !== "string" || !hash) return null;
@@ -65,7 +56,7 @@ export function computeDrinkConcentrationScale(
   let conc = 0;
   if (loadout?.wearableMap && typeof loadout.wearableMap === "object") {
     for (const raw of Object.values(loadout.wearableMap)) {
-      const parsed = parseLoadoutItemSpec(raw);
+      const parsed = parseItemHash(raw);
       if (parsed) conc += statOf(parsed.itemHrid, parsed.enhancementLevel);
     }
     return 1 + Math.max(0, conc);
@@ -80,16 +71,15 @@ export function computeDrinkConcentrationScale(
   return 1 + Math.max(0, conc);
 }
 
-/** Drinks the action will use: the loadout's drinks if it defines any, else the action type's slots. */
+/** Drinks the action will use: the loadout's drink slots when configured, else the action type's slots. */
 export function resolveActionDrinks(
   actionType: string,
   loadout: any | null,
   drinkSlotsMap: ReadonlyMap<string, readonly any[]>
 ): string[] {
-  const loadoutDrinks: string[] = Array.isArray(loadout?.drinkItemHrids)
-    ? loadout.drinkItemHrids.filter((h: unknown) => typeof h === "string" && h.length > 0)
-    : [];
-  if (loadoutDrinks.length > 0) return loadoutDrinks;
+  if (loadout && Array.isArray(loadout.drinkItemHrids)) {
+    return loadout.drinkItemHrids.filter((h: unknown): h is string => typeof h === "string" && h.length > 0);
+  }
   return (drinkSlotsMap.get(actionType) || []).map((d: any) => d?.itemHrid).filter(Boolean);
 }
 
@@ -175,11 +165,10 @@ export function getAlchemyCoinCost(actionHrid: string, itemLevel: number, sellPr
 
 /**
  * Max runs allowed by inventory — a port of the game client's `getItemActionLimit`:
- * - production: `inputItems` (+0 stacks only); upgrade item limited by the selected stack;
- * - alchemy: ⌊stack/bulk⌋, capped by catalyst count (or ⌊…/(bulk+1)⌋ if the catalyst is the same stack),
+ * - production: `inputItems` (+0 stacks only, reduced by Artisan Tea); upgrade item limited by the selected stack;
+ * - alchemy: ⌊stack/bulk⌋, capped by catalyst count (or ⌊stack/(bulk+1)⌋ if the catalyst is the same stack),
  *   plus `bulk` items and `getAlchemyCoinCost() × bulk` coins per run;
- * - enhancing: the selected item's `enhancementCosts`;
- * - Artisan reduces every cost entry: need = (1 − artisan) × count.
+ * - enhancing: the selected item's `enhancementCosts` (skipped when `enhancingMaxLevel > 0`, where stopping is target-level driven).
  */
 export function computeMaterialLimit(input: MaterialLimitInput): MaterialLimitResult {
   const { actionDetail, clientData, characterItems, drinkSlotsMap, loadout, actionInstance } = input;
@@ -224,13 +213,15 @@ export function computeMaterialLimit(input: MaterialLimitInput): MaterialLimitRe
     cap(Math.floor(item.count / bulk) || 0, item.itemHrid);
     const catalyst = resolveStack(inv, actionInstance.secondaryItemHash);
     if (catalyst) {
-      if (catalyst.hash === item.hash) cap(Math.floor(limit / (bulk + 1)), item.itemHrid);
+      if (catalyst.hash === item.hash) cap(Math.floor(item.count / (bulk + 1)), item.itemHrid);
       else cap(catalyst.count || 0, catalyst.itemHrid);
     }
     costs.push({ itemHrid: item.itemHrid, enhancementLevel: item.enhancementLevel, count: bulk });
     const coin = getAlchemyCoinCost(actionDetail.hrid || "", Number(detail.itemLevel) || 0, Number(detail.sellPrice) || 0);
     if (coin) costs.push({ itemHrid: COIN_HRID, enhancementLevel: 0, count: coin * bulk });
   } else if (isEnhancing) {
+    // Target-level enhancing stops once the target enhancement level is reached rather than burning all materials.
+    if ((Number(actionInstance.enhancingMaxLevel) || 0) > 0) return UNLIMITED;
     const item = resolveStack(inv, actionInstance.primaryItemHash);
     if (!item) return { isInfinite: false, max: 0, bottleneckHrid: parseItemHash(actionInstance.primaryItemHash)?.itemHrid || "" };
     for (const c of itemDetailMap[item.itemHrid]?.enhancementCosts || []) {
@@ -240,7 +231,10 @@ export function computeMaterialLimit(input: MaterialLimitInput): MaterialLimitRe
 
   if (costs.length > 0) {
     const drinks = resolveActionDrinks(actionDetail.type || "", loadout, drinkSlotsMap);
-    const artisan = computeArtisanSaving(drinks, clientData, characterItems, loadout);
+    const artisan =
+      isAlchemy || isEnhancing
+        ? 0
+        : computeArtisanSaving(drinks, clientData, characterItems, loadout);
     for (const c of costs) {
       const need = (1 - artisan) * c.count;
       if (!(need > 0)) continue;
