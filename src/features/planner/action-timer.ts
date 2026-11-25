@@ -54,12 +54,22 @@ function formatTimingTooltip(
         (name ? ` (${ctx.i18n.t("瓶颈", "bottleneck")}: ${name})` : "")
     );
   }
+  if (est.expectedLimited && est.expectedAttempts !== null) {
+    parts.push(
+      `${ctx.i18n.t("预计次数", "Expected attempts")} → +${est.enhanceTargetLevel}: ${Math.round(est.expectedAttempts).toLocaleString()}`
+    );
+  }
   return parts.join(" · ");
 }
 
-/** Prefix for durations bounded by materials of an infinite action. */
+/** True when the duration is an estimate (bounded by materials or by expected enhancing attempts). */
+function isEstimated(est: ActionTimingEstimate): boolean {
+  return est.materialLimited || est.expectedLimited;
+}
+
+/** Prefix for estimated durations. */
 function durationText(est: ActionTimingEstimate, sec: number): string {
-  return `${est.materialLimited ? "~" : ""}${formatDuration(sec)}`;
+  return `${isEstimated(est) ? "~" : ""}${formatDuration(sec)}`;
 }
 
 // Material limits only change on inventory / drink / loadout / queue events, not every 1s tick.
@@ -168,11 +178,11 @@ export function createActionTimerModule(): FeatureModule {
 
     let queueTotal = curEst.totalSec;
     let queueInf = curEst.isInfinite;
-    let queueMat = curEst.materialLimited;
+    let queueMat = isEstimated(curEst);
     for (let i = 1; i < actions.length; i++) {
       const est = estimateAt(actions[i], i);
       if (est.isInfinite) queueInf = true;
-      if (est.materialLimited) queueMat = true;
+      if (isEstimated(est)) queueMat = true;
       queueTotal += est.totalSec;
     }
 
