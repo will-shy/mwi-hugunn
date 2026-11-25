@@ -154,8 +154,12 @@ class InMemoryGameData implements GameDataAPI {
         }
       }
 
+      // Task progress (currentCount) arrives with each completed action, like the game client applies it.
+      const questsChanged = this.mergeQuests(data?.endCharacterQuests);
+
       if (Array.isArray(data?.endCharacterItems)) this.emit("items_updated", data);
       if (Array.isArray(data?.endCharacterSkills)) this.emit("skills_updated", data);
+      if (questsChanged) this.emit("quests_updated", data);
       this.emit("action_completed", data);
     });
 
@@ -291,16 +295,7 @@ class InMemoryGameData implements GameDataAPI {
     });
 
     wsBus.on("quests_updated", (data) => {
-      if (this.characterData && Array.isArray(data?.endCharacterQuests)) {
-        const map = new Map<number | string, any>();
-        for (const q of this.characterQuests) {
-          if (q?.id != null) map.set(q.id, q);
-        }
-        for (const q of data.endCharacterQuests) {
-          if (q?.id != null) map.set(q.id, q);
-        }
-        this.characterQuests = Array.from(map.values());
-      }
+      this.mergeQuests(data?.endCharacterQuests);
       this.emit("quests_updated", data);
     });
 
@@ -393,6 +388,20 @@ class InMemoryGameData implements GameDataAPI {
     }
     if (Array.isArray(core?.state?.characterSkills)) return core.state.characterSkills;
     return [];
+  }
+
+  /** Upsert quests by id (server sends changed quests only); returns true when anything was merged. */
+  private mergeQuests(endQuests: unknown): boolean {
+    if (!this.characterData || !Array.isArray(endQuests) || endQuests.length === 0) return false;
+    const map = new Map<number | string, any>();
+    for (const q of this.characterQuests) {
+      if (q?.id != null) map.set(q.id, q);
+    }
+    for (const q of endQuests) {
+      if (q?.id != null) map.set(q.id, q);
+    }
+    this.characterQuests = Array.from(map.values());
+    return true;
   }
 
   getCharacterQuests(): any[] {
