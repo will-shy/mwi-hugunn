@@ -79,6 +79,36 @@ function parseActionCount(raw: string | null | undefined): number | null {
 const NO_TASK_PANEL_SEL =
   '[class*="SkillActionDetail_alchemyComponent"], [class*="SkillActionDetail_enhancingComponent"]';
 
+const QUEST_DONE_STATUSES = new Set(["/quest_status/completed", "/quest_status/claimed", "/quest_status/discarded"]);
+
+/**
+ * Total remaining count across all unfinished random action tasks for the same action
+ * (e.g. two "Holy Milk" milking tasks → both remainders added), from the server's quest list.
+ */
+export function sumRemainingForAction(
+  quests: readonly any[],
+  actionHrid: string
+): { total: number; tasks: number } {
+  let total = 0;
+  let tasks = 0;
+  if (!actionHrid || !Array.isArray(quests)) return { total, tasks };
+  for (const q of quests) {
+    if (
+      q?.category !== "/quest_category/random_task" ||
+      q.type !== "/quest_type/action" ||
+      q.actionHrid !== actionHrid ||
+      QUEST_DONE_STATUSES.has(q.status)
+    ) {
+      continue;
+    }
+    const remaining = Math.floor((Number(q.goalCount) || 0) - (Number(q.currentCount) || 0));
+    if (remaining <= 0) continue;
+    total += remaining;
+    tasks++;
+  }
+  return { total, tasks };
+}
+
 export function computeQuickQueueCount(baseCount: number | null, autoMinusOne: boolean): number | null {
   if (baseCount === null || !Number.isFinite(baseCount) || baseCount <= 0) return null;
   const normalized = Math.floor(baseCount);
@@ -1128,8 +1158,8 @@ export function createTaskBoardModule(): FeatureModule {
           "Silently go, apply (N-1), add to queue, and return"
         )
       : ctx.i18n.t(
-          "后台静默前往并添加到队列后返回任务界面",
-          "Silently go, add to queue, and return"
+          "后台静默前往并添加到队列后返回任务界面（同名任务的剩余次数会合并）",
+          "Silently go, add to queue, and return (remaining counts of same-action tasks are merged)"
         );
 
     const taskKeys = buildTaskCardKeys(cards);
@@ -1201,6 +1231,17 @@ export function createTaskBoardModule(): FeatureModule {
     const winScrollXBefore = window.scrollX;
     const winScrollYBefore = window.scrollY;
 
+    // Merge all unfinished tasks for the same action into one queued count
+    // (skipped when "Auto (N-1)" is on: then each task queues its own count − 1).
+    let merged: { total: number; tasks: number } | null = null;
+    const parsedCard = parseCard(card);
+    if (parsedCard && !parsedCard.isCombat && !ctx.isFeatureEnabled(TASK_AUTO_N1_MODULE_ID)) {
+      ensureLookupMaps();
+      const hrid = resolveActionHridByTarget(parsedCard.taskTarget, ctx.gameData.getClientData());
+      const sum = hrid ? sumRemainingForAction(ctx.gameData.getCharacterQuests(), hrid) : null;
+      if (sum && sum.tasks >= 2) merged = sum;
+    }
+
     isQuickQueueing = true;
     const freeze = captureVisualFreezeOverlay(tabScrollBefore);
 
@@ -1268,10 +1309,11 @@ export function createTaskBoardModule(): FeatureModule {
       }
 
       const autoMinusOne = ctx!.isFeatureEnabled(TASK_AUTO_N1_MODULE_ID);
-      if (autoMinusOne && mainInput) {
-        const baseCount = parseActionCount(mainInput.value);
-        const targetCount = computeQuickQueueCount(baseCount, true);
-        if (targetCount !== null && baseCount !== null && targetCount !== baseCount) {
+      if (mainInput) {
+        // Base = merged remaining across same-action tasks (else the game's prefilled single-task count).
+        const baseCount = merged ? merged.total : parseActionCount(mainInput.value);
+        const targetCount = computeQuickQueueCount(baseCount, autoMinusOne);
+        if (targetCount !== null && targetCount !== parseActionCount(mainInput.value)) {
           setReactInputValue(mainInput, targetCount, false);
         }
       }
@@ -1292,7 +1334,12 @@ export function createTaskBoardModule(): FeatureModule {
         latestAddQueueBtn.click();
         return {
           status: "done",
-          feedback: { label: ctx!.i18n.t("✓ 已入队", "✓ Queued"), tone: "ok" },
+          feedback: {
+            label: merged
+              ? ctx!.i18n.t(`✓ 已入队（合并${merged.tasks}个）`, `✓ Queued (${merged.tasks} merged)`)
+              : ctx!.i18n.t("✓ 已入队", "✓ Queued"),
+            tone: "ok",
+          },
         };
       }
 

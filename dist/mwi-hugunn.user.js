@@ -2,7 +2,7 @@
 // @name         MWI · Hugunn
 // @name:zh-CN   MWI · Hugunn
 // @namespace    https://milkywayidle.com/mwi-hugunn
-// @version      1.4.2
+// @version      1.5.0
 // @description  Tired of reinstalling a pile of laggy, mismatched scripts on every device? Fast! Lightweight! One script is all you need—come fight me if it's not! 15-in-1 MWI suite, zero deps & 100% read-only.
 // @description:zh-CN 受够了换设备就重装一堆卡顿又杂乱的脚本？快速！轻量！一个就够！不好用你来打我！15合1 MWI 聚合插件（市场/规划/迷宫/战斗），零依赖纯只读。
 // @author       adudu
@@ -1791,7 +1791,7 @@
   }
 
   // src/core/version.ts
-  var HUGUNN_VERSION = true ? "1.4.2" : "dev";
+  var HUGUNN_VERSION = true ? "1.5.0" : "dev";
 
   // src/core/settings-ui.ts
   var SETTINGS_BTN_ID = "mwi-lite-settings-btn";
@@ -23645,6 +23645,22 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     return Number.isFinite(n) ? Math.floor(n * mul) : null;
   }
   var NO_TASK_PANEL_SEL = '[class*="SkillActionDetail_alchemyComponent"], [class*="SkillActionDetail_enhancingComponent"]';
+  var QUEST_DONE_STATUSES = /* @__PURE__ */ new Set(["/quest_status/completed", "/quest_status/claimed", "/quest_status/discarded"]);
+  function sumRemainingForAction(quests, actionHrid) {
+    let total = 0;
+    let tasks = 0;
+    if (!actionHrid || !Array.isArray(quests)) return { total, tasks };
+    for (const q of quests) {
+      if (q?.category !== "/quest_category/random_task" || q.type !== "/quest_type/action" || q.actionHrid !== actionHrid || QUEST_DONE_STATUSES.has(q.status)) {
+        continue;
+      }
+      const remaining = Math.floor((Number(q.goalCount) || 0) - (Number(q.currentCount) || 0));
+      if (remaining <= 0) continue;
+      total += remaining;
+      tasks++;
+    }
+    return { total, tasks };
+  }
   function computeQuickQueueCount(baseCount, autoMinusOne) {
     if (baseCount === null || !Number.isFinite(baseCount) || baseCount <= 0) return null;
     const normalized = Math.floor(baseCount);
@@ -24551,8 +24567,8 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         "后台静默前往并按 (N-1) 添加到队列后返回任务界面",
         "Silently go, apply (N-1), add to queue, and return"
       ) : ctx.i18n.t(
-        "后台静默前往并添加到队列后返回任务界面",
-        "Silently go, add to queue, and return"
+        "后台静默前往并添加到队列后返回任务界面（同名任务的剩余次数会合并）",
+        "Silently go, add to queue, and return (remaining counts of same-action tasks are merged)"
       );
       const taskKeys = buildTaskCardKeys(cards);
       for (let i = 0; i < cards.length; i++) {
@@ -24611,6 +24627,14 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       const subScrollBefore = findRealGameElement(document, SUB_PANEL_SEL)?.scrollTop ?? 0;
       const winScrollXBefore = window.scrollX;
       const winScrollYBefore = window.scrollY;
+      let merged = null;
+      const parsedCard = parseCard(card);
+      if (parsedCard && !parsedCard.isCombat && !ctx.isFeatureEnabled(TASK_AUTO_N1_MODULE_ID)) {
+        ensureLookupMaps();
+        const hrid = resolveActionHridByTarget(parsedCard.taskTarget, ctx.gameData.getClientData());
+        const sum = hrid ? sumRemainingForAction(ctx.gameData.getCharacterQuests(), hrid) : null;
+        if (sum && sum.tasks >= 2) merged = sum;
+      }
       isQuickQueueing = true;
       const freeze = captureVisualFreezeOverlay(tabScrollBefore);
       const navigateBackToTasks = () => {
@@ -24665,10 +24689,10 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
           };
         }
         const autoMinusOne = ctx.isFeatureEnabled(TASK_AUTO_N1_MODULE_ID);
-        if (autoMinusOne && mainInput) {
-          const baseCount = parseActionCount(mainInput.value);
-          const targetCount = computeQuickQueueCount(baseCount, true);
-          if (targetCount !== null && baseCount !== null && targetCount !== baseCount) {
+        if (mainInput) {
+          const baseCount = merged ? merged.total : parseActionCount(mainInput.value);
+          const targetCount = computeQuickQueueCount(baseCount, autoMinusOne);
+          if (targetCount !== null && targetCount !== parseActionCount(mainInput.value)) {
             setReactInputValue2(mainInput, targetCount, false);
           }
         }
@@ -24686,7 +24710,10 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
           latestAddQueueBtn.click();
           return {
             status: "done",
-            feedback: { label: ctx.i18n.t("✓ 已入队", "✓ Queued"), tone: "ok" }
+            feedback: {
+              label: merged ? ctx.i18n.t(`✓ 已入队（合并${merged.tasks}个）`, `✓ Queued (${merged.tasks} merged)`) : ctx.i18n.t("✓ 已入队", "✓ Queued"),
+              tone: "ok"
+            }
           };
         }
         const detailCount = getDetailActionCount(detail);
