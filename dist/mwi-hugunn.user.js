@@ -2,7 +2,7 @@
 // @name         MWI · Hugunn
 // @name:zh-CN   MWI · Hugunn
 // @namespace    https://milkywayidle.com/mwi-hugunn
-// @version      1.3.1
+// @version      1.4.0
 // @description  Tired of reinstalling a pile of laggy, mismatched scripts on every device? Fast! Lightweight! One script is all you need—come fight me if it's not! 15-in-1 MWI suite, zero deps & 100% read-only.
 // @description:zh-CN 受够了换设备就重装一堆卡顿又杂乱的脚本？快速！轻量！一个就够！不好用你来打我！15合1 MWI 聚合插件（市场/规划/迷宫/战斗），零依赖纯只读。
 // @author       adudu
@@ -1791,7 +1791,7 @@
   }
 
   // src/core/version.ts
-  var HUGUNN_VERSION = true ? "1.3.1" : "dev";
+  var HUGUNN_VERSION = true ? "1.4.0" : "dev";
 
   // src/core/settings-ui.ts
   var SETTINGS_BTN_ID = "mwi-lite-settings-btn";
@@ -16017,7 +16017,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     createCombatScoreModule()
   ];
 
-  // src/features/market/enhancement-math.ts
+  // src/core/enhancement-markov.ts
   var BASE_SUCCESS_RATES = [
     50,
     45,
@@ -16040,45 +16040,6 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     30,
     30
   ];
-  var ENHANCEMENT_BONUSES = {
-    1: 0.02,
-    2: 0.042,
-    3: 0.066,
-    4: 0.092,
-    5: 0.12,
-    6: 0.15,
-    7: 0.182,
-    8: 0.216,
-    9: 0.252,
-    10: 0.29,
-    11: 0.334,
-    12: 0.384,
-    13: 0.44,
-    14: 0.502,
-    15: 0.57,
-    16: 0.644,
-    17: 0.724,
-    18: 0.81,
-    19: 0.902,
-    20: 1
-  };
-  var ENHANCEMENT_MULTIPLIERS = {
-    "/equipment_types/neck": 5,
-    "/equipment_types/ring": 5,
-    "/equipment_types/earring": 5,
-    "/equipment_types/back": 5,
-    "/equipment_types/trinket": 5,
-    "/equipment_types/charm": 5
-  };
-  var MIN_ENHANCING_ACTION_TIME = 3;
-  var BASE_ENHANCING_ACTION_TIME = 12;
-  function getEnhancementStatMultiplier(itemDetails, enhancementLevel) {
-    if (!enhancementLevel || enhancementLevel <= 0) return 1;
-    const equipmentType = itemDetails?.equipmentDetail?.type;
-    const slotMult = ENHANCEMENT_MULTIPLIERS[equipmentType] || 1;
-    const bonus = ENHANCEMENT_BONUSES[enhancementLevel] || 0;
-    return 1 + bonus * slotMult;
-  }
   function invertMatrix(matrix) {
     const n = matrix.length;
     const aug = Array.from({ length: n }, (_, i) => {
@@ -16120,8 +16081,10 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
   }
   var MARKOV_CACHE_LIMIT = 4096;
   var markovCache = /* @__PURE__ */ new Map();
-  function solveEnhancementMarkov(enhancingLevel, toolBonus, itemLevel, targetLevel, protectFrom, blessedTea, guzzlingBonus) {
-    const cacheKey = `${enhancingLevel}|${toolBonus}|${itemLevel}|${targetLevel}|${protectFrom}|${blessedTea ? 1 : 0}|${guzzlingBonus}`;
+  function solveEnhancementMarkov(enhancingLevel, toolBonus, itemLevel, targetLevel, protectFrom, blessedTea, guzzlingBonus, startLevel = 0) {
+    const start = Math.max(0, Math.floor(startLevel));
+    if (!(targetLevel > start)) return null;
+    const cacheKey = `${enhancingLevel}|${toolBonus}|${itemLevel}|${targetLevel}|${protectFrom}|${blessedTea ? 1 : 0}|${guzzlingBonus}|${start}`;
     if (markovCache.has(cacheKey)) {
       return markovCache.get(cacheKey);
     }
@@ -16155,19 +16118,60 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     }
     let attempts = 0;
     for (let i = 0; i < targetLevel; i++) {
-      attempts += M[0][i];
+      attempts += M[start][i];
     }
     let protectionCount = 0;
     if (protectFrom > 0 && protectFrom < targetLevel) {
       for (let i = protectFrom; i < targetLevel; i++) {
         const failChance = Q[i][i - 1] ?? 0;
-        protectionCount += M[0][i] * failChance;
+        protectionCount += M[start][i] * failChance;
       }
     }
     const res = { attempts, protectionCount };
     if (markovCache.size >= MARKOV_CACHE_LIMIT) markovCache.clear();
     markovCache.set(cacheKey, res);
     return res;
+  }
+
+  // src/features/market/enhancement-math.ts
+  var ENHANCEMENT_BONUSES = {
+    1: 0.02,
+    2: 0.042,
+    3: 0.066,
+    4: 0.092,
+    5: 0.12,
+    6: 0.15,
+    7: 0.182,
+    8: 0.216,
+    9: 0.252,
+    10: 0.29,
+    11: 0.334,
+    12: 0.384,
+    13: 0.44,
+    14: 0.502,
+    15: 0.57,
+    16: 0.644,
+    17: 0.724,
+    18: 0.81,
+    19: 0.902,
+    20: 1
+  };
+  var ENHANCEMENT_MULTIPLIERS = {
+    "/equipment_types/neck": 5,
+    "/equipment_types/ring": 5,
+    "/equipment_types/earring": 5,
+    "/equipment_types/back": 5,
+    "/equipment_types/trinket": 5,
+    "/equipment_types/charm": 5
+  };
+  var MIN_ENHANCING_ACTION_TIME = 3;
+  var BASE_ENHANCING_ACTION_TIME = 12;
+  function getEnhancementStatMultiplier(itemDetails, enhancementLevel) {
+    if (!enhancementLevel || enhancementLevel <= 0) return 1;
+    const equipmentType = itemDetails?.equipmentDetail?.type;
+    const slotMult = ENHANCEMENT_MULTIPLIERS[equipmentType] || 1;
+    const bonus = ENHANCEMENT_BONUSES[enhancementLevel] || 0;
+    return 1 + bonus * slotMult;
   }
   function calculateEnhancingActionTime(enhancingLevel, itemLevel, speedBonus) {
     const speedMultiplier = enhancingLevel > itemLevel ? 1 + (enhancingLevel - itemLevel + speedBonus) / 100 : 1 + speedBonus / 100;
@@ -20962,6 +20966,12 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     }
     return null;
   }
+  function parseEnhancementLevelFromHash(itemHash) {
+    if (typeof itemHash !== "string" || !itemHash) return 0;
+    const parts = itemHash.split("::");
+    const lvl = Number(parts[parts.length - 1]);
+    return Number.isFinite(lvl) && lvl > 0 ? Math.floor(lvl) : 0;
+  }
   function isActionOnTask(actionHrid, characterQuests) {
     if (!actionHrid || !Array.isArray(characterQuests)) return false;
     for (let i = 0; i < characterQuests.length; i++) {
@@ -20994,6 +21004,10 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         acc.efficiency += flat + ratio;
       } else if (b.typeHrid === "/buff_types/action_level") {
         acc.actionLevelFlat += flat;
+      } else if (b.typeHrid === "/buff_types/enhancing_success") {
+        acc.enhancingSuccess += ratio;
+      } else if (b.typeHrid === "/buff_types/blessed") {
+        acc.blessed += flat + ratio;
       } else if (skillLevelBuffHrid && b.typeHrid === skillLevelBuffHrid) {
         acc.skillLevelFlat += flat;
         acc.skillLevelRatio += ratio;
@@ -21026,6 +21040,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         acc.actionSpeed += addStat(speedKey) + addStat("skillingSpeed");
         acc.efficiency += addStat(effKey) + addStat("skillingEfficiency");
         acc.skillLevelFlat += addStat(lvlKey);
+        if (skillPart === "enhancing") acc.enhancingSuccess += addStat("enhancingSuccess");
         taskSpeed += addStat("taskSpeed");
         drinkConcentration += addStat("drinkConcentration");
       }
@@ -21046,6 +21061,10 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
           acc.efficiency += flat + ratio;
         } else if (b.typeHrid === "/buff_types/action_level") {
           acc.actionLevelFlat += flat;
+        } else if (b.typeHrid === "/buff_types/enhancing_success") {
+          acc.enhancingSuccess += ratio;
+        } else if (b.typeHrid === "/buff_types/blessed") {
+          acc.blessed += flat + ratio;
         } else if (skillLevelBuffHrid && b.typeHrid === skillLevelBuffHrid) {
           acc.skillLevelFlat += flat;
           acc.skillLevelRatio += ratio;
@@ -21080,7 +21099,10 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         remainingActions: 0,
         totalSec: 0,
         isInfinite: false,
-        materialLimited: false
+        materialLimited: false,
+        expectedAttempts: null,
+        enhanceTargetLevel: 0,
+        expectedLimited: false
       };
     }
     const baseSec = (detail.baseTimeCost || 0) / 1e9 > 0 ? (detail.baseTimeCost || 0) / 1e9 : 3;
@@ -21099,7 +21121,9 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       efficiency: 0,
       actionLevelFlat: 0,
       skillLevelFlat: 0,
-      skillLevelRatio: 0
+      skillLevelRatio: 0,
+      enhancingSuccess: 0,
+      blessed: 0
     };
     accumulateBuffList(buffSources.mooPass?.[actionType], skillLevelBuffHrid, acc);
     accumulateBuffList(buffSources.community?.[actionType], skillLevelBuffHrid, acc);
@@ -21136,6 +21160,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     const baseSkillLevel = getSkillLevel(reqSkillHrid, characterSkills);
     const boostedSkillLevel = (1 + acc.skillLevelRatio) * baseSkillLevel + acc.skillLevelFlat;
     const itemDetailMap = clientData?.itemDetailMap || {};
+    let enhanceItemLevel = null;
     if (actionFunc === "/action_functions/gathering" || actionFunc === "/action_functions/production") {
       const adjReqLevel = (detail.levelRequirement?.level || 0) + acc.actionLevelFlat;
       if (boostedSkillLevel >= adjReqLevel) {
@@ -21148,6 +21173,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       }
     } else if (actionFunc === "/action_functions/enhancing") {
       const itemLevel = getItemLevelFromHash(action?.primaryItemHash, characterItems, itemDetailMap);
+      enhanceItemLevel = itemLevel;
       if (itemLevel !== null && boostedSkillLevel > itemLevel) {
         acc.actionSpeed += (boostedSkillLevel - itemLevel) / 100;
       }
@@ -21161,8 +21187,34 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
     const effectiveSecPerCount = perAttemptSec / effectiveRate;
     const hasMax = Boolean(action?.hasMaxCount && (action?.maxCount || 0) > 0);
     const matLimit = !hasMax && typeof materialLimit === "number" && Number.isFinite(materialLimit) ? Math.max(0, Math.floor(materialLimit)) : null;
-    const bounded = hasMax || matLimit !== null;
-    const remainingActions = hasMax ? Math.max(0, action.maxCount - (action.currentCount || 0)) : matLimit ?? 0;
+    const queued = hasMax ? Math.max(0, action.maxCount - (action.currentCount || 0)) : matLimit ?? Infinity;
+    let expectedAttempts = null;
+    let enhanceTargetLevel = 0;
+    if (actionFunc === "/action_functions/enhancing" && enhanceItemLevel !== null) {
+      const target = Math.floor(Number(action?.enhancingMaxLevel) || 0);
+      const startLevel = parseEnhancementLevelFromHash(action?.primaryItemHash);
+      if (target > startLevel) {
+        const res = solveEnhancementMarkov(
+          boostedSkillLevel,
+          acc.enhancingSuccess * 100,
+          enhanceItemLevel,
+          target,
+          Math.max(0, Math.floor(Number(action?.enhancingProtectionMinLevel) || 0)),
+          acc.blessed > 0,
+          acc.blessed * 100,
+          startLevel
+        );
+        if (res && Number.isFinite(res.attempts) && res.attempts > 0) {
+          expectedAttempts = res.attempts;
+          enhanceTargetLevel = target;
+        }
+      }
+    }
+    const countForTime = expectedAttempts !== null ? Math.min(queued, expectedAttempts) : queued;
+    const bounded = Number.isFinite(countForTime);
+    const expectedLimited = expectedAttempts !== null && expectedAttempts < queued;
+    const materialLimited = !hasMax && matLimit !== null && !expectedLimited;
+    const remainingActions = bounded ? expectedLimited ? Math.round(countForTime) : countForTime : 0;
     let elapsedFraction = 0;
     if (actionIndex === 0 && action?.startTime) {
       const startMs = new Date(action.startTime).getTime();
@@ -21171,7 +21223,7 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         elapsedFraction = Math.min(perAttemptSec * 0.99, elapsedSec % perAttemptSec);
       }
     }
-    const totalSec = bounded ? Math.max(0, remainingActions * effectiveSecPerCount - elapsedFraction) : 0;
+    const totalSec = bounded ? Math.max(0, countForTime * effectiveSecPerCount - elapsedFraction) : 0;
     return {
       perAttemptSec,
       effectiveSecPerCount,
@@ -21181,7 +21233,10 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       remainingActions,
       totalSec,
       isInfinite: !bounded,
-      materialLimited: matLimit !== null
+      materialLimited,
+      expectedAttempts,
+      enhanceTargetLevel,
+      expectedLimited
     };
   }
 
@@ -21393,10 +21448,18 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
         `${ctx.i18n.t("材料可做", "Materials allow")}: ${est.remainingActions.toLocaleString()} ${ctx.i18n.t("次", "acts")}` + (name ? ` (${ctx.i18n.t("瓶颈", "bottleneck")}: ${name})` : "")
       );
     }
+    if (est.expectedLimited && est.expectedAttempts !== null) {
+      parts.push(
+        `${ctx.i18n.t("预计次数", "Expected attempts")} → +${est.enhanceTargetLevel}: ${Math.round(est.expectedAttempts).toLocaleString()}`
+      );
+    }
     return parts.join(" · ");
   }
+  function isEstimated(est) {
+    return est.materialLimited || est.expectedLimited;
+  }
   function durationText(est, sec) {
-    return `${est.materialLimited ? "~" : ""}${formatDuration(sec)}`;
+    return `${isEstimated(est) ? "~" : ""}${formatDuration(sec)}`;
   }
   var materialLimitCache = /* @__PURE__ */ new Map();
   function clearMaterialLimitCache() {
@@ -21485,11 +21548,11 @@ self["webpackChunkmwicombatsimulator"] = __webpack_chunk_array__;`;
       }
       let queueTotal = curEst.totalSec;
       let queueInf = curEst.isInfinite;
-      let queueMat = curEst.materialLimited;
+      let queueMat = isEstimated(curEst);
       for (let i = 1; i < actions.length; i++) {
         const est = estimateAt(actions[i], i);
         if (est.isInfinite) queueInf = true;
-        if (est.materialLimited) queueMat = true;
+        if (isEstimated(est)) queueMat = true;
         queueTotal += est.totalSec;
       }
       const curPart = curEst.isInfinite ? `∞ (${curEst.perAttemptSec.toFixed(2)}s)` : `${durationText(curEst, curEst.totalSec)} → ${formatFinishClock(curEst.totalSec)}`;

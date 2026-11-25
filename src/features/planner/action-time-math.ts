@@ -1,4 +1,5 @@
 // Credit: Action timing & tea/equipment buff calculation aligned with Toolasha (Celasha, CC-BY-NC-SA-4.0) & MWITools (bot7420, shykai).
+import { solveEnhancementMarkov } from "../../core/enhancement-markov";
 import type { ActionTypeBuffSources } from "../../core/types";
 
 export interface ActionEstimateInput {
@@ -26,8 +27,14 @@ export interface ActionTimingEstimate {
   readonly remainingActions: number;
   readonly totalSec: number;
   readonly isInfinite: boolean;
-  /** True when an infinite action's duration is bounded by `materialLimit`. */
+  /** True when the duration is bounded by `materialLimit` (infinite actions). */
   readonly materialLimited: boolean;
+  /** Enhancing: expected attempts to reach the target level (Markov), or null when not applicable. */
+  readonly expectedAttempts: number | null;
+  /** Enhancing target level used for `expectedAttempts` (0 when not applicable). */
+  readonly enhanceTargetLevel: number;
+  /** True when the duration is bounded by `expectedAttempts` rather than the queued count / materials. */
+  readonly expectedLimited: boolean;
 }
 
 const EFFICIENCY_FUNCTIONS = new Set([
@@ -69,6 +76,13 @@ function getItemLevelFromHash(
   return null;
 }
 
+function parseEnhancementLevelFromHash(itemHash: unknown): number {
+  if (typeof itemHash !== "string" || !itemHash) return 0;
+  const parts = itemHash.split("::");
+  const lvl = Number(parts[parts.length - 1]);
+  return Number.isFinite(lvl) && lvl > 0 ? Math.floor(lvl) : 0;
+}
+
 function isActionOnTask(actionHrid: string, characterQuests: readonly any[]): boolean {
   if (!actionHrid || !Array.isArray(characterQuests)) return false;
   for (let i = 0; i < characterQuests.length; i++) {
@@ -96,16 +110,22 @@ function getSkillLevel(skillHrid: string, characterSkills: readonly any[]): numb
   return 0;
 }
 
+interface BuffAccumulator {
+  actionSpeed: number;
+  efficiency: number;
+  actionLevelFlat: number;
+  skillLevelFlat: number;
+  skillLevelRatio: number;
+  /** Σ `/buff_types/enhancing_success` ratioBoost (the game client only uses the ratio). */
+  enhancingSuccess: number;
+  /** Σ `/buff_types/blessed` (Blessed Tea +2 chance, already concentration-scaled). */
+  blessed: number;
+}
+
 function accumulateBuffList(
   buffs: readonly any[] | undefined,
   skillLevelBuffHrid: string,
-  acc: {
-    actionSpeed: number;
-    efficiency: number;
-    actionLevelFlat: number;
-    skillLevelFlat: number;
-    skillLevelRatio: number;
-  }
+  acc: BuffAccumulator
 ): void {
   if (!Array.isArray(buffs)) return;
   for (let i = 0; i < buffs.length; i++) {
@@ -119,6 +139,10 @@ function accumulateBuffList(
       acc.efficiency += flat + ratio;
     } else if (b.typeHrid === "/buff_types/action_level") {
       acc.actionLevelFlat += flat;
+    } else if (b.typeHrid === "/buff_types/enhancing_success") {
+      acc.enhancingSuccess += ratio;
+    } else if (b.typeHrid === "/buff_types/blessed") {
+      acc.blessed += flat + ratio;
     } else if (skillLevelBuffHrid && b.typeHrid === skillLevelBuffHrid) {
       acc.skillLevelFlat += flat;
       acc.skillLevelRatio += ratio;
@@ -133,13 +157,7 @@ function collectLoadoutBonuses(
   skillLevelBuffHrid: string,
   clientData: any,
   drinkSlotsMap: ReadonlyMap<string, readonly any[]>,
-  acc: {
-    actionSpeed: number;
-    efficiency: number;
-    actionLevelFlat: number;
-    skillLevelFlat: number;
-    skillLevelRatio: number;
-  }
+  acc: BuffAccumulator
 ): { taskSpeed: number } {
   const itemDetailMap = clientData?.itemDetailMap || {};
   const multTable: readonly number[] = clientData?.enhancementLevelTotalBonusMultiplierTable || [];
@@ -170,6 +188,7 @@ function collectLoadoutBonuses(
       acc.actionSpeed += addStat(speedKey) + addStat("skillingSpeed");
       acc.efficiency += addStat(effKey) + addStat("skillingEfficiency");
       acc.skillLevelFlat += addStat(lvlKey);
+      if (skillPart === "enhancing") acc.enhancingSuccess += addStat("enhancingSuccess");
       taskSpeed += addStat("taskSpeed");
       drinkConcentration += addStat("drinkConcentration");
     }
@@ -197,6 +216,10 @@ function collectLoadoutBonuses(
         acc.efficiency += flat + ratio;
       } else if (b.typeHrid === "/buff_types/action_level") {
         acc.actionLevelFlat += flat;
+      } else if (b.typeHrid === "/buff_types/enhancing_success") {
+        acc.enhancingSuccess += ratio;
+      } else if (b.typeHrid === "/buff_types/blessed") {
+        acc.blessed += flat + ratio;
       } else if (skillLevelBuffHrid && b.typeHrid === skillLevelBuffHrid) {
         acc.skillLevelFlat += flat;
         acc.skillLevelRatio += ratio;
@@ -239,6 +262,9 @@ export function estimateActionTiming(input: ActionEstimateInput): ActionTimingEs
       totalSec: 0,
       isInfinite: false,
       materialLimited: false,
+      expectedAttempts: null,
+      enhanceTargetLevel: 0,
+      expectedLimited: false,
     };
   }
 
@@ -255,12 +281,14 @@ export function estimateActionTiming(input: ActionEstimateInput): ActionTimingEs
   const reqSkillPart = reqSkillHrid.split("/").pop() || skillPart;
   const skillLevelBuffHrid = reqSkillPart ? `/buff_types/${reqSkillPart}_level` : "";
 
-  const acc = {
+  const acc: BuffAccumulator = {
     actionSpeed: 0,
     efficiency: 0,
     actionLevelFlat: 0,
     skillLevelFlat: 0,
     skillLevelRatio: 0,
+    enhancingSuccess: 0,
+    blessed: 0,
   };
 
   // Global non-loadout buff dictionaries (identical across equipped loadouts)
@@ -311,6 +339,7 @@ export function estimateActionTiming(input: ActionEstimateInput): ActionTimingEs
   const baseSkillLevel = getSkillLevel(reqSkillHrid, characterSkills);
   const boostedSkillLevel = (1 + acc.skillLevelRatio) * baseSkillLevel + acc.skillLevelFlat;
   const itemDetailMap = clientData?.itemDetailMap || {};
+  let enhanceItemLevel: number | null = null;
 
   if (
     actionFunc === "/action_functions/gathering" ||
@@ -327,6 +356,7 @@ export function estimateActionTiming(input: ActionEstimateInput): ActionTimingEs
     }
   } else if (actionFunc === "/action_functions/enhancing") {
     const itemLevel = getItemLevelFromHash(action?.primaryItemHash, characterItems, itemDetailMap);
+    enhanceItemLevel = itemLevel;
     if (itemLevel !== null && boostedSkillLevel > itemLevel) {
       acc.actionSpeed += (boostedSkillLevel - itemLevel) / 100;
     }
@@ -345,10 +375,38 @@ export function estimateActionTiming(input: ActionEstimateInput): ActionTimingEs
     !hasMax && typeof materialLimit === "number" && Number.isFinite(materialLimit)
       ? Math.max(0, Math.floor(materialLimit))
       : null;
-  const bounded = hasMax || matLimit !== null;
-  const remainingActions = hasMax
-    ? Math.max(0, action.maxCount - (action.currentCount || 0))
-    : (matLimit ?? 0);
+  const queued = hasMax ? Math.max(0, action.maxCount - (action.currentCount || 0)) : (matLimit ?? Infinity);
+
+  // Enhancing: cap by the expected attempts to reach the target level (Markov from the current level).
+  let expectedAttempts: number | null = null;
+  let enhanceTargetLevel = 0;
+  if (actionFunc === "/action_functions/enhancing" && enhanceItemLevel !== null) {
+    const target = Math.floor(Number(action?.enhancingMaxLevel) || 0);
+    const startLevel = parseEnhancementLevelFromHash(action?.primaryItemHash);
+    if (target > startLevel) {
+      const res = solveEnhancementMarkov(
+        boostedSkillLevel,
+        acc.enhancingSuccess * 100,
+        enhanceItemLevel,
+        target,
+        Math.max(0, Math.floor(Number(action?.enhancingProtectionMinLevel) || 0)),
+        acc.blessed > 0,
+        acc.blessed * 100,
+        startLevel
+      );
+      if (res && Number.isFinite(res.attempts) && res.attempts > 0) {
+        expectedAttempts = res.attempts;
+        enhanceTargetLevel = target;
+      }
+    }
+  }
+
+  // min(queued count or materials, expected attempts)
+  const countForTime = expectedAttempts !== null ? Math.min(queued, expectedAttempts) : queued;
+  const bounded = Number.isFinite(countForTime);
+  const expectedLimited = expectedAttempts !== null && expectedAttempts < queued;
+  const materialLimited = !hasMax && matLimit !== null && !expectedLimited;
+  const remainingActions = bounded ? (expectedLimited ? Math.round(countForTime) : countForTime) : 0;
 
   let elapsedFraction = 0;
   if (actionIndex === 0 && action?.startTime) {
@@ -360,7 +418,7 @@ export function estimateActionTiming(input: ActionEstimateInput): ActionTimingEs
   }
 
   const totalSec = bounded
-    ? Math.max(0, remainingActions * effectiveSecPerCount - elapsedFraction)
+    ? Math.max(0, countForTime * effectiveSecPerCount - elapsedFraction)
     : 0;
 
   return {
@@ -372,6 +430,9 @@ export function estimateActionTiming(input: ActionEstimateInput): ActionTimingEs
     remainingActions,
     totalSec,
     isInfinite: !bounded,
-    materialLimited: matLimit !== null,
+    materialLimited,
+    expectedAttempts,
+    enhanceTargetLevel,
+    expectedLimited,
   };
 }
